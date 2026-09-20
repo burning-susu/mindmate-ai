@@ -1,0 +1,86 @@
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Dependencies
+node_modules/
+
+# Frontend build output and caches
+dist/
+build/
+.vite/
+.nuxt/
+.next/
+.output/
+.cache/
+coverage/
+*.tsbuildinfo
+
+# Java / Spring Boot
+target/
+*.class
+*.jar
+*.war
+*.ear
+.gradle/
+out/
+
+# Python / AI services
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+
+# Runtime data and local storage
+logs/
+*.log
+uploads/
+storage/
+data/
+temp/
+tmp/
+*.db
+*.sqlite
+*.sqlite3
+
+# AI model and vector database data
+models/
+model-cache/
+vector-store/
+chroma/
+.chroma/
+
+# IDE and editor settings
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+
+# Operating system files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Package manager logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Test and temporary reports
+test-results/
+playwright-report/
+allure-results/
+allure-report/
+
+# Local Docker overrides
+docker-compose.override.yml
+
