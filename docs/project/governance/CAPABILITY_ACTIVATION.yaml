@@ -1,0 +1,118 @@
+document:
+  id: CAPABILITY-ACTIVATION-MINDMATE-001
+  version: "1.0"
+  type: governance
+  status: active
+  project: mindmate-ai
+  created_at: "2026-09-20"
+  updated_at: "2026-09-20"
+  assessment: ASSESSMENT-MINDMATE-001
+  workflow: WF-MINDMATE-001
+
+activation_rules:
+  - capability_id: CAP-ARCH-TECH-SELECTION
+    status: REQUIRED
+    source: doc/capabilities/architecture/technical-selection.md
+    trigger: TRG-HARD-01
+    stages: [G2, G6, G7, G8, G9]
+    current_scope: G2 只登记技术决策领域和 TBD；G6 才进行完整候选/组合分析
+    active_rules:
+      - 不能把 Provider、数据库、向量库或框架提前写死
+      - 需要区分 PROPOSED、CONFIRMED、TBD
+    required_evidence: TECH-DECISION 清单、候选组合分析、确认和应用记录
+  - capability_id: CAP-UI-DESIGN-TO-CODE
+    status: REQUIRED
+    source: doc/capabilities/ui/设计稿转代码流程.md
+    trigger: TRG-SOFT-01
+    stages: [G5.5, G8, G9.1, G10, G11]
+    current_scope: G2 仅登记设计素材和改造边界；实现前需要页面结构、状态和视觉验收基线
+    active_rules:
+      - 设计稿不自动生成业务交互、API 和异常流程
+      - 模板平台化能力不得自动进入 V1
+    required_evidence: UI_SCOPE_MAP、素材登记、人工视觉验收
+  - capability_id: CAP-API-RESTFUL
+    status: REQUIRED
+    source: doc/capabilities/api/RESTful API设计规范.md
+    trigger: TRG-SOFT-02
+    stages: [G8, G9, G10, G11]
+    current_scope: REST/OpenAPI 方向已确认；路径、字段、上传和流式协议 TBD
+    active_rules:
+      - API Contract 作为唯一契约来源
+      - 错误、状态、归属、分页和兼容规则需要统一
+    required_evidence: API Contract、错误码、鉴权/归属说明、接口测试
+  - capability_id: RULE-FRONTEND-GENERIC
+    status: CONDITIONAL
+    source: doc/rules/frontend/frontend.md
+    trigger: PROJECT_PROFILE.frontend.form=桌面 Web
+    stages: [G8, G9, G10, G11]
+    current_scope: Web 前端技术栈确定后加载
+    active_rules:
+      - 页面、组件、状态、API 层保持职责边界
+    required_evidence: 工程规范和代码审查记录
+  - capability_id: RULE-TYPESCRIPT
+    status: CONDITIONAL
+    source: doc/rules/typescript/typescript.md
+    trigger: PROJECT_PROFILE.frontend.language=TypeScript
+    stages: [G9, G10, G11]
+    current_scope: TypeScript 尚未确定
+    active_rules:
+      - 未确定语言前不宣称已激活
+    required_evidence: 技术栈决策和静态检查结果
+  - capability_id: RULE-JAVA-SPRING
+    status: CONDITIONAL
+    source: doc/rules/backend/java-spring.md
+    trigger: PROJECT_PROFILE.backend.language=Java 且 framework=Spring/Spring Boot
+    stages: [G8, G9, G10, G11]
+    current_scope: 后端语言和框架 TBD
+    active_rules:
+      - 当前不加载 Java/Spring 具体规则
+    required_evidence: 技术栈确认和工程规范
+  - capability_id: CAP-TEST-AUTOMATION
+    status: REQUIRED
+    source: doc/capabilities/testing/自动化测试选型与规范.md
+    trigger: TRG-HARD-04
+    stages: [G3, G8, G9, G10, G11]
+    current_scope: 单元、API/契约和核心 E2E；工具 TBD
+    active_rules:
+      - 测试从 Spec/Contract/Acceptance 派生
+      - 外部 Provider 在单元测试中 Mock
+    required_evidence: 测试用例、运行记录、结果和缺陷处理
+  - capability_id: CAP-TEST-SECURITY
+    status: REQUIRED
+    source: doc/capabilities/testing/安全测试选型与规范.md
+    trigger: TRG-HARD-02
+    stages: [G3, G8, G9, G10, G11]
+    current_scope: 基础安全检查；是否升级专业测试 TBD
+    active_rules:
+      - 资源归属、文件校验、提示注入、密钥和日志边界必须检查
+    required_evidence: 安全检查清单、敏感信息扫描、异常和越权结果
+  - capability_id: CAP-TEST-PERFORMANCE
+    status: REQUIRED
+    source: doc/capabilities/testing/性能测试选型与规范.md
+    trigger: TRG-SOFT-03
+    stages: [G3, G8, G9, G10, G11]
+    current_scope: 轻量性能基线；FULL_SCALE_LOAD_TEST=DISABLED_IN_V1
+    active_rules:
+      - 先测量再优化
+      - 轻量基线不得被表述为高并发承载证明
+    required_evidence: 页面反馈、上传/处理耗时、首字延迟和长会话记录
+  - capability_id: CAP-UI-RESPONSIVE-COMPATIBILITY
+    status: REQUIRED
+    source: doc/capabilities/ui/响应式与浏览器兼容清单.md
+    trigger: TRG-HARD-03
+    stages: [G5.5, G8, G9.1, G10, G11]
+    current_scope: Chrome/Edge 桌面优先；1100px 和 768px 降级行为
+    active_rules:
+      - 交互状态、键盘可达、视口降级和 Chromium 实测
+    required_evidence: 浏览器/视口验证记录和人工视觉验收
+  - capability_id: CAP-PLATFORM-MINIPROGRAM-FULLSTACK
+    status: DISABLED
+    source: doc/capabilities/platform/小程序全栈开发与上线SOP.md
+    trigger: TRG-INFO-01
+    stages: []
+    current_scope: 当前不适用；项目是桌面 Web
+    active_rules: []
+    required_evidence: 如未来改为小程序，执行 Workflow Change/Rebase
+
+runtime_note: 未进入当前 G2 Runtime Context 的未来阶段 Capability 不得被当成当前编码规则；本文件的 REQUIRED 表示按阶段触发，不表示本轮已经开始实现。
+

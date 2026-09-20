@@ -1,0 +1,151 @@
+document:
+  id: ASSESSMENT-MINDMATE-001
+  version: "1.0"
+  type: governance
+  status: active
+  project: mindmate-ai
+  created_at: "2026-09-20"
+  updated_at: "2026-09-20"
+  source: SRC-001, SRC-002, SRC-003, DEC-BOOTSTRAP-001
+
+assessment_status: COMPLETED
+current_stage: G2
+workflow_effect: Workflow 已确认；G3 入口门禁通过但 G3 尚未执行
+
+dimensions:
+  - id: ASSESS-SCALE
+    name: 项目规模
+    result: S_PROVISIONAL
+    basis: 单用户和个人资料规模目标明确，但并发、总容量和未来用户数 TBD
+    trigger: SOFT-SMALL_PROJECT
+    risk: 小规模不等于可关闭安全、数据、验收和回滚门禁
+    missing: 真实用户数、并发、文件总容量
+    workflow_effect: 允许轻量化文档和模块化单体候选
+  - id: ASSESS-BUSINESS
+    name: 业务复杂度
+    result: MEDIUM_HIGH
+    basis: 三种对话模式、引用、证据不足拒答、陪练状态、历史恢复和删除影响
+    trigger: HARD-CORE_STATE_AND_EVIDENCE
+    risk: 业务状态和引用错配会直接损害可信度
+    missing: 模式切换上下文细则、页面树最终口径
+    workflow_effect: G3/G8/G9 不能被完全压缩
+  - id: ASSESS-FILE
+    name: 文件处理复杂度
+    result: MEDIUM_HIGH
+    basis: 四种格式、20MB、批量 5 个、上传/解析/索引/可用/失败状态和删除级联
+    trigger: HARD-ASYNC_FILE_PIPELINE
+    risk: 解析失败或定位错误会影响引用和 RAG
+    missing: 解析器、复杂表格、代码块和页码规则
+    workflow_effect: 需要文件状态机、重试、错误 Evidence 和 G8 设计
+  - id: ASSESS-AI-RAG
+    name: AI 与 RAG 复杂度
+    result: HIGH
+    basis: 外部模型、Embedding、检索、查询重写、引用绑定、拒答和陪练
+    trigger: HARD-EXTERNAL_PROVIDER_AND_EVIDENCE
+    risk: 数据出站、成本、延迟、幻觉和引用失真
+    missing: Provider、模型、Embedding、向量实现、阈值和重排方式
+    workflow_effect: G6 必须做 TECH-DECISION，G8/G11 必须有质量和失败测试
+  - id: ASSESS-PRIVACY
+    name: 数据和隐私风险
+    result: HIGH
+    basis: 用户文件可能包含账号、证件、财务或其他敏感内容；必要文本可发送外部 Provider
+    trigger: HARD-EXTERNAL_DATA_BOUNDARY
+    risk: 密钥泄露、敏感资料外发、资源串用、提示注入
+    missing: Provider 条款、地域、保留策略、备份周期
+    workflow_effect: REQUIRED 基础安全 Capability；G6/G11 需要明确提示、扫描和回滚边界
+  - id: ASSESS-UI
+    name: UI 实现复杂度
+    result: MEDIUM
+    basis: 有 B 端设计工程，但需要从平台模板裁剪为个人助手并补齐大量状态
+    trigger: HARD-DESIGN-ASSET
+    risk: 模板平台化内容进入 V1 或状态缺失导致返工
+    missing: 最终页面树、视觉验收精度、Design Token
+    workflow_effect: G5.5/G10 激活设计稿转代码和响应式兼容
+  - id: ASSESS-PROVIDER
+    name: 外部 Provider 依赖
+    result: HIGH_UNCERTAINTY
+    basis: 模型和 Embedding 已确认外部托管，但 Provider 尚未选择
+    trigger: HARD-PROVIDER_SELECTION
+    risk: 供应商锁定、限流、费用和服务不可用
+    missing: Provider 名称、SLA、成本和数据政策
+    workflow_effect: G6 技术选型为 REQUIRED；保留 Adapter 和降级边界
+  - id: ASSESS-TEST
+    name: 测试复杂度
+    result: MEDIUM_HIGH
+    basis: 文件状态、异步任务、引用、资源归属、删除和陪练均有回归价值
+    trigger: HARD-CORE_AUTOMATION_AND_SECURITY
+    risk: 只做人工测试会遗漏状态、权限和证据问题
+    missing: 测试工具、固定评测集、E2E 环境和 UAT 责任人
+    workflow_effect: 自动化和基础安全 REQUIRED；性能按轻量范围执行
+  - id: ASSESS-LOCAL-OPS
+    name: 本地部署复杂度
+    result: MEDIUM
+    basis: 无云服务器，但本地仍需处理依赖、密钥、存储、异步任务和日志
+    trigger: SOFT-LOCAL_RUNTIME
+    risk: 用户启动失败、Provider 密钥配置错误和本地数据丢失
+    missing: 操作系统、安装方式、升级、备份和恢复
+    workflow_effect: G6/G10 保留本地运行和恢复说明
+  - id: ASSESS-IMPLEMENTATION
+    name: 个人开发实施成本
+    result: MEDIUM_HIGH
+    basis: 个人 MVP 同时包含 Web、文件解析、RAG、流式对话、陪练、安全和测试
+    trigger: SOFT-FLOW-01-CANDIDATE
+    risk: 范围蔓延和 Provider/解析质量返工
+    missing: 可投入工时、技术熟悉度和目标日期
+    workflow_effect: 候选 FLOW-01；禁止首版微服务和平台化扩张
+
+triggers:
+  - id: TRG-HARD-01
+    class: HARD
+    condition: 新项目且技术栈、Provider、数据和部署均未完成选择
+    source: SRC-003, DEC-BOOTSTRAP-001
+    capability: CAP-ARCH-TECH-SELECTION
+    reason: 必须通过候选和组合分析，不得凭经验写死技术栈
+  - id: TRG-HARD-02
+    class: HARD
+    condition: 用户文件、资源归属、外部模型调用和敏感内容边界
+    source: SRC-003, DEC-BOOTSTRAP-001
+    capability: CAP-TEST-SECURITY
+    reason: 即使单用户也需要资源归属和密钥/出站边界检查
+  - id: TRG-HARD-03
+    class: HARD
+    condition: Web 桌面交付并明确 Chrome/Edge 和响应式断点
+    source: SRC-003
+    capability: CAP-UI-RESPONSIVE-COMPATIBILITY
+    reason: 需要可预测的桌面、收窄视口和基础移动浏览行为
+  - id: TRG-HARD-04
+    class: HARD
+    condition: 文件状态、AI 状态、引用和陪练均需回归验证
+    source: SRC-003, DEC-BOOTSTRAP-001
+    capability: CAP-TEST-AUTOMATION
+    reason: 关键业务路径重复度和失败成本足以支持自动化
+  - id: TRG-SOFT-01
+    class: SOFT
+    condition: 需要把已有 Figma/Sketch 参考落到 Web 页面
+    source: SRC-004, SRC-005, DEC-BOOTSTRAP-001
+    capability: CAP-UI-DESIGN-TO-CODE
+    reason: 实现阶段需要结构确认、状态补齐和人工视觉验收
+  - id: TRG-SOFT-02
+    class: SOFT
+    condition: V1 已确认 REST + OpenAPI 方向但尚无正式契约
+    source: DEC-BOOTSTRAP-001
+    capability: CAP-API-RESTFUL
+    reason: G8/G9 需要统一资源、错误、状态、分页和兼容规则
+  - id: TRG-SOFT-03
+    class: SOFT
+    condition: V1 明确启用轻量性能基线，但不做完整压测
+    source: DEC-BOOTSTRAP-001
+    capability: CAP-TEST-PERFORMANCE
+    reason: 文件处理、流式首字和长会话仍需有基本体验证据
+  - id: TRG-INFO-01
+    class: INFO
+    condition: 通用仓库包含小程序 SOP，但项目当前是桌面 Web
+    source: SRC-003, SRC-007
+    capability: CAP-PLATFORM-MINIPROGRAM-FULLSTACK
+    reason: 当前不满足小程序激活条件
+
+workflow_impacts:
+  required: G2、G3、G6、G8、G9、G10、G11 均不能完全删除
+  simplified: 可合并小项目文档；采用模块化单体；V1 不做微服务、云服务器和复杂后台
+  g3_entry_gate: READY
+  g3_execution: NOT_STARTED

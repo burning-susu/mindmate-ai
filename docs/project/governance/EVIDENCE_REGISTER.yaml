@@ -1,0 +1,96 @@
+document:
+  id: EVIDENCE-REGISTER-MINDMATE-001
+  version: "1.0"
+  type: evidence
+  status: active
+  project: mindmate-ai
+  created_at: "2026-09-20"
+  updated_at: "2026-09-20"
+
+evidence:
+  - id: EVID-001
+    type: repository_scan
+    scope: 仓库结构、Git 状态和代码基线
+    result: 无业务代码、无构建入口、无 API/数据库/测试实现；工作区干净
+    verified_at: "2026-09-20"
+    ref: git status --short；rg --files
+    supports:
+      - CODE_BASELINE_MODE=NONE
+      - PROJECT_PROFILE.current_code_baseline
+  - id: EVID-002
+    type: document_extraction
+    scope: 两份 DOCX 正文和表格
+    result: 产品说明书 114 个非空段落、13 个表格；项目需求文档 239 个非空段落、38 个表格
+    verified_at: "2026-09-20"
+    ref: SRC-002、SRC-003
+    supports:
+      - 业务范围
+      - 功能编号
+      - 状态、数据、安全和验收输入
+  - id: EVID-003
+    type: design_asset_inspection
+    scope: Figma 和 Sketch 工程容器、元数据和预览
+    result: Figma 32 个 ZIP 条目且含缩略图；Sketch 36 个 ZIP 条目、3 个页面、meta version 143
+    verified_at: "2026-09-20"
+    ref: SRC-004、SRC-005
+    supports:
+      - 设计资料存在
+      - UI 参考边界
+    limitation: 未读取全部画板和图层业务含义
+  - id: EVID-004
+    type: decision_confirmation
+    scope: HIGH-01 至 LOW-02
+    result: 用户在当前会话逐项完成二次确认并使用“确认并应用”授权
+    verified_at: "2026-09-20"
+    ref: 当前会话确认消息、DEC-BOOTSTRAP-001
+    supports:
+      - 10 项项目决策
+    limitation: 当前会话证据不是代码、测试或发布证据
+  - id: EVID-005
+    type: file_created
+    scope: G1 来源登记和 G2 基线
+    result: docs/project/sources/、docs/project/baseline/ 已创建
+    verified_at: "2026-09-20"
+    ref: SRC-REGISTER-001、G2-BASELINE-README-001
+    supports:
+      - G1_SOURCE_REGISTER=COMPLETED
+      - G2_BASELINE=COMPLETED
+  - id: EVID-006
+    type: file_created
+    scope: PROJECT_PROFILE、ASSESSMENT、CAPABILITY_ACTIVATION、WORKFLOW_BLUEPRINT、RUNTIME_CONTEXT
+    result: 项目级治理文件已创建；创建时 Workflow 为 PROPOSED
+    verified_at: "2026-09-20"
+    ref: PROJECT-PROFILE-MINDMATE-001、ASSESSMENT-MINDMATE-001、CAPABILITY-ACTIVATION-MINDMATE-001、WF-MINDMATE-001
+    status: HISTORICAL
+    supports:
+      - ASSESSMENT_STATUS=COMPLETED
+      - WORKFLOW_STATUS=PROPOSED_AT_CREATION
+  - id: EVID-007
+    type: workflow_confirmation
+    scope: WF-MINDMATE-001 v0.1
+    claim: 用户确认并应用当前候选 Workflow 及其限制条件
+    result: WORKFLOW_STATUS=CONFIRMED；G3 入口门禁通过；G3 尚未执行
+    verified_at: "2026-09-20"
+    verifier: user
+    ref: C:/Users/15932/Desktop/第二轮确认状态持久化.md；当前用户执行该提示词的授权消息
+    relates_to:
+      - WF-MINDMATE-001
+      - PROJECT_STAGE=BOOTSTRAP
+      - G3_ENTRY_GATE
+    constraints:
+      - 本地单用户 MVP
+      - 外部 Provider 只发送完成当前任务所必需的文本和上下文
+      - 模型和 Embedding 通过本地后端 Provider Adapter 接入
+      - 原始文件、业务数据和向量数据默认保存在本地
+      - 采用模块化单体
+      - V1 不包含设置页和独立错题本
+      - API 采用 REST + OpenAPI 方向
+      - G3 完成前不得进入开发和项目脚手架创建
+
+completion_claims:
+  code_complete: NOT_STARTED
+  tests_passed: NOT_STARTED
+  acceptance_complete: NOT_STARTED
+  workflow_confirmed: CONFIRMED
+  g3_started: NOT_STARTED
+  release_complete: NOT_STARTED

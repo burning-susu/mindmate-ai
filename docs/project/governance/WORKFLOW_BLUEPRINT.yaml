@@ -1,0 +1,208 @@
+document:
+  id: WF-MINDMATE-001
+  version: "0.1"
+  type: governance
+  status: CONFIRMED
+  project: mindmate-ai
+  created_at: "2026-09-20"
+  updated_at: "2026-09-20"
+  source:
+    - SRC-007
+    - PROJECT-PROFILE-MINDMATE-001
+    - ASSESSMENT-MINDMATE-001
+    - CAPABILITY-ACTIVATION-MINDMATE-001
+  confirmation_required: false
+  confirmed_at: "2026-09-20"
+  confirmed_by: user
+  confirmation_source: docs/project/governance/EVIDENCE_REGISTER.yaml#EVID-007
+
+workflow:
+  base_lifecycle: G0-G11
+  scenario: NEW_PROJECT
+  current_stage: G2
+  current_stage_level: L2
+  workflow_status: CONFIRMED
+  workflow_confirmation_constraints:
+    - 本地单用户 MVP
+    - 外部 Provider 只发送完成当前任务所必需的文本和上下文
+    - 模型和 Embedding 通过本地后端 Provider Adapter 接入
+    - 原始文件、业务数据和向量数据默认保存在本地
+    - 采用模块化单体
+    - V1 不包含设置页和独立错题本
+    - API 采用 REST + OpenAPI 方向
+    - G3 完成前不得进入开发和项目脚手架创建
+  execution_flow:
+    id: FLOW-01
+    name: AI 前端 Mock 先行型
+    status: PROPOSED
+    rationale:
+      - 新建桌面 Web 项目且当前没有 API 或代码基线
+      - 存在可复用的结构化设计参考
+      - 单用户 MVP 适合先验证页面、状态和核心垂直链路
+      - 模块化单体和本地运行形态降低后端环境成本
+    not_selected:
+      FLOW-02: 后端和 RAG 风险尚未完成 Spike，当前不先把所有实现冻结为后端先行
+      FLOW-03: 当前没有已稳定 API
+      FLOW-04: 项目不是内容站
+      FLOW-05: 项目包含 Web 用户端和 AI 交互
+      FLOW-06: 单人/小规模项目不制造虚假多端并行
+    reevaluate_when:
+      - Provider 或本地解析/RAG Spike 成为主要阻塞
+      - API 和数据模型必须先于 UI 冻结
+      - 从本地单用户扩展为公网多用户
+      - 增加小程序或其他客户端
+      - 团队方式从单人转为多团队并行
+
+stage_policy:
+  - id: G0
+    enabled: true
+    level: L1
+    purpose: 复用现有治理资产并确认项目入口
+    simplified: 不重建 doc/ 通用目录和模板
+    cannot_omit: 事实源、权限、项目状态和证据边界
+    entry: AGENTS.md 和通用治理资产可读
+    exit: 项目级文档路径和运行边界明确
+  - id: G1
+    enabled: true
+    level: L2
+    purpose: 登记业务、设计和控制输入资料
+    simplified: 单人项目合并来源批次摘要
+    cannot_omit: 来源编号、版本、路径、用途、优先级、可读性和边界
+    evidence: SRC-REGISTER-001、EVID-001、EVID-002、EVID-003
+    exit: COMPLETED
+  - id: G2
+    enabled: true
+    level: L2
+    purpose: 形成来源、决策、冲突和待确认基线
+    simplified: 合并重复产品描述，不复制原始资料
+    cannot_omit: 决策证据、冲突矩阵、TBD、来源追踪和 G3 入口门禁
+    evidence: G2-BASELINE-README-001、DEC-BOOTSTRAP-001
+    exit: COMPLETED
+    next_gate: G3_NOT_STARTED
+  - id: G3
+    enabled: true
+    level: L3
+    purpose: PRD 准入审计
+    entry: Workflow CONFIRMED，G2 基线 active
+    simplified: 可合并审计表，但不得省略 P0/P1、状态、权限、异常、验收和追踪
+    cannot_omit: Given/When/Then、页面范围、引用、数据归属和删除影响
+    current_status: NOT_STARTED_WORKFLOW_GATE_CLEARED
+  - id: G4
+    enabled: true
+    level: L2
+    purpose: 形成 PRD Draft
+    simplified: 产品主 PRD 可合并模块叙述
+    cannot_omit: 范围、非目标、业务规则、状态、异常、验收和来源
+  - id: G5
+    enabled: true
+    level: L3
+    purpose: PRD 评审和批准
+    simplified: 低影响文案可延后
+    cannot_omit: 高影响业务决策、P0/P1、批准证据和追踪
+  - id: G5.5
+    enabled: true
+    level: L1
+    purpose: 根据 Approved PRD 建立 UI 逻辑范围
+    conditional: PRD Approved 且 GENERATE_UI_REFERENCE_TREE=true
+    cannot_omit: 页面、模块、目标终端和设计来源映射
+  - id: G6
+    enabled: true
+    level: L3
+    purpose: 总体技术架构和 TECH-DECISION
+    simplified: 首版优先比较模块化单体、Provider Adapter、本地数据和内部异步任务
+    cannot_omit: 数据归属、Provider、隐私、文件、RAG、部署、失败恢复和回滚
+  - id: G7
+    enabled: true
+    level: L2
+    purpose: 技术模块边界
+    simplified: 不按微服务拆分，不按页面或表机械拆分
+    cannot_omit: 数据所有权、依赖、事务、测试和发布边界
+  - id: G8
+    enabled: true
+    level: L2
+    purpose: 模块详细技术设计
+    simplified: 低风险设置延期，不为延后能力做完整设计
+    cannot_omit: 文件状态、RAG/引用、会话、陪练、异常、重试和安全
+  - id: G9
+    enabled: true
+    level: L3
+    purpose: API、数据和编码规范
+    simplified: 首版只设计核心资源和必要契约
+    cannot_omit: REST/OpenAPI、错误、分页、状态、幂等、归属、迁移和测试
+  - id: G9.1
+    enabled: true
+    level: L1
+    purpose: 生成真实 UI 应用目录
+    conditional: 应用架构和 PROJECT_STRUCTURE 已确认
+    cannot_omit: 真实应用、代码路径、目标设备和 PRD 映射
+  - id: G9.5
+    enabled: false
+    level: L0
+    purpose: 正式 UI_SPEC
+    reason: LOW-02 和 MEDIUM-01 只确认参考方式，尚未要求正式 Design Token 和像素级规范
+    reopen_when: 高保真、品牌化或对外视觉交付被确认
+  - id: G10
+    enabled: true
+    level: L2
+    purpose: 开发批次、有效 UI Contract 和交付
+    entry: PRD、架构、API/数据和执行 Flow 已满足门禁
+    simplified: 使用 FLOW-01；后台和复杂平台能力不进入 V1
+    cannot_omit: 核心垂直链路、测试、人工验证、Evidence 和回滚
+  - id: G11
+    enabled: true
+    level: L3
+    purpose: 实施、联调、测试、发布和维护
+    simplified: 默认不计入完整压测、专业渗透和云服务器发布
+    cannot_omit: 核心闭环、基础安全、引用质量、异常恢复、验收和交接
+
+active_capabilities_by_stage:
+  G2:
+    - CAP-ARCH-TECH-SELECTION
+  G3:
+    - CAP-TEST-AUTOMATION
+    - CAP-TEST-SECURITY
+  G5.5:
+    - CAP-UI-DESIGN-TO-CODE
+    - CAP-UI-RESPONSIVE-COMPATIBILITY
+  G6:
+    - CAP-ARCH-TECH-SELECTION
+  G8:
+    - CAP-ARCH-TECH-SELECTION
+    - CAP-API-RESTFUL
+    - CAP-TEST-AUTOMATION
+    - CAP-TEST-SECURITY
+    - CAP-TEST-PERFORMANCE
+  G9:
+    - CAP-API-RESTFUL
+    - CAP-TEST-AUTOMATION
+    - CAP-TEST-SECURITY
+    - CAP-TEST-PERFORMANCE
+  G10:
+    - CAP-UI-DESIGN-TO-CODE
+    - CAP-UI-RESPONSIVE-COMPATIBILITY
+    - CAP-TEST-AUTOMATION
+    - CAP-TEST-SECURITY
+    - CAP-TEST-PERFORMANCE
+  G11:
+    - CAP-UI-DESIGN-TO-CODE
+    - CAP-UI-RESPONSIVE-COMPATIBILITY
+    - CAP-TEST-AUTOMATION
+    - CAP-TEST-SECURITY
+    - CAP-TEST-PERFORMANCE
+
+gates:
+  workflow_confirmation:
+    status: COMPLETED
+    before: G3
+    evidence: EVID-007；用户确认 WORKFLOW_ID=WF-MINDMATE-001、版本 0.1 和限制条件
+  architecture_confirmation:
+    status: REQUIRED
+    before: G6 exit or architecture-dependent implementation
+    evidence: TECH-DECISION review, informed confirmation and apply
+  module_boundary_confirmation:
+    status: REQUIRED
+    before: G8
+    evidence: MODULE_BOUNDARIES review and apply
+  code_gate:
+    status: NOT_REACHED
+    rule: 不因本轮文档生成进入代码实现

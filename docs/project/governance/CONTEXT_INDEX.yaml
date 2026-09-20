@@ -1,0 +1,75 @@
+document:
+  id: CONTEXT-INDEX-MINDMATE-001
+  version: "1.0"
+  type: governance
+  status: active
+  project: mindmate-ai
+  created_at: "2026-09-20"
+  updated_at: "2026-09-20"
+  governance_version: v3.2.4
+  summary_root: docs/project/governance/context-summaries/
+
+runtime_defaults:
+  enable_token_governance: true
+  context_loading_mode: MINIMAL
+  token_budget_level: MEDIUM
+  allow_full_context_scan: false
+  reuse_context_summary: true
+  skip_unchanged_resources: true
+  discovery_mode: TARGETED
+
+resources:
+  - path: doc/governance/通用文档提示词v3.2.md
+    version_or_hash: 19309D54CB5F3E60327FAD7940C8B3287D0A340821C36813B24E28CC4CB320C7
+    coverage: v3.2.4 variables, Token/context governance, lifecycle and gates
+    summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
+    last_verified_at: "2026-09-20"
+    status: CURRENT
+  - path: doc/governance/通用文档提示词v3.2完整使用说明.md
+    version_or_hash: 5FADB67527BF37ED56F394B3FEE145EEB2E114A2B0F55050599F61ABB2997A0E
+    coverage: 2F Token/context governance, task preflight and summary/index rules
+    summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
+    last_verified_at: "2026-09-20"
+    status: CURRENT
+  - path: docs/project/governance/PROJECT_PROFILE.yaml
+    version_or_hash: 2C8D0B0EAFB82DBE852705A43D32CF5A544EF9DEFE0277403CF39BCAD80855CC
+    coverage: project identity, scope, data, AI, UI and delivery profile
+    summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
+    last_verified_at: "2026-09-20"
+    status: CURRENT
+  - path: docs/project/governance/ASSESSMENT.yaml
+    version_or_hash: C4950188A147D4718D467FBF1B757A2C93062A27FDA621A533281FD3125C7D02
+    coverage: complexity, risks, triggers and workflow impacts
+    summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
+    last_verified_at: "2026-09-20"
+    status: CURRENT
+  - path: docs/project/governance/CAPABILITY_ACTIVATION.yaml
+    version_or_hash: 55BA005C5677DE337A7AEDDA95FAE28AC6A13872F5553072EAF175381C48B01A
+    coverage: capability status, triggers, stages and evidence
+    summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
+    last_verified_at: "2026-09-20"
+    status: CURRENT
+  - path: docs/project/governance/WORKFLOW_BLUEPRINT.yaml
+    version_or_hash: F7353B467FB3BB80CF5F00AF0B1AC1F4A870CD79FD00BE92BBA019CFF0AA838B
+    coverage: confirmed WF-MINDMATE-001 v0.1, stage policy and gates
+    summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
+    last_verified_at: "2026-09-20"
+    status: CURRENT
+  - path: docs/project/governance/RUNTIME_CONTEXT.md
+    version_or_hash: EB046586BC58BFF567DD8F6A1B448A7DA994A2A5EF3199CEFA08BC6C976124F0
+    coverage: current task scope, permissions, Token budget and G3 not-started status
+    summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
+    last_verified_at: "2026-09-20"
+    status: CURRENT
+  - path: docs/project/governance/EVIDENCE_REGISTER.yaml
+    version_or_hash: D0603839D46677CD345167CF560C4F7031EE0FE688C568034515AB3BE5BF62A4
+    coverage: G1/G2 evidence and EVID-007 Workflow confirmation
+    summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
+    last_verified_at: "2026-09-20"
+    status: CURRENT
+  - path: docs/project/baseline/02_DECISION_BASELINE.md
+    version_or_hash: 66C15B5C8797E0717AC141FE4FE41ADCFBD7028538D176124FB97B88CD3E8F0A
+    coverage: confirmed project decisions and unresolved TBD
+    summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
+    last_verified_at: "2026-09-20"
+    status: CURRENT

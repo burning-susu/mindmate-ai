@@ -1,0 +1,41 @@
+document:
+  id: STAGE-POLICY-MINDMATE-001
+  version: "0.1"
+  type: governance
+  status: proposed
+  project: mindmate-ai
+  workflow: WF-MINDMATE-001
+  created_at: "2026-09-20"
+  updated_at: "2026-09-20"
+
+levels:
+  L0: Disabled
+  L1: Minimal
+  L2: Standard
+  L3: Enhanced
+  L4: Full
+
+stages:
+  G0: L1
+  G1: L2
+  G2: L2
+  G3: L3
+  G4: L2
+  G5: L3
+  G5.5: L1
+  G6: L3
+  G7: L2
+  G8: L2
+  G9: L3
+  G9.1: L1
+  G9.5: L0
+  G10: L2
+  G11: L3
+
+policy:
+  - 轻量化只合并文档和减少未触发能力，不删除需求、架构、API/数据、测试、验收和 Evidence 职责。
+  - 不因单用户或小规模关闭安全、隐私、资源归属、删除和回滚门禁。
+  - G3 及后续阶段必须等待 WORKFLOW_STATUS=CONFIRMED。
+  - G6/G7 的 Draft 可以保留 TBD，但正式出口和依赖 Blocking 结论的实现必须完成知情决策和应用。
+  - G9.5 暂不启用，不阻断开发；如果开启，必须生成正式 UI_SPEC 和视觉验收。
+

@@ -1,0 +1,305 @@
+document:
+  id: PROJECT-PROFILE-MINDMATE-001
+  version: "1.0"
+  type: governance
+  status: active
+  project: mindmate-ai
+  created_at: "2026-09-20"
+  updated_at: "2026-09-20"
+  sources:
+    - SRC-001
+    - SRC-002
+    - SRC-003
+    - SRC-004
+    - SRC-005
+    - SRC-007
+  decisions:
+    - DEC-BOOTSTRAP-001
+
+project:
+  name:
+    value: mindmate-ai
+    state: CONFIRMED
+    source: SRC-001
+  type:
+    value: 个人AI知识学习助手
+    state: CONFIRMED
+    source: SRC-001, SRC-002, SRC-003
+  scenario:
+    value: NEW_PROJECT
+    state: CONFIRMED
+    source: SRC-007
+  lifecycle:
+    value: NEW
+    state: CONFIRMED
+    source: SRC-007
+  stage:
+    value: BOOTSTRAP
+    state: CONFIRMED
+    source: SRC-007
+  repository_role:
+    value: NONE
+    state: CONFIRMED
+    source: SRC-007, EVID-001
+  code_baseline_mode:
+    value: NONE
+    state: CONFIRMED
+    source: SRC-007, EVID-001
+
+business:
+  usage_scenarios:
+    value:
+      - 创建个人知识库
+      - 上传和处理学习资料
+      - 基于指定资料问答
+      - 查看真实引用
+      - 基于资料逐题学习陪练
+      - 恢复历史会话
+    state: CONFIRMED
+    source: SRC-002, SRC-003
+  target_users:
+    value:
+      - 学生和备考者
+      - 自学者
+      - 初级开发者
+      - 知识工作者
+    state: CONFIRMED
+    source: SRC-002, SRC-003
+  project_goal:
+    value: 将个人文件转化为可查询、可追溯、可练习的个人知识库
+    state: CONFIRMED
+    source: SRC-002, SRC-003
+  core_capabilities:
+    value:
+      - 知识库管理
+      - PDF/DOCX/Markdown/TXT 文件上传和处理
+      - 自由对话
+      - 资料问答
+      - 引用溯源
+      - 学习陪练
+      - 历史会话
+    state: CONFIRMED
+    source: SRC-003
+  deferred_capabilities:
+    value:
+      - 设置页面
+      - 独立错题本
+      - OCR
+      - 多智能体
+      - 工作流编排
+      - 团队权限
+      - 联网搜索
+      - 语音陪练
+    state: CONFIRMED
+    source: DEC-BOOTSTRAP-001
+
+scale:
+  label:
+    value: S
+    state: PROVISIONAL
+    basis: 单用户、小量个人资料；每个知识库约 50 份文件，单用户约 10 个知识库
+    source: SRC-003
+  capacity_targets:
+    knowledge_bases_per_user: 10
+    files_per_knowledge_base: 50
+    single_file_size: 20MB
+    files_per_upload: 5
+    state: CONFIRMED_FOR_V1
+    source: SRC-003, DEC-BOOTSTRAP-001
+
+data:
+  types:
+    value:
+      - userId 和资源归属标识
+      - 知识库
+      - 原始文件和文件元数据
+      - 解析文本和文档片段
+      - 向量数据
+      - 标签和摘要
+      - 会话、消息和引用
+      - 陪练会话、题目、回答和点评
+    state: CONFIRMED
+    source: SRC-003
+  ownership:
+    value: userId 保留，服务层必须执行资源归属校验
+    state: CONFIRMED
+    source: DEC-BOOTSTRAP-001
+  local_storage:
+    value: 原始文件、解析结果、业务数据和向量数据默认本地保存
+    state: CONFIRMED
+    source: DEC-BOOTSTRAP-001
+  retention_and_backup:
+    value: TBD
+    state: TBD
+    source: OPEN-01, OPEN-04
+
+ai:
+  capabilities:
+    value:
+      - 文档解析后的摘要和标签生成
+      - Embedding
+      - 向量检索和后续重排
+      - 查询重写
+      - 基于证据的回答
+      - 引用绑定和证据不足拒答
+      - 流式回答
+      - 逐题出题和点评
+    state: CONFIRMED_AS_PRODUCT_NEED
+    source: SRC-003
+  model_provider_mode:
+    value: EXTERNAL_PROVIDER
+    state: CONFIRMED
+    source: DEC-BOOTSTRAP-001
+  embedding_provider_mode:
+    value: EXTERNAL_PROVIDER
+    state: CONFIRMED
+    source: DEC-BOOTSTRAP-001
+  provider_adapter:
+    value: LOCAL_BACKEND_ADAPTER
+    state: CONFIRMED
+    source: DEC-BOOTSTRAP-001
+  provider_name:
+    value: TBD
+    state: TBD
+    source: OPEN-01
+  model_name:
+    value: TBD
+    state: TBD
+    source: OPEN-01
+  embedding_model_name:
+    value: TBD
+    state: TBD
+    source: OPEN-01
+  external_data_boundary:
+    value: 仅发送当前任务必要的问题、文本片段和上下文，并提示外部模型可能接收必要文本
+    state: CONFIRMED
+    source: DEC-BOOTSTRAP-001
+
+technology:
+  frontend:
+    form: 桌面优先 Web
+    framework: TBD
+    language: TBD
+    state: CONFIRMED_FORM_TBD_STACK
+    source: SRC-003, OPEN-05
+  backend:
+    form: 本地运行的服务端
+    framework: TBD
+    language: TBD
+    state: CONFIRMED_FORM_TBD_STACK
+    source: DEC-BOOTSTRAP-001, OPEN-05
+  architecture_style:
+    value: MODULAR_MONOLITH
+    state: CONFIRMED
+    source: DEC-BOOTSTRAP-001
+  async_task_mode:
+    value: INTERNAL_ASYNC_TASK
+    state: CONFIRMED
+    source: DEC-BOOTSTRAP-001
+  microservice_mode:
+    value: DISABLED_IN_V1
+    state: CONFIRMED
+    source: DEC-BOOTSTRAP-001
+  api_style:
+    value: REST
+    state: CONFIRMED_DIRECTION
+    source: DEC-BOOTSTRAP-001
+  api_documentation:
+    value: OPENAPI
+    state: CONFIRMED_DIRECTION
+    source: DEC-BOOTSTRAP-001
+  api_paths:
+    value: TBD
+    state: TBD
+    source: OPEN-03
+  api_fields:
+    value: TBD
+    state: TBD
+    source: OPEN-03
+  streaming_protocol:
+    value: TBD
+    state: TBD
+    source: OPEN-03
+  vector_store_mode:
+    value: LOCAL
+    state: CONFIRMED_MODE_TBD_IMPLEMENTATION
+    source: DEC-BOOTSTRAP-001, OPEN-02
+  vector_store_implementation:
+    value: TBD
+    state: TBD
+    source: OPEN-02
+  document_parser:
+    value: TBD
+    state: TBD
+    source: OPEN-02, OPEN-07
+
+security_and_privacy:
+  risk_level:
+    value: HIGH
+    state: CONFIRMED_ASSESSMENT
+    source: ASSESSMENT-MINDMATE-001
+  auth_mode_v1:
+    value: NO_REAL_LOGIN_IN_V1
+    state: CONFIRMED
+    source: DEC-BOOTSTRAP-001
+  api_key_location:
+    value: LOCAL_BACKEND_ENVIRONMENT_ONLY
+    state: CONFIRMED
+    source: DEC-BOOTSTRAP-001
+  prompt_injection_boundary:
+    value: 文档内容不得覆盖系统规则
+    state: CONFIRMED
+    source: SRC-003
+  sensitive_content_warning:
+    value: V1 必须提示外部模型可能接收必要文本，不适合处理高度敏感资料
+    state: CONFIRMED
+    source: DEC-BOOTSTRAP-001
+
+ui:
+  maturity:
+    value: 有可编辑 B 端模板和控件资产，但需要产品化裁剪
+    state: CONFIRMED
+    source: SRC-004, SRC-005
+  usage_mode:
+    value: STRUCTURE_AND_VISUAL_REFERENCE
+    state: CONFIRMED
+    source: DEC-BOOTSTRAP-001
+  pixel_perfect_replica:
+    value: false
+    state: CONFIRMED
+    source: DEC-BOOTSTRAP-001
+  formal_ui_spec:
+    value: OPTIONAL_NOT_ENABLED_IN_G2
+    state: CONFIRMED
+    source: DEC-BOOTSTRAP-001
+  browser_scope:
+    value: Chrome 和 Edge 桌面浏览器优先；小于 1100px 收起右侧栏；小于 768px 只保证基础浏览和对话
+    state: CONFIRMED
+    source: SRC-003
+  final_design_tokens:
+    value: TBD
+    state: TBD
+    source: LOW-02, OPEN-06
+
+delivery:
+  deployment_mode:
+    value: LOCAL_ONLY
+    state: CONFIRMED
+    source: DEC-BOOTSTRAP-001
+  cloud_server_required:
+    value: false
+    state: CONFIRMED
+    source: DEC-BOOTSTRAP-001
+  public_deployment:
+    value: false_for_v1
+    state: CONFIRMED
+    source: HIGH-01, HIGH-02
+  target_release:
+    value: TBD
+    state: TBD
+    source: OPEN-10
+  owner_and_budget:
+    value: TBD
+    state: TBD
+    source: OPEN-10
+
