@@ -1,0 +1,68 @@
+document:
+  id: MODEL-REGISTRY-MINDMATE-001
+  version: "0.2"
+  type: governance
+  status: active
+  project: mindmate-ai
+  created_at: "2026-09-21"
+  updated_at: "2026-09-21"
+
+runtime_platform: CHATGPT_CODEX
+registry_status: PARTIAL
+routing_mode: RECOMMEND_ONLY
+cross_provider_switch: false
+cost_limit: TBD
+
+models:
+  - model_id: gpt-6-astra
+    family: GPT-6 Pro / Astra
+    enabled: true
+    availability: VERIFIED_BY_CURRENT_CODEX_HOST_CAPABILITY
+    reasoning_levels: [low, medium, high, xhigh, max, ultra]
+    source: current Codex host model capability metadata
+    verified_at: "2026-09-21"
+  - model_id: gpt-5.6-sol
+    family: GPT-5.6 Sol
+    enabled: true
+    availability: VERIFIED_BY_CURRENT_CODEX_HOST_CAPABILITY
+    reasoning_levels: [low, medium, high, xhigh, max, ultra]
+    source: current Codex host model capability metadata
+    verified_at: "2026-09-21"
+  - model_id: gpt-5.6-terra
+    family: GPT-5.6 Terra
+    enabled: true
+    availability: VERIFIED_BY_CURRENT_CODEX_HOST_CAPABILITY
+    reasoning_levels: [low, medium, high, xhigh, max, ultra]
+    source: current Codex host model capability metadata
+    verified_at: "2026-09-21"
+  - model_id: gpt-5.6-luna
+    family: GPT-5.6 Luna
+    enabled: true
+    availability: VERIFIED_BY_CURRENT_CODEX_HOST_CAPABILITY
+    reasoning_levels: [low, medium, high, xhigh, max]
+    source: current Codex host model capability metadata
+    verified_at: "2026-09-21"
+  - model_id: gpt-5.5
+    family: GPT-5.5
+    enabled: true
+    availability: VERIFIED_BY_CURRENT_CODEX_HOST_CAPABILITY
+    reasoning_levels: [low, medium, high, xhigh]
+    source: current Codex host model capability metadata
+    verified_at: "2026-09-21"
+  - model_id: gpt-6-pro
+    family: GPT-6 Pro
+    enabled: false
+    availability: TBD
+    reasoning_levels: []
+    source: governance candidate list only
+  - model_id: gpt-5.6-sol-pro
+    family: GPT-5.6 Sol Pro
+    enabled: false
+    availability: TBD
+    reasoning_levels: []
+    source: governance candidate list only
+
+notes:
+  - enabled=true 仅表示当前 Codex 主机能力元数据声明可用，不代表本项目已经调用过每个模型或已完成成本批准。
+  - MODEL_COST_LIMIT 仍为 TBD，因此路由模式保持 RECOMMEND_ONLY，不自动切换底层模型。
+  - gpt-6-pro 和 gpt-5.6-sol-pro 无法从当前工作区能力元数据验证，保持 enabled=false、availability=TBD。

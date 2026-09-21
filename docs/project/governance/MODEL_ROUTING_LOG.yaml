@@ -1,0 +1,14 @@
+document:
+  id: MODEL-ROUTING-LOG-MINDMATE-001
+  version: "1.1"
+  type: evidence
+  status: active
+  project: mindmate-ai
+  created_at: "2026-09-21"
+  updated_at: "2026-09-21"
+
+routing_records: []
+
+notes:
+  - Bootstrap 初始化不伪造历史路由记录。
+  - 后续每次实际路由、升级、降级、回退或验证结果再追加记录。

@@ -5,6 +5,7 @@
 > 关联对象：PROJECT mindmate-ai
 > 状态：active
 > 关联来源：SRC-002、SRC-003、DEC-BOOTSTRAP-001
+> 历史状态：G2 预审；G3 审计结果见 07_G3_PRD_ADMISSION_AUDIT.md；页面树决策见 DEC-G3-001
 
 ## 审计目的
 
@@ -39,3 +40,5 @@
 - 当前 G3 PRD 准入：不启动。
 - 原因：Workflow 已确认，但页面树、逐条验收表达、API/数据契约、Provider 隐私约束和正式责任人仍有待收敛。
 - 这不是 G2 失败；G3 入口门禁已通过，本轮只停在 G3 尚未执行。
+
+G3 已在 Workflow 确认后单独执行；本文件不替代 G3 审计结论。

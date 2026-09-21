@@ -1,6 +1,6 @@
 # Mindmate AI 项目文档指南
 > 文档编号：DOC-GUIDE-001
-> 文档版本：v1.0
+> 文档版本：v1.1
 > 文档类型：governance
 > 关联对象：PROJECT mindmate-ai
 > 状态：active
@@ -14,7 +14,7 @@
 本项目文档必须区分以下内容：
 
 - 项目事实：来自业务资料、当前代码、配置、契约或运行证据。
-- 用户确认决策：来自当前会话中完成二次确认并授权应用的决策。
+- 用户确认决策：当前流程来自用户明确的 `决策ID=方案` 选择并在同轮自动应用；历史记录中的二次确认仍作为审计事实保留。
 - 操作指令：来自启动提示词或本轮提示词，只约束 AI 如何工作，不自动成为业务事实。
 - 通用参考：来自 doc/governance、doc/capabilities、doc/rules 和 doc/handbook，只提供方法，不自动成为项目结论。
 - TBD：当前无法由项目事实或用户确认确定的内容。
@@ -32,7 +32,9 @@
 - Capability 激活：governance/CAPABILITY_ACTIVATION.yaml
 - 候选流程：governance/WORKFLOW_BLUEPRINT.yaml
 - 当前运行上下文：governance/RUNTIME_CONTEXT.md
-- 项目决策：decisions/DEC-BOOTSTRAP-001.md
+- 项目决策：decisions/README.md 和 decisions/ 下对应 DEC
+- 待复核清单：decisions/REVIEW_BACKLOG.md
+- 决策流程迁移记录：baseline/DECISION_WORKFLOW_MIGRATION.md
 
 衍生文档只能引用上述事实源，不得复制出第二份业务规则、API 契约或技术栈事实。
 
@@ -44,9 +46,16 @@
 - 本目录的 active 不代表 PRD、架构或发布已批准。
 - 需求、架构、API、数据、UI 或验收范围发生变化时，先登记变更并执行影响分析。
 
+### 即时决策应用
+
+- 每轮最多展示 5 个彼此独立的决策；用户可以逐行回复多个 `决策ID=方案`。
+- 明确选择后同轮内部写入并同步 DEC/ADR/CR/UI-DEC、基线、Evidence、Runtime、Trace 和开放项。
+- 不要求二次确认，不要求用户输入 `DECISION_APPLY`；应用结果报告不是新的确认门禁。
+- `REVIEW_BACKLOG` 用于后续集中复核，不替代 G6/G7、`MANDATORY`、`TECH_DECISION` 或安全停止条件。
+
 ## v3.2.4 任务前上下文治理
 
-当前仓库的通用治理文档已更新到 v3.2.4（完整使用说明配套版本为 v3.2.2），后续每次具体任务开始前必须：
+当前仓库实际读取的通用治理文档为主文档 v3.2.7、完整使用说明 v3.2.5；后续每次具体任务开始前必须：
 
 1. 读取当前 Runtime Context、governance/CONTEXT_INDEX.yaml 和可复用的 context-summaries/。
 2. 设置 CONTEXT_LOADING_MODE、TOKEN_BUDGET_LEVEL 和 DISCOVERY_MODE。
@@ -54,7 +63,7 @@
 4. 只对版本变化、状态为 STALE 或摘要覆盖不足的资源重新读取。
 5. Token 节约不得省略事实核验、权限、安全、生产和阶段门禁。
 
-本轮核对的更新内容实际是“AI Token 与上下文节约治理”；在两份通用治理文档中未发现独立的“模型自动切换”字段、规则或 Provider 路由定义。模型选择、Provider 路由和具体技术实现仍须保持 TBD，不得根据这句描述自行补全。
+本轮核对的更新内容包括模型路由与“即时决策应用”。模型路由仍遵循当前 registry、实际可验证能力和 no-call 约束；不能以治理文档中的候选模型或 Provider 名称替代运行证据。项目 Provider runtime 仍按 G6 guards 保持禁用。
 
 上下文索引和摘要的项目入口：
 

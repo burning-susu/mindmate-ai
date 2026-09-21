@@ -14,3 +14,7 @@
 - STAGE_POLICY.yaml：每个阶段的执行深度和门禁。
 - RUNTIME_CONTEXT.md：当前任务的工作模式、允许写入和禁止动作。
 - EVIDENCE_REGISTER.yaml：完成声明的证据索引。
+- CONTEXT_INDEX.yaml：当前治理资源、摘要和哈希索引。
+- context-summaries/：可复用的最小上下文摘要。
+
+决策交互版本由 `RUNTIME_CONTEXT.md` 和 `WORKFLOW_BLUEPRINT.yaml` 中的 `V3.2_IMMEDIATE_APPLY` 字段定义；迁移记录位于 `../baseline/DECISION_WORKFLOW_MIGRATION.md`，已应用决策的后续复核位于 `../decisions/REVIEW_BACKLOG.md`。

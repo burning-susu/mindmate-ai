@@ -5,7 +5,7 @@ document:
   status: CONFIRMED
   project: mindmate-ai
   created_at: "2026-09-20"
-  updated_at: "2026-09-20"
+  updated_at: "2026-09-21"
   source:
     - SRC-007
     - PROJECT-PROFILE-MINDMATE-001
@@ -15,13 +15,38 @@ document:
   confirmed_at: "2026-09-20"
   confirmed_by: user
   confirmation_source: docs/project/governance/EVIDENCE_REGISTER.yaml#EVID-007
+  decision_workflow:
+    version: V3.2_IMMEDIATE_APPLY
+    second_confirmation_required: false
+    user_decision_apply_command_required: false
+    max_decisions_per_round: 5
+    review_backlog_enabled: true
+    review_backlog_path: docs/project/decisions/REVIEW_BACKLOG.md
+    architecture_gates_preserved: true
+    migration_record: docs/project/baseline/DECISION_WORKFLOW_MIGRATION.md
 
 workflow:
   base_lifecycle: G0-G11
   scenario: NEW_PROJECT
-  current_stage: G2
-  current_stage_level: L2
+  current_stage: G6
+  current_stage_level: L3
   workflow_status: CONFIRMED
+  provider_decision_status: APPLIED_CONDITIONAL
+  provider_change_status: APPLIED_CONDITIONAL
+  current_chat_provider: DEEPSEEK_API
+  current_chat_model: deepseek-flash
+  current_chat_model_status: APPLIED_CONDITIONAL
+  embedding_provider: LOCAL
+  current_embedding_model: BAAI/bge-small-zh-v1.5
+  embedding_decision_status: APPLIED_CONDITIONAL_SPIKE_REQUIRED
+  vector_store_strategy: LOCAL_EMBEDDED_ADAPTER
+  vector_store_product_status: TBD_SPIKE_REQUIRED
+  cost_policy_status: APPLIED_NOT_IMPLEMENTED
+  monthly_soft_budget: USD 5
+  cost_alert_threshold: USD 4
+  cost_stop_threshold: USD 5
+  provider_runtime_enabled: false
+  provider_guard_status: BLOCKED
   workflow_confirmation_constraints:
     - 本地单用户 MVP
     - 外部 Provider 只发送完成当前任务所必需的文本和上下文
@@ -86,37 +111,51 @@ stage_policy:
     entry: Workflow CONFIRMED，G2 基线 active
     simplified: 可合并审计表，但不得省略 P0/P1、状态、权限、异常、验收和追踪
     cannot_omit: Given/When/Then、页面范围、引用、数据归属和删除影响
-    current_status: NOT_STARTED_WORKFLOW_GATE_CLEARED
+    current_status: PASSED_G4_ENTRY_READY
   - id: G4
     enabled: true
     level: L2
     purpose: 形成 PRD Draft
     simplified: 产品主 PRD 可合并模块叙述
     cannot_omit: 范围、非目标、业务规则、状态、异常、验收和来源
+    current_status: COMPLETED_PRD_DRAFT
+    evidence: PRD-MINDMATE-V1、EVID-012、EVID-013
   - id: G5
     enabled: true
     level: L3
     purpose: PRD 评审和批准
     simplified: 低影响文案可延后
     cannot_omit: 高影响业务决策、P0/P1、批准证据和追踪
+    current_status: COMPLETED_PRD_APPROVED
+    entry: PRD_STATUS=READY_FOR_APPROVAL；G5_ENTRY_GATE=READY
   - id: G5.5
     enabled: true
     level: L1
     purpose: 根据 Approved PRD 建立 UI 逻辑范围
     conditional: PRD Approved 且 GENERATE_UI_REFERENCE_TREE=true
     cannot_omit: 页面、模块、目标终端和设计来源映射
+    current_status: COMPLETED_UI_LOGIC_SCOPE_DRAFT
+    entry: PRD_STATUS=APPROVED；G5_APPROVAL_STATUS=COMPLETED
+    evidence: UI-LOGIC-SCOPE-MINDMATE-001、EVID-021、EVID-022、EVID-023
   - id: G6
     enabled: true
     level: L3
     purpose: 总体技术架构和 TECH-DECISION
     simplified: 首版优先比较模块化单体、Provider Adapter、本地数据和内部异步任务
     cannot_omit: 数据归属、Provider、隐私、文件、RAG、部署、失败恢复和回滚
+    current_status: BLOCKED_OPEN_01
+    entry: G5.5_STATUS=COMPLETED；G6_ENTRY_GATE=READY
+    execution: BLOCKED
+    exit_gate: BLOCKED_TECH-DEC-004
+    evidence: EVID-023（入口）；EVID-024（架构 Draft）；EVID-025（C/no-call 已应用）；EVID-026（候选评审）；EVID-027（A 初选）；EVID-028（A 二次确认）；EVID-029（Alibaba 历史条件性应用）；EVID-032（DeepSeek Chat 修订应用）；EVID-033（DeepSeek Guard 阻断）；EVID-034（四项 G6 剩余决策批量应用）
   - id: G7
     enabled: true
     level: L2
     purpose: 技术模块边界
     simplified: 不按微服务拆分，不按页面或表机械拆分
     cannot_omit: 数据所有权、依赖、事务、测试和发布边界
+    current_status: NOT_STARTED_G6_EXIT_BLOCKED
+    entry_gate: NOT_READY
   - id: G8
     enabled: true
     level: L2
@@ -196,9 +235,13 @@ gates:
     before: G3
     evidence: EVID-007；用户确认 WORKFLOW_ID=WF-MINDMATE-001、版本 0.1 和限制条件
   architecture_confirmation:
-    status: REQUIRED
+    status: BLOCKED
     before: G6 exit or architecture-dependent implementation
-    evidence: TECH-DECISION review, informed confirmation and apply
+    blocker: TECH-DEC-004 / OPEN-01
+    applied_interim_decision: DEC-G6-001
+    applied_conditional_decision: DEC-G6-003
+    historical_conditional_decision: DEC-G6-002
+    evidence: EVID-024、EVID-025、EVID-029、EVID-030、EVID-032、EVID-033；DeepSeek Chat 已条件性应用，Embedding/Guard BLOCKED，Provider runtime 仍禁用
   module_boundary_confirmation:
     status: REQUIRED
     before: G8
@@ -206,3 +249,31 @@ gates:
   code_gate:
     status: NOT_REACHED
     rule: 不因本轮文档生成进入代码实现
+  g6_entry_gate: READY
+  g6_entry_verification: PASSED
+  g6_execution: BLOCKED
+  g6_exit_gate: BLOCKED_TECH-DEC-004
+  architecture_decision_apply_status: PARTIAL
+  provider_change_status: APPLIED_CONDITIONAL
+  current_chat_provider: DEEPSEEK_API
+  current_chat_model: deepseek-flash
+  current_chat_model_status: APPLIED_CONDITIONAL
+  embedding_provider: LOCAL
+  current_embedding_model: BAAI/bge-small-zh-v1.5
+  embedding_decision_status: APPLIED_CONDITIONAL_SPIKE_REQUIRED
+  vector_store_strategy: LOCAL_EMBEDDED_ADAPTER
+  vector_store_product_status: TBD_SPIKE_REQUIRED
+  cost_policy_status: APPLIED_NOT_IMPLEMENTED
+  monthly_soft_budget: USD 5
+  cost_alert_threshold: USD 4
+  cost_stop_threshold: USD 5
+  provider_runtime_enabled: false
+  provider_guard_status: BLOCKED
+  g7_entry_gate: NOT_READY
+  g7_execution: NOT_STARTED
+  decision_workflow_version: V3.2_IMMEDIATE_APPLY
+  second_confirmation_required: false
+  user_decision_apply_command_required: false
+  max_decisions_per_round: 5
+  review_backlog_enabled: true
+  architecture_gates_preserved: true

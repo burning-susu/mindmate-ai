@@ -1,16 +1,40 @@
 document:
   id: ASSESSMENT-MINDMATE-001
-  version: "1.0"
+  version: "1.1"
   type: governance
   status: active
   project: mindmate-ai
   created_at: "2026-09-20"
-  updated_at: "2026-09-20"
+  updated_at: "2026-09-21"
   source: SRC-001, SRC-002, SRC-003, DEC-BOOTSTRAP-001
 
 assessment_status: COMPLETED
-current_stage: G2
-workflow_effect: Workflow 已确认；G3 入口门禁通过但 G3 尚未执行
+current_stage: G6
+workflow_effect: G6 架构 Draft 已生成；DEC-G6-004 已批量应用 DeepSeek Chat/deepseek-flash、本地 BGE Embedding、本地嵌入式向量存储方向和 USD 5 成本政策，EVID-033 Provider Guard 仍 BLOCKED，Provider runtime 仍禁用，本地 Spike/成本实现未完成；OPEN-01 仍阻断 G6 正式出口，G7 未开始
+
+decision_workflow:
+  version: V3.2_IMMEDIATE_APPLY
+  second_confirmation_required: false
+  user_decision_apply_command_required: false
+  max_decisions_per_round: 5
+  review_backlog_enabled: true
+  review_backlog_path: docs/project/decisions/REVIEW_BACKLOG.md
+  architecture_gates_preserved: true
+  migration_record: docs/project/baseline/DECISION_WORKFLOW_MIGRATION.md
+  current_chat_provider: DEEPSEEK_API
+  current_chat_model: deepseek-flash
+  current_chat_model_status: APPLIED_CONDITIONAL
+  embedding_provider: LOCAL
+  current_embedding_model: BAAI/bge-small-zh-v1.5
+  embedding_decision_status: APPLIED_CONDITIONAL_SPIKE_REQUIRED
+  vector_store_strategy: LOCAL_EMBEDDED_ADAPTER
+  vector_store_product_status: TBD_SPIKE_REQUIRED
+  cost_policy_status: APPLIED_NOT_IMPLEMENTED
+  monthly_soft_budget: USD 5
+  cost_alert_threshold: USD 4
+  cost_stop_threshold: USD 5
+  provider_change_status: APPLIED_CONDITIONAL
+  provider_guard_status: BLOCKED
 
 dimensions:
   - id: ASSESS-SCALE
@@ -64,10 +88,10 @@ dimensions:
   - id: ASSESS-PROVIDER
     name: 外部 Provider 依赖
     result: HIGH_UNCERTAINTY
-    basis: 模型和 Embedding 已确认外部托管，但 Provider 尚未选择
+    basis: Chat Provider 已条件性修订为 DeepSeek API / deepseek-flash；Embedding、公开条款、账号资格、地区可用性和成本 guards 尚未通过
     trigger: HARD-PROVIDER_SELECTION
     risk: 供应商锁定、限流、费用和服务不可用
-    missing: Provider 名称、SLA、成本和数据政策
+    missing: 可引用的 API 数据处理/保留/训练/删除/地域条款、账号资格、模型权限、余额、Embedding 方案、SLA、成本保护和运行时启用证据
     workflow_effect: G6 技术选型为 REQUIRED；保留 Adapter 和降级边界
   - id: ASSESS-TEST
     name: 测试复杂度
@@ -148,4 +172,38 @@ workflow_impacts:
   required: G2、G3、G6、G8、G9、G10、G11 均不能完全删除
   simplified: 可合并小项目文档；采用模块化单体；V1 不做微服务、云服务器和复杂后台
   g3_entry_gate: READY
-  g3_execution: NOT_STARTED
+  g3_execution: COMPLETED
+  g3_status: PASSED
+  g4_execution: COMPLETED
+  g4_status: COMPLETED
+  g5_entry_gate: READY
+  g5_review_status: COMPLETED
+  prd_status: APPROVED
+  prd_approval_gate: COMPLETED
+  g5_approval_status: COMPLETED
+  g5_5_entry_gate: READY
+  g5_5_execution: COMPLETED
+  g5_5_status: COMPLETED
+  g6_entry_gate: READY
+  g6_entry_verification: PASSED
+  g6_execution: BLOCKED
+  g6_exit_gate: BLOCKED_TECH-DEC-004
+  architecture_decision_apply_status: PARTIAL
+  provider_decision_status: APPLIED_CONDITIONAL
+  provider_change_status: APPLIED_CONDITIONAL
+  current_chat_provider: DEEPSEEK_API
+  current_chat_model: deepseek-flash
+  current_chat_model_status: APPLIED_CONDITIONAL
+  embedding_provider: LOCAL
+  current_embedding_model: BAAI/bge-small-zh-v1.5
+  embedding_decision_status: APPLIED_CONDITIONAL_SPIKE_REQUIRED
+  vector_store_strategy: LOCAL_EMBEDDED_ADAPTER
+  vector_store_product_status: TBD_SPIKE_REQUIRED
+  cost_policy_status: APPLIED_NOT_IMPLEMENTED
+  monthly_soft_budget: USD 5
+  cost_alert_threshold: USD 4
+  cost_stop_threshold: USD 5
+  provider_guard_status: BLOCKED
+  architecture_status: DRAFT
+  g7_entry_gate: NOT_READY
+  g7_execution: NOT_STARTED

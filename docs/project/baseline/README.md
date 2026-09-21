@@ -1,6 +1,6 @@
 # G2 来源与决策基线
 > 文档编号：G2-BASELINE-README-001
-> 文档版本：v1.0
+> 文档版本：v1.1
 > 文档类型：governance
 > 关联对象：PROJECT mindmate-ai
 > 状态：active
@@ -15,5 +15,6 @@
 - 04_CONFLICT_MATRIX.md：来源冲突、裁决和待复核项。
 - 05_PENDING_QUESTIONS.md：会影响后续 Workflow、架构、范围、数据或交付的 TBD。
 - 06_REQUIREMENT_ALIGNMENT_AUDIT.md：进入 G3 前的需求一致性预审。
+- DECISION_WORKFLOW_MIGRATION.md：V3.2 即时决策应用迁移记录、旧规则盘点和门禁保留说明。
 
-当前结论：G2 基线已形成；Workflow 已确认；G3 尚未启动。
+当前结论：G2 基线已形成；Workflow 已确认；G3 审计已通过；G4 入口门禁 READY，但 G4 尚未启动。

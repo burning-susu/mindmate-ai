@@ -1,11 +1,11 @@
 document:
   id: EVIDENCE-REGISTER-MINDMATE-001
-  version: "1.0"
+  version: "2.0"
   type: evidence
   status: active
   project: mindmate-ai
   created_at: "2026-09-20"
-  updated_at: "2026-09-20"
+  updated_at: "2026-09-21"
 
 evidence:
   - id: EVID-001
@@ -86,11 +86,508 @@ evidence:
       - V1 不包含设置页和独立错题本
       - API 采用 REST + OpenAPI 方向
       - G3 完成前不得进入开发和项目脚手架创建
+  - id: EVID-008
+    type: raw_requirement_audit_input
+    scope: 两份原始 DOCX 的 G3 需求事实核验
+    claim: G3 审计已重新读取产品说明书和项目需求文档正文与表格
+    result: 产品说明书 114 个非空段落、13 个表格；项目需求文档 239 个非空段落、38 个表格
+    verified_at: "2026-09-20"
+    verifier: assistant
+    ref: SRC-002、SRC-003
+    source_hashes:
+      SRC-002: 654932274C802BA349E6DD110A3D2A68D7E5BC3301180402904592D87B6ED82F
+      SRC-003: 587D2BED9DA20BC9DF8F307D7718872E7BC802567410219734127AAC1799059D
+  - id: EVID-009
+    type: stage_audit
+    scope: G3 PRD 准入审计
+    claim: G3 审计完成并识别一个阻断冲突
+    result: G3_STATUS=BLOCKED；G4_ENTRY_GATE=NOT_READY；阻断项 G3-BLOCKER-001
+    status: HISTORICAL
+    verified_at: "2026-09-20"
+    verifier: assistant
+    ref: docs/project/baseline/07_G3_PRD_ADMISSION_AUDIT.md
+    relates_to:
+      - WF-MINDMATE-001
+      - G3
+      - CONFLICT-04
+  - id: EVID-010
+    type: decision_confirmation_apply
+    scope: G3-BLOCKER-001
+    claim: 用户确认并应用 V1 页面树和一级入口方案 A
+    result: DEC-G3-001=APPLIED；CONFLICT-04=RESOLVED
+    verified_at: "2026-09-20"
+    verifier: user
+    ref: 当前用户确认消息、docs/project/decisions/DEC-G3-001.md
+    constraints:
+      - 五个一级页面壳
+      - 知识库详情和文件详情作为嵌套页面
+      - 学习陪练保留在 AI 对话模式中
+      - 设置页和独立错题本不进入 V1
+  - id: EVID-011
+    type: stage_exit
+    scope: G3 PRD 准入审计
+    claim: G3 阻断项已应用，G3 退出条件满足
+    result: G3_STATUS=PASSED；G4_ENTRY_GATE=READY；G4 尚未执行
+    verified_at: "2026-09-20"
+    verifier: assistant
+    ref: docs/project/baseline/07_G3_PRD_ADMISSION_AUDIT.md、DEC-G3-001
+    relates_to:
+      - G3
+      - G4
+  - id: EVID-012
+    type: document_output
+    scope: V1.0 PRD Draft
+    claim: 项目级 PRD Draft 已生成
+    result: PRD_STATUS=DRAFT；覆盖 V1 范围、页面树、流程、REQ、业务规则、状态、异常、隐私、安全、NFR、验收和 TBD
+    verified_at: "2026-09-20"
+    verifier: assistant
+    ref: docs/project/prd/PRODUCT_PRD.md
+    relates_to:
+      - PRD-MINDMATE-V1
+      - G4
+  - id: EVID-013
+    type: stage_exit
+    scope: G4 PRD Draft
+    claim: G4 最低退出条件满足
+    result: G4_STATUS=COMPLETED；G5_ENTRY_GATE=READY；G5_EXECUTION=NOT_STARTED
+    verified_at: "2026-09-20"
+    verifier: assistant
+    ref: docs/project/prd/PRODUCT_PRD.md、docs/project/acceptance/TRACE_MATRIX.md、docs/project/acceptance/OPEN_ITEMS.md
+    relates_to:
+      - G4
+      - G5
+  - id: EVID-014
+    type: stage_review
+    scope: G5 PRD 评审与批准门禁
+    claim: PRD Draft 已完成评审和必要修订
+    result: PRD_STATUS=DRAFT；G5_REVIEW_STATUS=BLOCKED；PRD_APPROVAL_GATE=NOT_READY
+    status: HISTORICAL
+    verified_at: "2026-09-21"
+    verifier: assistant
+    ref: docs/project/baseline/08_G5_PRD_REVIEW.md、docs/project/prd/PRODUCT_PRD.md
+    relates_to:
+      - G5
+      - PRD-MINDMATE-V1
+      - G5-BLOCKER-001
+  - id: EVID-015
+    type: model_routing
+    scope: G5 PRD 评审任务
+    claim: 当前 ChatGPT/Codex 模型路由仅记录建议，未执行底层模型自动切换
+    result: MODEL_ROUTING_MODE=RECOMMEND_ONLY；CURRENT_REASONING_LEVEL=HIGH；MODEL_REGISTRY 未配置
+    verified_at: "2026-09-21"
+    verifier: assistant
+    ref: docs/project/governance/MODEL_REGISTRY.yaml、docs/project/governance/MODEL_ROUTING_LOG.yaml
+    relates_to:
+      - G5
+      - v3.2.5-2G
+  - id: EVID-016
+    type: decision_confirmation_apply
+    scope: G5-BLOCKER-001
+    claim: 用户确认并应用 V1 本地轻量备份/恢复方案
+    result: DEC-G5-001=APPLIED_WITH_TECHNICAL_TBD；G5-BLOCKER-001=RESOLVED
+    verified_at: "2026-09-21"
+    verifier: user
+    ref: 当前用户确认消息、docs/project/decisions/DEC-G5-001.md
+    constraints:
+      - V1 提供轻量本地导出/备份和恢复
+      - 不提供云同步、远程备份或跨设备同步
+      - 备份格式、内容、加密、覆盖、索引重建和失败恢复留到 G6/G8/G10
+  - id: EVID-017
+    type: stage_review
+    scope: G5 PRD 评审与批准门禁
+    claim: G5 评审完成，PRD 达到用户批准门禁
+    result: G5_REVIEW_STATUS=COMPLETED；PRD_STATUS=READY_FOR_APPROVAL；PRD_APPROVAL_GATE=WAITING_FOR_USER_CONFIRMATION
+    status: HISTORICAL
+    verified_at: "2026-09-21"
+    verifier: assistant
+    ref: docs/project/baseline/08_G5_PRD_REVIEW.md、docs/project/prd/PRODUCT_PRD.md、DEC-G5-001
+    relates_to:
+      - G5
+      - PRD-MINDMATE-V1
+  - id: EVID-018
+    type: prd_approval_confirmation
+    scope: PRD-MINDMATE-V1 v1.0-Draft.3
+    claim: 用户完成 PRD 二次确认并批准当前版本及限制条件
+    result: PRD_STATUS=APPROVED；PRD_APPROVAL_GATE=COMPLETED；G5_APPROVAL_STATUS=COMPLETED
+    verified_at: "2026-09-21"
+    verifier: user
+    ref: 当前用户确认消息、docs/project/prd/PRODUCT_PRD.md
+    constraints:
+      - V1 本地单用户 MVP
+      - 五个一级页面壳
+      - 设置页和独立错题本不进入 V1
+      - 本地轻量备份/恢复方向已确认，技术细节留后续阶段
+      - Provider、模型、数据库、向量存储和流式协议继续 TBD
+  - id: EVID-019
+    type: stage_exit
+    scope: G5 PRD 评审与批准
+    claim: G5 批准门禁完成，G5.5 可进入但未执行
+    result: G5_STATUS=COMPLETED；G5_5_ENTRY_GATE=READY；G5_5_EXECUTION=NOT_STARTED
+    status: HISTORICAL
+    verified_at: "2026-09-21"
+    verifier: assistant
+    ref: docs/project/baseline/08_G5_PRD_REVIEW.md、DEC-G5-001、EVID-018
+    relates_to:
+      - G5
+      - G5.5
+  - id: EVID-020
+    type: model_routing_bootstrap
+    scope: MODEL_ROUTING_BOOTSTRAP
+    claim: 模型注册表和路由日志已按当前 Codex 工作区能力初始化
+    result: MODEL_ROUTING_STATUS=PARTIAL_REGISTRY_NO_COST_LIMIT；已验证模型 5 个；未验证候选 2 个；routing_records 为空
+    verified_at: "2026-09-21"
+    verifier: assistant
+    ref: docs/project/governance/MODEL_REGISTRY.yaml、docs/project/governance/MODEL_ROUTING_LOG.yaml、当前 Codex host model capability metadata
+    constraints:
+      - 不改变 PROJECT_STAGE、Workflow、PRD、代码或发布状态
+      - 不跨 Provider
+      - MODEL_COST_LIMIT 继续 TBD
+  - id: EVID-021
+    type: model_routing_check
+    scope: G5.5-UI-LOGIC-SCOPE
+    claim: 第六轮模型路由降级状态在本轮仍有效
+    result: MODEL_ROUTING_CHECK=CONFIRMED_EXISTING_DEGRADED_STATE；MODEL_SWITCH_EXECUTED=false；G5.5_BLOCKED_BY_MODEL_ROUTING=false
+    verified_at: "2026-09-21"
+    verifier: assistant
+    ref: docs/project/governance/MODEL_REGISTRY.yaml、docs/project/governance/MODEL_ROUTING_LOG.yaml、docs/project/governance/RUNTIME_CONTEXT.md
+    constraints:
+      - MODEL_ROUTING_MODE=RECOMMEND_ONLY
+      - ACTUAL_MODEL_ID=TBD
+      - 不伪造路由记录
+  - id: EVID-022
+    type: prd_approval_verification
+    scope: PRD-MINDMATE-V1 v1.0-Draft.3
+    claim: Approved PRD 和 G5.5 入口证据校验通过
+    result: PRD_APPROVAL_VERIFICATION=PASSED；PRD_STATUS=APPROVED；G5_STATUS=COMPLETED；G5_5_ENTRY_GATE=READY
+    verified_at: "2026-09-21"
+    verifier: assistant
+    ref: docs/project/prd/PRODUCT_PRD.md、docs/project/prd/CHANGELOG.md、docs/project/baseline/08_G5_PRD_REVIEW.md、EVID-018、EVID-019
+    relates_to:
+      - PRD-MINDMATE-V1
+      - G5
+      - G5.5
+  - id: EVID-023
+    type: stage_exit
+    scope: G5.5 UI 逻辑范围
+    claim: G5.5 UI 逻辑范围已完成，G6 入口已就绪
+    result: G5_5_STATUS=COMPLETED；UI_LOGIC_SCOPE_STATUS=DRAFT；G6_ENTRY_GATE=READY；G6_EXECUTION=NOT_STARTED
+    verified_at: "2026-09-21"
+    verifier: assistant
+    ref: docs/project/ui/UI_LOGIC_SCOPE.md、docs/project/acceptance/TRACE_MATRIX.md、EVID-021、EVID-022
+    relates_to:
+      - G5.5
+      - G6
+  - id: EVID-024
+    type: architecture_draft_and_gate_review
+    scope: G6 总体技术架构
+    claim: G6 入口核验通过并生成供应商无关架构 Draft；正式出口因 Provider 数据处理边界未决而阻断
+    result: G6_ENTRY_VERIFICATION=PASSED；G6_STATUS=BLOCKED；ARCHITECTURE_STATUS=DRAFT；G7_ENTRY_GATE=NOT_READY；G7_EXECUTION=NOT_STARTED
+    verified_at: "2026-09-21"
+    verifier: assistant
+    ref: docs/project/architecture/SYSTEM_ARCHITECTURE.md、docs/project/baseline/09_G6_ARCHITECTURE_REVIEW.md、docs/project/acceptance/TRACE_MATRIX.md、docs/project/acceptance/OPEN_ITEMS.md
+    relates_to:
+      - G6
+      - TECH-DEC-004
+      - OPEN-01
+    limitations:
+      - Provider、模型/Embedding、地域、数据处理/保留条款及成本边界仍未确认
+      - 不构成 Approved/Baselined 架构、Provider 选择、代码或测试完成证据
+      - 本轮未执行模型切换，ACTUAL_MODEL_ID=TBD
+  - id: EVID-025
+    type: decision_confirmation_apply
+    scope: TECH-DEC-004=C
+    claim: 用户完成二次确认并授权应用 Provider 详情未决期间的 no-call 临时边界
+    result: DEC-G6-001=APPLIED_WITH_PROVIDER_TBD；真实 Provider/模型/Embedding 请求保持禁用；OPEN-01 仍阻断 G6 Exit；ARCHITECTURE_DECISION_APPLY_STATUS=PARTIAL
+    verified_at: "2026-09-21"
+    verifier: user
+    ref: 用户消息“确认该决策：TECH-DEC-004=C”及“应用并同步 TECH-DEC-004=C”、docs/project/decisions/DEC-G6-001.md
+    relates_to:
+      - TECH-DEC-004
+      - DEC-G6-001
+      - OPEN-01
+      - G6
+    constraints:
+      - 不改变 Approved PRD 中外部 Provider 的总体方向
+      - 不确认具体供应商、模型、Embedding、地域、数据条款或成本上限
+      - 不授权真实外部 API 调用，不解除 G6 出口阻断
+  - id: EVID-026
+    type: provider_candidate_review
+    scope: G6 Provider / Chat / Embedding 决策初选包
+    claim: 已读取当前官方资料并形成候选、成本情景和数据边界评审；尚未收到用户初选
+    result: PROVIDER_DECISION_STATUS=WAITING_FOR_USER_INITIAL_SELECTION；G6_STATUS=BLOCKED；G7_ENTRY_GATE=NOT_READY；DEC-G6-001 保持原样；真实 Provider 请求未发起
+    status: HISTORICAL
+    verified_at: "2026-09-21"
+    verifier: assistant
+    ref: docs/project/baseline/10_G6_PROVIDER_DECISION_REVIEW.md、当前官方资料来源登记
+    relates_to:
+      - TECH-DEC-004
+      - OPEN-01
+      - G6
+    limitations:
+      - 用户国家/地区、Provider 账户资格和 API 付款状态未验证
+      - Alibaba Model Studio API 数据条款未由当前读取内容确认
+      - DeepSeek 的消费者隐私政策不作为开发者 API 数据条款
+      - 本地 BGE 候选未安装或性能测试
+      - 未确认候选方案、正式月预算或任何 Provider
+  - id: EVID-027
+    type: provider_initial_selection
+    scope: TECH-DEC-004-V2=A
+    claim: 用户初选 Alibaba Cloud Model Studio 方案，但明确要求数据条款、账号资格和地区可用性核验完成前不调用、不解除 OPEN-01
+    result: PROVIDER_DECISION_STATUS=INFORMED_CONFIRMATION_PENDING；A 仍为初选意向；G6_STATUS=BLOCKED；G7_ENTRY_GATE=NOT_READY；无正式 V2 DEC
+    verified_at: "2026-09-21"
+    verifier: user
+    ref: 当前用户初选消息、docs/project/baseline/10_G6_PROVIDER_DECISION_REVIEW.md
+    relates_to:
+      - TECH-DEC-004
+      - OPEN-01
+      - G6
+    selection:
+      provider: Alibaba Cloud Model Studio
+      chat_model: qwen3.8-flash
+      embedding: text-embedding-v4
+      region: Singapore/International
+      data_terms: 待继续核验官方数据处理、保留和训练条款
+      monthly_soft_budget: USD 5
+    constraints:
+      - 在数据条款、账号资格和地区可用性核验完成前不发起真实外部请求
+      - 不解除 OPEN-01
+      - 不创建或应用正式 V2 DEC
+      - 不将初选当成 Provider 已批准
+  - id: EVID-028
+    type: provider_decision_confirmation
+    scope: TECH-DEC-004-V2=A
+    claim: 用户完成 Alibaba Cloud Model Studio A 方案的正式二次确认，但保留数据条款、账号资格和地区可用性核验前不调用且不解除 OPEN-01 的限制
+    result: PROVIDER_DECISION_STATUS=CONFIRMED_NOT_APPLIED；A 已二次确认但尚未应用；G6_STATUS=BLOCKED；G7_ENTRY_GATE=NOT_READY；无正式 V2 DEC
+    verified_at: "2026-09-21"
+    verifier: user
+    ref: 当前用户二次确认消息、docs/project/baseline/10_G6_PROVIDER_DECISION_REVIEW.md
+    relates_to:
+      - TECH-DEC-004
+      - OPEN-01
+      - G6
+    confirmation:
+      provider: Alibaba Cloud Model Studio
+      chat_model: qwen3.8-flash
+      embedding: text-embedding-v4
+      region: Singapore/International
+      constraints:
+        - 数据处理、保留和训练条款继续核验
+        - 账号资格和地区可用性继续核验
+        - 核验完成前不发起真实外部请求
+        - 不解除 OPEN-01
+    limitations:
+      - 二次确认不等于已应用
+      - 尚未创建或更新正式 V2 DEC
+      - 尚未更新架构为 Approved
+  - id: EVID-029
+    type: provider_decision_apply
+    scope: TECH-DEC-004-V2=A
+    claim: 用户授权应用并同步 A；DEC-G6-002 已创建为条件性 Provider 基线并 amends DEC-G6-001
+    result: PROVIDER_DECISION_STATUS=APPLIED_CONDITIONAL；Provider runtime disabled until guards verified；OPEN-01 仍为 G6_EXIT_BLOCKER；G6_STATUS=BLOCKED；G7_ENTRY_GATE=NOT_READY
+    verified_at: "2026-09-21"
+    verifier: user
+    ref: 用户消息“应用并同步 TECH-DEC-004-V2”、docs/project/decisions/DEC-G6-002.md、docs/project/baseline/10_G6_PROVIDER_DECISION_REVIEW.md
+    relates_to:
+      - TECH-DEC-004
+      - DEC-G6-001
+      - DEC-G6-002
+      - OPEN-01
+      - G6
+    applied_baseline:
+      provider: Alibaba Cloud Model Studio
+      chat_model: qwen3.8-flash
+      embedding: text-embedding-v4
+      region: Singapore/International
+      runtime_enabled: false
+    guards:
+      - 数据处理、保留和训练条款核验
+      - 账号资格和 Model Studio 开通状态核验
+      - Singapore/International 地区可用性核验
+      - no-call 约束在 guards 完成前持续有效
+      - 不解除 OPEN-01
+  - id: EVID-030
+    type: provider_guard_verification_and_exit_preflight
+    scope: G6 Provider Guard Verification
+    claim: 公开官方资料、账户核验条件和成本防护已逐项预检；强制 guards 未全部通过，G6 Exit 保持阻断
+    result: G6_EXIT=BLOCKED；PROVIDER_GUARD_STATUS=BLOCKED；G6_STATUS=BLOCKED；ARCHITECTURE_STATUS=DRAFT；OPEN-01=G6_EXIT_BLOCKER；G7_ENTRY_GATE=NOT_READY；PROVIDER_RUNTIME_ENABLED=false
+    verified_at: "2026-09-21"
+    verifier: assistant
+    ref: docs/project/baseline/11_G6_PROVIDER_GUARD_VERIFICATION.md、docs/project/baseline/10_G6_PROVIDER_DECISION_REVIEW.md、Alibaba 官方 Model Studio 页面
+    relates_to:
+      - DEC-G6-002
+      - TECH-DEC-004
+      - OPEN-01
+      - G6
+    guard_summary:
+      public_terms: UNVERIFIED
+      public_region: UNVERIFIED
+      public_model_catalog: PARTIAL_PUBLIC_ONLY
+      public_pricing: PARTIAL_PUBLIC_ONLY
+      account_eligibility: NOT_VERIFIED
+      cost_protection: PROPOSED_NOT_APPLIED
+    limitations:
+      - Alibaba Region/Data privacy/Terms 页面当前只返回页面壳，未取得可引用正文
+      - 未登录或检查 Alibaba Cloud 账号、Model Studio、endpoint、付款或配额
+      - 未读取或验证任何 Secret
+  - id: EVID-031
+    type: decision_workflow_migration
+    scope: V3.2_IMMEDIATE_APPLY
+    claim: 项目决策交互已从二次确认/用户 DECISION_APPLY 迁移为一次明确选择当轮自动应用，并建立 Review Backlog
+    result: DECISION_WORKFLOW_VERSION=V3.2_IMMEDIATE_APPLY；SECOND_CONFIRMATION_REQUIRED=false；USER_DECISION_APPLY_COMMAND_REQUIRED=false；MAX_DECISIONS_PER_ROUND=5；REVIEW_BACKLOG_ENABLED=true；G6_STATUS=BLOCKED；OPEN-01=G6_EXIT_BLOCKER；G7_ENTRY_GATE=NOT_READY
+    verified_at: "2026-09-21"
+    verifier: assistant
+    ref: docs/project/baseline/DECISION_WORKFLOW_MIGRATION.md、docs/project/decisions/REVIEW_BACKLOG.md、docs/project/decisions/README.md、docs/project/governance/RUNTIME_CONTEXT.md
+    relates_to:
+      - V3.2_IMMEDIATE_APPLY
+      - G6
+      - G7
+      - OPEN-01
+    source_mapping:
+      requested_main: svg通用文档提示词v3.2.md
+      actual_main: doc/governance/通用文档提示词v3.2.md
+      actual_main_sha256: 902C8C9F1C783742CB56AE803022FE0423D45D90B8AA9399606A9236ED265E25
+      requested_full: svg通用文档提示词v3.2完整使用说明.md
+      actual_full: doc/governance/通用文档提示词v3.2完整使用说明.md
+      actual_full_sha256: DB0AC53C5C76A098356B8951A6C115EE567C7D9AEF4DD116EA9ADC389CA86A2A
+    preserved:
+      - 历史 DEC/Evidence 中的二次确认事实未被改写
+      - MANDATORY、TECH_DECISION、依赖/互斥分析和 G6/G7 门禁保持有效
+      - DEC-G6-001 no-call guards、DEC-G6-002 条件性 Provider 基线和 Provider runtime disabled 保持不变
+      - 未修改业务代码、Provider、Secret 或 Git 状态
+  - id: EVID-032
+    type: provider_decision_revision_apply
+    scope: DEC-G6-003 / Chat Provider=DeepSeek API
+    claim: 本轮控制输入引用的所有者明确选择“我想用 DeepSeek API 解决”；按即时应用规则，Chat Provider 修订已同轮条件性应用
+    result: CHAT_PROVIDER=DEEPSEEK_API；CURRENT_CHAT_MODEL=deepseek-flash；PROVIDER_CHANGE_STATUS=APPLIED_CONDITIONAL；DEC-G6-002 Chat route=SUPERSEDED_NOT_CURRENT_PROVIDER；EMBEDDING_DECISION_STATUS=TBD；PROVIDER_RUNTIME_ENABLED=false；G6_STATUS=BLOCKED；OPEN-01=G6_EXIT_BLOCKER；G7_ENTRY_GATE=NOT_READY
+    verified_at: "2026-09-21"
+    verifier: user-provided control prompt / assistant
+    ref: C:/Users/15932/Desktop/G6切换DeepSeek并集中剩余决策提示词.md、docs/project/decisions/DEC-G6-003.md、docs/project/baseline/G6_DEEPSEEK_PROVIDER_CHANGE_REVIEW.md
+    relates_to:
+      - DEC-G6-001
+      - DEC-G6-002
+      - DEC-G6-003
+      - TECH-DEC-004
+      - G6
+    selection:
+      chat_provider: DeepSeek API
+      chat_model: deepseek-flash
+      base_url: https://api.deepseek.com
+      embedding: TBD
+      runtime_enabled: false
+    constraints:
+      - 不要求二次确认或用户 DECISION_APPLY
+      - 不调用 DeepSeek 或 Alibaba API
+      - 不创建、读取、验证或展示 API Key
+      - 本地后端 Adapter 读取 Secret；前端不得持有 Key
+      - DeepSeek Guard、账号、地区、Embedding 和成本完成前不解除 OPEN-01
+  - id: EVID-033
+    type: provider_guard_verification_and_exit_preflight
+    scope: G6 DeepSeek Provider Guard Verification
+    claim: DeepSeek 官方公开 API 功能/价格/限流资料可读，但数据处理、保留/训练、删除、地域、账号资格、Embedding 和成本保护未全部通过，G6 Exit 保持阻断
+    result: PROVIDER_GUARD_STATUS=BLOCKED；PROVIDER_RUNTIME_ENABLED=false；G6_EXIT=BLOCKED；G6_STATUS=BLOCKED；ARCHITECTURE_STATUS=DRAFT；OPEN-01=G6_EXIT_BLOCKER；G7_ENTRY_GATE=NOT_READY；CURRENT_CHAT_PROVIDER=DEEPSEEK_API；CURRENT_CHAT_MODEL=deepseek-flash；EMBEDDING_DECISION_STATUS=TBD
+    verified_at: "2026-09-21"
+    verifier: assistant
+    ref: docs/project/baseline/12_G6_DEEPSEEK_PROVIDER_GUARD_VERIFICATION.md、docs/project/baseline/G6_DEEPSEEK_PROVIDER_CHANGE_REVIEW.md、DeepSeek 官方 API 文档（Models & Pricing、Chat Completions、Thinking Mode、JSON Output、Tool Calls、Rate Limit & Isolation）
+    relates_to:
+      - DEC-G6-003
+      - TECH-DEC-004
+      - OPEN-01
+      - G6
+    guard_summary:
+      public_api_features: PASS_PUBLIC_DOCS
+      public_pricing_and_limits: PARTIAL_PUBLIC_ONLY
+      api_data_processing: UNVERIFIED
+      retention_training_deletion_region: UNVERIFIED
+      account_model_balance: NOT_VERIFIED
+      embedding_choice: TBD
+      cost_protection: PROPOSED_NOT_APPLIED
+    limitations:
+      - 消费者隐私政策不能替代开发者 API 条款
+      - 未登录或检查 DeepSeek 账号、模型权限、余额、付款、地区或配额
+      - 未读取、创建或验证任何 Secret
+  - id: EVID-034
+    type: g6_remaining_decisions_batch_apply
+    scope: DEC-G6-004 / TECH-G6-CHAT-MODEL=A / TECH-G6-EMBEDDING=A / COST-G6-PROVIDER=A / TECH-G6-VECTOR-STORE=A
+    claim: 用户一次回复 4 个独立 G6 决策选择；按 V3.2_IMMEDIATE_APPLY 同轮完成批量内部应用
+    result: CHAT_MODEL=deepseek-flash；CHAT_MODEL_STATUS=APPLIED_CONDITIONAL；EMBEDDING_PROVIDER=LOCAL；EMBEDDING_MODEL=BAAI/bge-small-zh-v1.5；EMBEDDING_STATUS=APPLIED_CONDITIONAL_SPIKE_REQUIRED；VECTOR_STORE_STRATEGY=LOCAL_EMBEDDED_ADAPTER；VECTOR_STORE_PRODUCT_STATUS=TBD_SPIKE_REQUIRED；MONTHLY_SOFT_BUDGET=USD 5；COST_ALERT_THRESHOLD=USD 4；COST_STOP_THRESHOLD=USD 5；COST_POLICY_STATUS=APPLIED_NOT_IMPLEMENTED；PROVIDER_RUNTIME_ENABLED=false；G6_STATUS=BLOCKED；OPEN-01=G6_EXIT_BLOCKER；G7_ENTRY_GATE=NOT_READY
+    verified_at: "2026-09-21"
+    verifier: user / assistant
+    ref: 当前用户消息“四项 TECH-G6 决策均选择 A”、docs/project/decisions/DEC-G6-004.md、docs/project/baseline/G6_DEEPSEEK_PROVIDER_CHANGE_REVIEW.md
+    relates_to:
+      - DEC-G6-003
+      - DEC-G6-004
+      - TECH-G6-CHAT-MODEL
+      - TECH-G6-EMBEDDING
+      - COST-G6-PROVIDER
+      - TECH-G6-VECTOR-STORE
+      - G6
+    applied_decisions:
+      chat_model:
+        choice: A
+        value: deepseek-flash
+        status: APPLIED_CONDITIONAL
+      embedding:
+        choice: A
+        provider: LOCAL
+        model: BAAI/bge-small-zh-v1.5
+        status: APPLIED_CONDITIONAL_SPIKE_REQUIRED
+      cost:
+        choice: A
+        monthly_soft_budget: USD 5
+        alert_threshold: USD 4
+        stop_threshold: USD 5
+        auto_top_up: false
+        manual_resume: true
+        status: APPLIED_NOT_IMPLEMENTED
+      vector_store:
+        choice: A
+        strategy: LOCAL_EMBEDDED_ADAPTER
+        product_status: TBD_SPIKE_REQUIRED
+    limitations:
+      - 未下载、安装或运行本地 Embedding 模型
+      - 未创建数据库、向量库、依赖或业务代码
+      - 未调用 DeepSeek/Alibaba API，未读取或验证任何 Key
+      - 成本政策已记录但运行时计数和停止实现尚未完成
 
 completion_claims:
   code_complete: NOT_STARTED
   tests_passed: NOT_STARTED
   acceptance_complete: NOT_STARTED
   workflow_confirmed: CONFIRMED
-  g3_started: NOT_STARTED
+  g3_audit: PASSED
+  g4_status: COMPLETED
+  g5_entry_gate: READY
+  g5_review_status: COMPLETED
+  prd_status: APPROVED
+  prd_approval_gate: COMPLETED
+  g5_approval_status: COMPLETED
+  g5_started: COMPLETED
+  g5_5_entry_gate: READY
+  g5_5_started: COMPLETED
+  g6_entry_gate: READY
+  g6_entry_verification: PASSED
+  g6_execution: BLOCKED
+  g6_exit_gate: BLOCKED_TECH-DEC-004
+  architecture_status: DRAFT
+  architecture_decision_apply_status: PARTIAL
+  provider_decision_status: APPLIED_CONDITIONAL
+  provider_guard_status: BLOCKED
+  current_chat_provider: DEEPSEEK_API
+  current_chat_model: deepseek-flash
+  provider_change_status: APPLIED_CONDITIONAL
+  g6_remaining_decisions_batch_apply: COMPLETED
+  current_chat_model_status: APPLIED_CONDITIONAL
+  embedding_provider: LOCAL
+  current_embedding_model: BAAI/bge-small-zh-v1.5
+  embedding_decision_status: APPLIED_CONDITIONAL_SPIKE_REQUIRED
+  vector_store_strategy: LOCAL_EMBEDDED_ADAPTER
+  vector_store_product_status: TBD_SPIKE_REQUIRED
+  cost_policy_status: APPLIED_NOT_IMPLEMENTED
+  monthly_soft_budget: USD 5
+  cost_alert_threshold: USD 4
+  cost_stop_threshold: USD 5
+  g6_exit_preflight: BLOCKED
+  g7_entry_gate: NOT_READY
+  g7_execution: NOT_STARTED
+  decision_workflow_migration: COMPLETED
   release_complete: NOT_STARTED
