@@ -24,8 +24,16 @@
 
 ## 阶段 3
 
-- 状态：`NOT_STARTED`
+- 状态：`COMPLETED`
+- 阶段提交：待创建 `feat: add persistent data task and recovery foundation`
+- 已完成：核心数据模型、Alembic 0002、BackgroundTask lease/checkpoint/恢复、备份 manifest/hash/敏感目录排除。
+- 验收证据：迁移往返通过；后端 9 tests、Ruff、Pyright 通过；详见 `docs/test-reports/stage-3-data-task-backup.md`。
 - 入口：SQLite 业务实体、持久 BackgroundTask、恢复检查点和备份 manifest。
+
+## 阶段 4
+
+- 状态：`NOT_STARTED`
+- 入口：文件夹、标签、文件 CRUD、导入校验、流式复制、SHA-256 去重、解析任务和回收站。
 
 ## 进度口径
 
