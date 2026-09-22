@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     provider_model: str = "deepseek-flash"
     log_level: str = "INFO"
     allowed_origins: tuple[str, ...] = ("http://127.0.0.1:5173", "http://localhost:5173")
+    parser_timeout_seconds: float = 30.0
+    parser_memory_limit_bytes: int = 512 * 1024 * 1024
+    parse_worker_poll_seconds: float = 0.1
+    parse_worker_lease_seconds: int = 60
+    parse_worker_max_retries: int = 2
     alembic_ini: Path = Path(__file__).resolve().parents[2] / "alembic.ini"
 
     @property

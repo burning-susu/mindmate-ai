@@ -8,13 +8,18 @@ import re
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import zipfile
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import BinaryIO
+from typing import Any, BinaryIO
 
+from uuid6 import uuid7
+
+from mindmate.application.resource_limits import JobObjectError, ManagedJobObject
 from mindmate.config import Settings
 
 MAX_FILE_SIZE = 50 * 1024 * 1024
@@ -69,6 +74,37 @@ class FileValidationError(ValueError):
         super().__init__(detail)
         self.code = code
         self.detail = detail
+
+
+SAFE_PARSE_FAILURE_MESSAGES = {
+    "PARSER_TIMEOUT": "文件解析超时，可以稍后重新处理。",
+    "PARSER_OUTPUT_INVALID": "解析器未生成有效结果，可以重新处理。",
+    "PARSER_EMPTY": "文件中没有可提取的文本，扫描件可能需要 OCR。",
+    "PARSER_FAILED": "文件未能提取出文本，扫描件可能需要 OCR，也可以稍后重新处理。",
+    "PARSER_RESOURCE_LIMIT": "解析资源达到安全上限，可以稍后重新处理。",
+    "PARSER_CANCELLED": "解析任务已停止，可以稍后重新处理。",
+    "FILE_TEXT_INVALID": "文本内容无法安全读取。",
+    "FILE_VERSION_CHANGED": "文件已删除或版本已变化，未写入旧解析结果。",
+}
+
+
+def safe_parse_failure_message(code: str) -> str:
+    return SAFE_PARSE_FAILURE_MESSAGES.get(code, "文件解析失败，可以稍后重新处理。")
+
+
+def mark_parse_succeeded(record: Any) -> None:
+    record.status = "PARSED"
+    record.parse_revision_id = str(uuid7())
+    record.parse_failure_stage = None
+    record.parse_error_id = None
+
+
+def mark_parse_failed(record: Any, error: FileValidationError) -> str:
+    record.status = "PARSE_FAILED"
+    record.parse_revision_id = None
+    record.parse_failure_stage = "PARSING"
+    record.parse_error_id = error.code
+    return safe_parse_failure_message(error.code)
 
 
 def utc_now() -> datetime:
@@ -279,25 +315,98 @@ def write_parsed_text(
     os.replace(temporary, destination)
 
 
-def parse_document_in_subprocess(path: Path, document_type: str) -> dict[str, object]:
+_ACTIVE_PARSER_LOCK = threading.Lock()
+_ACTIVE_PARSER_PROCESSES: dict[int, tuple[subprocess.Popen[bytes], ManagedJobObject]] = {}
+
+
+def terminate_active_parser_processes() -> None:
+    """Terminate parser children before the application closes its database."""
+    with _ACTIVE_PARSER_LOCK:
+        active = list(_ACTIVE_PARSER_PROCESSES.values())
+    for process, job in active:
+        try:
+            process.terminate()
+            process.wait(timeout=0.5)
+        except (OSError, subprocess.TimeoutExpired):
+            try:
+                process.kill()
+            except OSError:
+                pass
+        finally:
+            job.close()
+
+
+def parse_document_in_subprocess(
+    path: Path,
+    document_type: str,
+    *,
+    timeout_seconds: float = PARSER_TIMEOUT_SECONDS,
+    memory_limit_bytes: int = 512 * 1024 * 1024,
+    stop_event: threading.Event | None = None,
+) -> dict[str, object]:
     worker = Path(__file__).with_name("parser_worker.py")
     with tempfile.TemporaryDirectory(prefix="mindmate-parser-") as temporary_value:
         temporary = Path(temporary_value)
         output = temporary / "result.json"
+        process: subprocess.Popen[bytes] | None = None
         try:
-            result = subprocess.run(
+            job = ManagedJobObject.create(memory_limit_bytes)
+        except JobObjectError as exc:
+            raise FileValidationError("PARSER_RESOURCE_LIMIT", safe_parse_failure_message(exc.code)) from exc
+        try:
+            process = subprocess.Popen(
                 [sys.executable, "-I", str(worker), document_type, str(path), str(output)],
                 cwd=temporary,
                 stdin=subprocess.DEVNULL,
-                capture_output=True,
-                check=False,
-                timeout=PARSER_TIMEOUT_SECONDS,
-                env={"SystemRoot": os.environ.get("SystemRoot", ""), "TEMP": str(temporary), "TMP": str(temporary)},
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                env={
+                    "SystemRoot": os.environ.get("SystemRoot", ""),
+                    "PATH": os.environ.get("PATH", ""),
+                    "TEMP": str(temporary),
+                    "TMP": str(temporary),
+                },
             )
+            try:
+                job.assign(process)
+            except JobObjectError as exc:
+                try:
+                    process.kill()
+                except OSError:
+                    pass
+                raise FileValidationError("PARSER_RESOURCE_LIMIT", safe_parse_failure_message(exc.code)) from exc
+            with _ACTIVE_PARSER_LOCK:
+                _ACTIVE_PARSER_PROCESSES[process.pid] = (process, job)
+            deadline = time.monotonic() + max(0.1, timeout_seconds)
+            while process.poll() is None:
+                if stop_event is not None and stop_event.is_set():
+                    raise FileValidationError("PARSER_CANCELLED", "解析任务已停止。")
+                if time.monotonic() >= deadline:
+                    raise FileValidationError("PARSER_TIMEOUT", "文件解析超时，已安全终止。")
+                time.sleep(0.05)
+            assert process is not None
+            stderr = process.communicate(timeout=0.5)[1]
         except subprocess.TimeoutExpired as exc:
             raise FileValidationError("PARSER_TIMEOUT", "文件解析超时，已安全终止。") from exc
-        if result.returncode != 0:
-            detail = result.stderr.decode("utf-8", errors="replace").strip()[:300]
+        except FileValidationError:
+            if process is not None:
+                try:
+                    process.terminate()
+                    process.wait(timeout=0.5)
+                except (OSError, subprocess.TimeoutExpired):
+                    try:
+                        process.kill()
+                    except OSError:
+                        pass
+            raise
+        finally:
+            with _ACTIVE_PARSER_LOCK:
+                if process is not None:
+                    _ACTIVE_PARSER_PROCESSES.pop(process.pid, None)
+            job.close()
+        assert process is not None
+        if process.returncode != 0:
+            detail = stderr.decode("utf-8", errors="replace").strip()[:300]
             raise FileValidationError("PARSER_FAILED", detail or "文件解析失败。")
         if not output.is_file() or output.stat().st_size > MAX_PARSED_OUTPUT_SIZE:
             raise FileValidationError("PARSER_OUTPUT_INVALID", "解析结果不存在或超过安全上限。")

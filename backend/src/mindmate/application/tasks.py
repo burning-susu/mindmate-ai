@@ -3,13 +3,14 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.orm import Session
 from uuid6 import uuid7
 
 from mindmate.infrastructure.models import BackgroundTask, TaskAttempt, TaskEvent
 
-TERMINAL_STATES = {"COMPLETED", "FAILED", "CANCELLED", "INTERRUPTED"}
+FINAL_STATES = {"COMPLETED", "FAILED", "CANCELLED"}
+CLAIMABLE_STATES = {"QUEUED", "INTERRUPTED"}
 
 
 def now() -> datetime:
@@ -62,20 +63,47 @@ def add_event(
     return event
 
 
+def _claimable_clause(now_value: datetime):
+    return or_(
+        BackgroundTask.status.in_(CLAIMABLE_STATES),
+        and_(
+            BackgroundTask.status == "RUNNING",
+            or_(
+                BackgroundTask.lease_until.is_(None),
+                BackgroundTask.lease_until <= now_value,
+            ),
+        ),
+    )
+
+
 def claim_task(
     session: Session, task_id: str, worker_id: str, lease_seconds: int = 60
 ) -> BackgroundTask | None:
+    """Atomically claim one task if it is queued or its lease has expired.
+
+    The conditional UPDATE is the concurrency boundary. A caller may inspect task
+    candidates first, but only a rowcount of one grants ownership.
+    """
+    started = now()
+    lease_until = started + timedelta(seconds=lease_seconds)
+    result = session.execute(
+        update(BackgroundTask)
+        .where(BackgroundTask.task_id == task_id, _claimable_clause(started))
+        .values(
+            status="RUNNING",
+            lease_owner=worker_id,
+            lease_until=lease_until,
+            started_at=func.coalesce(BackgroundTask.started_at, started),
+            updated_at=started,
+            row_version=BackgroundTask.row_version + 1,
+        )
+        .execution_options(synchronize_session=False)
+    )
+    if getattr(result, "rowcount", 0) != 1:
+        return None
     task = session.get(BackgroundTask, task_id)
-    if task is None or task.status in TERMINAL_STATES:
+    if task is None:
         return None
-    if task.lease_until and task.lease_until > now() and task.lease_owner != worker_id:
-        return None
-    task.status = "RUNNING"
-    task.lease_owner = worker_id
-    task.lease_until = now() + timedelta(seconds=lease_seconds)
-    task.started_at = task.started_at or now()
-    task.updated_at = now()
-    task.row_version += 1
     attempt_number = (
         session.scalar(
             select(TaskAttempt.attempt_number)
@@ -95,6 +123,59 @@ def claim_task(
     )
     add_event(session, task, "RUNNING", {"worker_id": worker_id, "attempt": attempt_number})
     return task
+
+
+def claim_next_task(
+    session: Session, worker_id: str, lease_seconds: int = 60
+) -> BackgroundTask | None:
+    """Find candidates and use the atomic claim boundary for each one."""
+    candidate_ids = session.scalars(
+        select(BackgroundTask.task_id)
+        .where(_claimable_clause(now()))
+        .order_by(BackgroundTask.priority.desc(), BackgroundTask.created_at)
+        .limit(32)
+    )
+    for task_id in candidate_ids:
+        claimed = claim_task(session, task_id, worker_id, lease_seconds)
+        if claimed is not None:
+            return claimed
+    return None
+
+
+def renew_task_lease(
+    session: Session, task_id: str, worker_id: str, lease_seconds: int = 60
+) -> bool:
+    current = now()
+    result = session.execute(
+        update(BackgroundTask)
+        .where(
+            BackgroundTask.task_id == task_id,
+            BackgroundTask.status == "RUNNING",
+            BackgroundTask.lease_owner == worker_id,
+        )
+        .values(
+            lease_until=current + timedelta(seconds=lease_seconds),
+            updated_at=current,
+            row_version=BackgroundTask.row_version + 1,
+        )
+        .execution_options(synchronize_session=False)
+    )
+    return getattr(result, "rowcount", 0) == 1
+
+
+def finish_attempt(
+    session: Session, task_id: str, status: str, error_summary: str | None = None
+) -> None:
+    attempt = session.scalar(
+        select(TaskAttempt)
+        .where(TaskAttempt.task_id == task_id, TaskAttempt.status == "RUNNING")
+        .order_by(TaskAttempt.attempt_number.desc())
+        .limit(1)
+    )
+    if attempt is not None:
+        attempt.status = status
+        attempt.error_summary = error_summary
+        attempt.completed_at = now()
 
 
 def checkpoint_task(
@@ -121,19 +202,63 @@ def checkpoint_task(
 
 
 def cancel_task(session: Session, task: BackgroundTask) -> None:
-    if task.status in TERMINAL_STATES and task.status != "INTERRUPTED":
+    if task.status in FINAL_STATES:
         return
     task.status = "CANCELLED"
     task.updated_at = now()
     task.completed_at = now()
+    task.lease_owner = None
+    task.lease_until = None
     task.row_version += 1
     add_event(session, task, "CANCELLED")
 
 
 def recover_running_tasks(session: Session) -> int:
+    """Legacy stage-3 recovery helper: mark all running work interrupted."""
     result = session.execute(
         update(BackgroundTask)
         .where(BackgroundTask.status == "RUNNING")
+        .values(
+            status="INTERRUPTED",
+            updated_at=now(),
+            lease_owner=None,
+            lease_until=None,
+            row_version=BackgroundTask.row_version + 1,
+        )
+    )
+    return int(getattr(result, "rowcount", 0) or 0)
+
+
+def recover_expired_tasks(session: Session) -> int:
+    """Release only leases that are known to be expired."""
+    result = session.execute(
+        update(BackgroundTask)
+        .where(
+            BackgroundTask.status == "RUNNING",
+            or_(
+                BackgroundTask.lease_until.is_(None),
+                BackgroundTask.lease_until <= now(),
+            ),
+        )
+        .values(
+            status="INTERRUPTED",
+            updated_at=now(),
+            lease_owner=None,
+            lease_until=None,
+            row_version=BackgroundTask.row_version + 1,
+        )
+    )
+    return int(getattr(result, "rowcount", 0) or 0)
+
+
+def interrupt_owned_tasks(session: Session, worker_id: str) -> int:
+    """Stop accepting work while leaving an explicit recoverable checkpoint."""
+    result = session.execute(
+        update(BackgroundTask)
+        .where(
+            BackgroundTask.status == "RUNNING",
+            BackgroundTask.lease_owner == worker_id,
+        )
         .values(
             status="INTERRUPTED",
             updated_at=now(),

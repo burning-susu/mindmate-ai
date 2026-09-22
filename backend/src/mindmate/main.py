@@ -19,6 +19,7 @@ from mindmate import __version__
 from mindmate.api.files import FileApiError
 from mindmate.api.files import router as files_router
 from mindmate.api.problem import ProblemDetail
+from mindmate.application.parse_worker_service import ParsingWorker
 from mindmate.config import Settings, get_settings
 from mindmate.infrastructure.db import create_session_factory, create_sqlite_engine, quick_check
 from mindmate.security.instance import SingleInstanceLock
@@ -76,8 +77,13 @@ async def lifespan(app: FastAPI):
         app.state.database_status = quick_check(app.state.engine)
         app.state.session_factory = create_session_factory(app.state.engine)
         app.state.session = LocalSession()
+        app.state.parse_worker = ParsingWorker(app.state.session_factory, settings)
+        app.state.parse_worker.start()
         yield
     finally:
+        worker = getattr(app.state, "parse_worker", None)
+        if worker is not None:
+            worker.stop()
         engine = getattr(app.state, "engine", None)
         if engine is not None:
             engine.dispose()

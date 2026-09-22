@@ -7,7 +7,7 @@ import mimetypes
 from collections.abc import Iterator
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
@@ -28,18 +28,18 @@ from mindmate.application.files import (
     copy_stream_to_staging,
     delete_parsed_text,
     document_spec,
+    mark_parse_failed,
+    mark_parse_succeeded,
     normalize_name,
-    parse_document_in_subprocess,
-    parse_local_text,
     promote_staged_file,
     read_parsed_text,
     resolve_storage_path,
+    safe_parse_failure_message,
     sanitize_display_name,
     utc_now,
     validate_file_format,
     validate_managed_content_path,
     validate_upload_mime,
-    write_parsed_text,
 )
 from mindmate.application.tasks import add_event, cancel_task, create_task
 from mindmate.config import Settings
@@ -413,32 +413,16 @@ def _file_payload(session: Session, settings: Settings, record: FileRecord) -> d
     }
 
 
-SAFE_PARSE_FAILURE_MESSAGES = {
-    "PARSER_TIMEOUT": "文件解析超时，可以稍后重新处理。",
-    "PARSER_OUTPUT_INVALID": "解析器未生成有效结果，可以重新处理。",
-    "PARSER_EMPTY": "文件中没有可提取的文本，扫描件可能需要 OCR。",
-    "PARSER_FAILED": "文件未能提取出文本，扫描件可能需要 OCR，也可以稍后重新处理。",
-    "FILE_TEXT_INVALID": "文本内容无法安全读取。",
-}
-
-
 def _safe_parse_failure(error: FileValidationError) -> str:
-    return SAFE_PARSE_FAILURE_MESSAGES.get(error.code, "文件解析失败，可以稍后重新处理。")
+    return safe_parse_failure_message(error.code)
 
 
 def _mark_parse_succeeded(record: FileRecord) -> None:
-    record.status = "PARSED"
-    record.parse_revision_id = new_id()
-    record.parse_failure_stage = None
-    record.parse_error_id = None
+    mark_parse_succeeded(record)
 
 
 def _mark_parse_failed(record: FileRecord, error: FileValidationError) -> str:
-    record.status = "PARSE_FAILED"
-    record.parse_revision_id = None
-    record.parse_failure_stage = "PARSING"
-    record.parse_error_id = error.code
-    return _safe_parse_failure(error)
+    return mark_parse_failed(record, error)
 
 
 def _restored_file_status(settings: Settings, record: FileRecord) -> str:
@@ -470,6 +454,27 @@ def _task_payload(task: BackgroundTask) -> dict[str, Any]:
         "knowledge_base_id": context.get("knowledge_base_id"),
         "error": task.error_summary,
     }
+
+
+def _task_contains_file(task: BackgroundTask, file_id: str) -> bool:
+    checkpoint = task.checkpoint_json if isinstance(task.checkpoint_json, dict) else {}
+    context = checkpoint.get("context", {})
+    if isinstance(context, dict) and context.get("file_id") == file_id:
+        return True
+    items = checkpoint.get("items", [])
+    return isinstance(items, list) and any(
+        isinstance(item, dict) and item.get("file_id") == file_id for item in items
+    )
+
+
+def _active_parse_task(session: Session, file_id: str) -> BackgroundTask | None:
+    tasks = session.scalars(
+        select(BackgroundTask).where(
+            BackgroundTask.task_type.in_({"FILE_IMPORT", "FILE_REPROCESS"}),
+            BackgroundTask.status.in_({"BLOCKED", "QUEUED", "RUNNING", "INTERRUPTED"}),
+        )
+    )
+    return next((task for task in tasks if _task_contains_file(task, file_id)), None)
 
 
 def _safe_staging_path(settings: Settings, task_id: str, index: int) -> Path:
@@ -570,32 +575,12 @@ def _create_record_from_content(
         updated_at=utc_now(),
         row_version=1,
     )
-    parse_error: str | None = None
-    source = resolve_storage_path(settings, content.storage_relative_path)
-    try:
-        if document_type in {"TXT", "MARKDOWN"}:
-            text, metadata = parse_local_text(source)
-            write_parsed_text(settings, file_id, content.sha256, text, metadata)
-        else:
-            parsed = parse_document_in_subprocess(source, document_type)
-            write_parsed_text(
-                settings,
-                file_id,
-                content.sha256,
-                str(parsed["text"]),
-                cast(dict[str, object], parsed["metadata"]),
-                parser=f"isolated-{document_type.casefold()}-v1",
-                locations=cast(list[dict[str, object]], parsed["locations"]),
-            )
-        _mark_parse_succeeded(record)
-    except FileValidationError as exc:
-        parse_error = _mark_parse_failed(record, exc)
     content.reference_count += 1
     session.add(record)
     session.flush()
     _attach_tags(session, file_id, tag_ids)
     _attach_knowledge_base(session, file_id, knowledge_base_id)
-    return record, parse_error
+    return record, None
 
 
 def _promote_new_content(
@@ -795,11 +780,26 @@ async def create_file_import(
         },
         "items": items,
     }
-    task.phase = "WAITING_DUPLICATE_DECISION" if pending_duplicates else "COMPLETED"
-    task.status = "BLOCKED" if pending_duplicates else "COMPLETED"
-    task.progress = 100
-    task.completed_at = None if pending_duplicates else utc_now()
+    has_parse_work = any(
+        item.get("status") == "IMPORTED" and item.get("file_id") for item in items
+    )
+    if pending_duplicates:
+        task.phase = "WAITING_DUPLICATE_DECISION"
+        task.status = "BLOCKED"
+        task.progress = 100 if not has_parse_work else 0
+        task.completed_at = None
+    elif has_parse_work:
+        task.phase = "PARSING"
+        task.status = "QUEUED"
+        task.progress = 0
+        task.completed_at = None
+    else:
+        task.phase = "COMPLETED"
+        task.status = "COMPLETED"
+        task.progress = 100
+        task.completed_at = utc_now()
     task.updated_at = utc_now()
+    task.row_version += 1
     add_event(session, task, task.status, {"item_count": len(items)})
     session.commit()
     return JSONResponse(status_code=202, content=_task_payload(task))
@@ -810,6 +810,14 @@ def get_file_import(import_id: str, session: Session = Depends(get_session)) -> 
     task = session.get(BackgroundTask, import_id)
     if task is None or task.task_type != "FILE_IMPORT":
         raise FileApiError("IMPORT_NOT_FOUND", "导入任务不存在。", 404)
+    return _task_payload(task)
+
+
+@router.get("/tasks/{task_id}", tags=["tasks"])
+def get_background_task(task_id: str, session: Session = Depends(get_session)) -> dict[str, Any]:
+    task = session.get(BackgroundTask, task_id)
+    if task is None:
+        raise FileApiError("TASK_NOT_FOUND", "任务不存在。", 404)
     return _task_payload(task)
 
 
@@ -892,12 +900,27 @@ def decide_duplicates(
             item.update({"status": "SKIPPED", "duplicate_status": "SKIPPED"})
         _remove_staging(settings, item)
     pending = any(item.get("duplicate_status") == "PENDING_DECISION" for item in items)
+    has_parse_work = any(
+        item.get("status") == "IMPORTED" and item.get("file_id") for item in items
+    )
     task.checkpoint_json = {"context": context, "items": items}
-    task.status = "BLOCKED" if pending else "COMPLETED"
-    task.phase = "WAITING_DUPLICATE_DECISION" if pending else "COMPLETED"
-    task.progress = 100
-    task.completed_at = None if pending else utc_now()
+    if pending:
+        task.status = "BLOCKED"
+        task.phase = "WAITING_DUPLICATE_DECISION"
+        task.progress = 0 if has_parse_work else 100
+        task.completed_at = None
+    elif has_parse_work:
+        task.status = "QUEUED"
+        task.phase = "PARSING"
+        task.progress = 0
+        task.completed_at = None
+    else:
+        task.status = "COMPLETED"
+        task.phase = "COMPLETED"
+        task.progress = 100
+        task.completed_at = utc_now()
     task.updated_at = utc_now()
+    task.row_version += 1
     add_event(session, task, task.status, {"decisions": len(payload.decisions)})
     session.commit()
     return _task_payload(task)
@@ -1204,46 +1227,42 @@ def reprocess_file(
     record = _get_file_or_404(session, file_id)
     if record.deleted_at is not None:
         raise FileApiError("FILE_IN_TRASH", "回收站中的文件不能重新处理。", 409)
-    record.status = "PARSING"
-    record.parse_retry_count += 1
-    record.updated_at = utc_now()
+    active = _active_parse_task(session, file_id)
+    if active is not None:
+        return {"task_id": active.task_id, "file": _file_payload(session, settings, record)}
     idempotency_key = (
         request.headers.get("idempotency-key") or f"reprocess:{file_id}:{record.row_version}"
     )
+    existing = session.scalar(
+        select(BackgroundTask).where(BackgroundTask.idempotency_key == idempotency_key)
+    )
+    if existing is not None:
+        return {"task_id": existing.task_id, "file": _file_payload(session, settings, record)}
     task = create_task(
         session,
         "FILE_REPROCESS",
         idempotency_key,
-        {"file_id": file_id, "status": "QUEUED"},
+        {
+            "context": {"file_id": file_id},
+            "items": [
+                {
+                    "item_index": 0,
+                    "file_id": file_id,
+                    "status": "IMPORTED",
+                    "parse_status": "QUEUED",
+                    "manual_retry": bool(record.parse_error_id),
+                }
+            ],
+        },
     )
-    content_path = _record_content_path(session, settings, record)
-    try:
-        if record.document_type in {"TXT", "MARKDOWN"}:
-            text, metadata = parse_local_text(content_path)
-            write_parsed_text(settings, file_id, record.content_hash, text, metadata)
-        else:
-            parsed = parse_document_in_subprocess(content_path, record.document_type)
-            write_parsed_text(
-                settings,
-                file_id,
-                record.content_hash,
-                str(parsed["text"]),
-                cast(dict[str, object], parsed["metadata"]),
-                parser=f"isolated-{record.document_type.casefold()}-v1",
-                locations=cast(list[dict[str, object]], parsed["locations"]),
-            )
-        _mark_parse_succeeded(record)
-        task.status = "COMPLETED"
-        task.phase = "COMPLETED"
-        task.progress = 100
-        task.completed_at = utc_now()
-    except FileValidationError as exc:
-        safe_error = _mark_parse_failed(record, exc)
-        task.status = "FAILED"
-        task.phase = "PARSING"
-        task.error_summary = safe_error
-        task.completed_at = utc_now()
+    record.status = "QUEUED"
+    record.updated_at = utc_now()
     record.row_version += 1
+    task.status = "QUEUED"
+    task.phase = "PARSING"
+    task.progress = 0
+    task.updated_at = utc_now()
+    task.row_version += 1
     session.commit()
     return {"task_id": task.task_id, "file": _file_payload(session, settings, record)}
 
@@ -1265,6 +1284,7 @@ def batch_file_action(
     results: list[dict[str, Any]] = []
     for file_id in dict.fromkeys(payload.file_ids):
         try:
+            reprocess_task_id: str | None = None
             record = _get_file_or_404(session, file_id)
             if payload.action == "MOVE":
                 record.folder_id = payload.folder_id
@@ -1304,39 +1324,47 @@ def batch_file_action(
             elif payload.action == "REPROCESS":
                 if record.deleted_at is not None:
                     raise FileApiError("FILE_IN_TRASH", "回收站中的文件不能重新处理。", 409)
-                record.status = "PARSING"
-                record.parse_retry_count += 1
-                content_path = _record_content_path(session, settings, record)
-                try:
-                    if record.document_type in {"TXT", "MARKDOWN"}:
-                        text, metadata = parse_local_text(content_path)
-                        write_parsed_text(
-                            settings, record.file_id, record.content_hash, text, metadata
-                        )
-                    else:
-                        parsed = parse_document_in_subprocess(
-                            content_path, record.document_type
-                        )
-                        write_parsed_text(
-                            settings,
-                            record.file_id,
-                            record.content_hash,
-                            str(parsed["text"]),
-                            cast(dict[str, object], parsed["metadata"]),
-                            parser=f"isolated-{record.document_type.casefold()}-v1",
-                            locations=cast(
-                                list[dict[str, object]], parsed["locations"]
-                            ),
-                        )
-                    _mark_parse_succeeded(record)
-                except FileValidationError as exc:
-                    safe_error = _mark_parse_failed(record, exc)
-                    raise FileApiError(exc.code, safe_error, 409) from exc
+                active = _active_parse_task(session, record.file_id)
+                if active is not None:
+                    results.append(
+                        {"file_id": file_id, "status": "QUEUED", "task_id": active.task_id}
+                    )
+                    continue
+                task_key = f"batch-reprocess:{record.file_id}:{record.row_version}"
+                task = create_task(
+                    session,
+                    "FILE_REPROCESS",
+                    task_key,
+                    {
+                        "context": {"file_id": record.file_id},
+                        "items": [
+                            {
+                                "item_index": 0,
+                                "file_id": record.file_id,
+                                "status": "IMPORTED",
+                                "parse_status": "QUEUED",
+                                "manual_retry": bool(record.parse_error_id),
+                            }
+                        ],
+                    },
+                )
+                record.status = "QUEUED"
+                record.updated_at = utc_now()
                 record.row_version += 1
+                task.status = "QUEUED"
+                task.phase = "PARSING"
+                task.progress = 0
+                task.updated_at = utc_now()
+                task.row_version += 1
+                reprocess_task_id = task.task_id
             else:
                 raise FileApiError("BATCH_ACTION_INVALID", "批量操作类型无效。")
             record.updated_at = utc_now()
-            results.append({"file_id": file_id, "status": "SUCCEEDED"})
+            results.append(
+                {"file_id": file_id, "status": "QUEUED", "task_id": reprocess_task_id}
+                if payload.action == "REPROCESS"
+                else {"file_id": file_id, "status": "SUCCEEDED"}
+            )
         except FileApiError as exc:
             results.append({"file_id": file_id, "status": "FAILED", "error": exc.detail})
     session.commit()

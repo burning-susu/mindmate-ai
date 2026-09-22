@@ -22,8 +22,9 @@ type ImportItem = {
   file_id?: string | null
   error?: string | null
   error_code?: string
+  parse_status?: string | null
 }
-type ImportResponse = { import_id: string; status: string; items: ImportItem[] }
+type ImportResponse = { import_id: string; status: string; phase?: string | null; progress?: number | null; items: ImportItem[] }
 
 const statusLabels: Record<string, string> = {
   PARSED: '已解析',
@@ -90,6 +91,19 @@ export default function FilesPage() {
       if (documentType) params.set('document_type', documentType)
       if (status) params.set('status', status)
       return apiRequest<FileListResponse>(`/api/v1/files?${params}`)
+    },
+    refetchInterval: (query) => {
+      const data = query.state.data as FileListResponse | undefined
+      return data?.items.some((file) => file.status === 'QUEUED' || file.status === 'PARSING') ? 1000 : false
+    },
+  })
+  const importTaskQuery = useQuery({
+    queryKey: ['file-import', importResult?.import_id],
+    queryFn: () => apiRequest<ImportResponse>(`/api/v1/file-imports/${importResult?.import_id}`),
+    enabled: Boolean(importResult?.import_id),
+    refetchInterval: (query) => {
+      const status = (query.state.data as ImportResponse | undefined)?.status
+      return status === 'QUEUED' || status === 'RUNNING' || status === 'PARSING' ? 1000 : false
     },
   })
   const foldersQuery = useQuery({ queryKey: ['folders'], queryFn: () => apiRequest<{ items: FolderItem[] }>('/api/v1/folders') })
@@ -164,7 +178,8 @@ export default function FilesPage() {
   const folders = foldersQuery.data?.items ?? []
   const files = filesQuery.data?.items ?? []
   const tags = tagsQuery.data?.items ?? []
-  const pendingDuplicates = useMemo(() => importResult?.items.filter((item) => item.duplicate_status === 'PENDING_DECISION') ?? [], [importResult])
+  const activeImportResult = importTaskQuery.data ?? importResult
+  const pendingDuplicates = useMemo(() => activeImportResult?.items.filter((item) => item.duplicate_status === 'PENDING_DECISION') ?? [], [activeImportResult])
   const selectedFiles = files.filter((file) => selected.includes(file.file_id))
 
   function chooseFiles(fileList: FileList | File[]) {
@@ -230,7 +245,7 @@ export default function FilesPage() {
             <FileUp size={19} aria-hidden="true" /><span>拖放文件到这里，或 <button type="button" onClick={() => inputRef.current?.click()}>选择文件</button></span><small>单文件 50 MB · 单批 20 个 · 总量 500 MB</small>
           </div>
 
-          {importResult && <div className="import-summary" role="status"><div><strong>导入任务 {importResult.status === 'BLOCKED' ? '等待重复决策' : '已处理'}</strong><span>{importResult.items.filter((item) => item.status === 'IMPORTED' || item.status === 'REUSED').length} 个成功，{importResult.items.filter((item) => item.error).length} 个未导入</span></div><button type="button" className="icon-button" onClick={() => setImportResult(null)} aria-label="关闭导入结果"><X size={16} aria-hidden="true" /></button>{pendingDuplicates.map((item) => <div className="duplicate-row" key={item.item_index}><span>{item.original_name}</span><button type="button" onClick={() => duplicateMutation.mutate({ importId: importResult.import_id, itemIndex: item.item_index, decision: 'REUSE_EXISTING' })}>复用现有</button><button type="button" onClick={() => duplicateMutation.mutate({ importId: importResult.import_id, itemIndex: item.item_index, decision: 'CREATE_SEPARATE_RECORD' })}>另存记录</button><button type="button" onClick={() => duplicateMutation.mutate({ importId: importResult.import_id, itemIndex: item.item_index, decision: 'SKIP' })}>跳过</button></div>)}</div>}
+          {activeImportResult && <div className="import-summary" role="status"><div><strong>导入任务 {activeImportResult.status === 'BLOCKED' ? '等待重复决策' : activeImportResult.status === 'QUEUED' || activeImportResult.status === 'RUNNING' || activeImportResult.status === 'PARSING' ? '解析处理中' : activeImportResult.status === 'FAILED' ? '解析失败' : '已完成'}</strong><span>{activeImportResult.items.filter((item) => item.status === 'IMPORTED' || item.status === 'REUSED').length} 个已加入，{activeImportResult.items.filter((item) => item.error || item.parse_status === 'PARSE_FAILED').length} 个未完成</span></div><button type="button" className="icon-button" onClick={() => setImportResult(null)} aria-label="关闭导入结果"><X size={16} aria-hidden="true" /></button>{pendingDuplicates.map((item) => <div className="duplicate-row" key={item.item_index}><span>{item.original_name}</span><button type="button" onClick={() => duplicateMutation.mutate({ importId: activeImportResult.import_id, itemIndex: item.item_index, decision: 'REUSE_EXISTING' })}>复用现有</button><button type="button" onClick={() => duplicateMutation.mutate({ importId: activeImportResult.import_id, itemIndex: item.item_index, decision: 'CREATE_SEPARATE_RECORD' })}>另存记录</button><button type="button" onClick={() => duplicateMutation.mutate({ importId: activeImportResult.import_id, itemIndex: item.item_index, decision: 'SKIP' })}>跳过</button></div>)}</div>}
 
           {selectedFiles.length > 0 && <div className="selection-bar"><strong>已选 {selectedFiles.length} 个</strong><select value={batchFolderId} onChange={(event) => setBatchFolderId(event.target.value)} aria-label="批量目标文件夹"><option value="">未分类</option>{folders.map((folder) => <option key={folder.folder_id} value={folder.folder_id}>{folder.name}</option>)}</select><button type="button" onClick={() => batchMutation.mutate({ action: 'MOVE', folderId: batchFolderId || null })}>移动</button><select value={batchTagId} onChange={(event) => setBatchTagId(event.target.value)} aria-label="批量目标标签"><option value="">选择标签</option>{tags.map((tag) => <option key={tag.tag_id} value={tag.tag_id}>{tag.name}</option>)}</select><button type="button" disabled={!batchTagId} onClick={() => batchMutation.mutate({ action: 'ADD_TAG', targetTagId: batchTagId })}>添加标签</button><button type="button" disabled={!batchTagId} onClick={() => batchMutation.mutate({ action: 'REMOVE_TAG', targetTagId: batchTagId })}>移除标签</button><button type="button" onClick={() => batchMutation.mutate({ action: 'REPROCESS' })}>重新处理</button><button type="button" onClick={() => batchMutation.mutate({ action: 'TRASH' })}><Trash2 size={15} aria-hidden="true" />移入回收站</button><button type="button" onClick={() => setSelected([])}>取消</button></div>}
 

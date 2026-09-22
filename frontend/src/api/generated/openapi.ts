@@ -203,6 +203,9 @@ export interface operations {
   "GET /api/v1/file-imports/{import_id}": {
     operationId: "get_file_import_api_v1_file_imports__import_id__get"
   };
+  "GET /api/v1/tasks/{task_id}": {
+    operationId: "get_background_task_api_v1_tasks__task_id__get"
+  };
   "POST /api/v1/file-imports/{import_id}/duplicate-decisions": {
     operationId: "decide_duplicates_api_v1_file_imports__import_id__duplicate_decisions_post"
   };

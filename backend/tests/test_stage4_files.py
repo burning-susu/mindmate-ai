@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import os
+import time
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,7 @@ from sqlalchemy import update
 
 from mindmate.api import files as files_api
 from mindmate.application import files as file_service
+from mindmate.application import parse_worker_service
 from mindmate.application.files import (
     FileValidationError,
     resolve_storage_path,
@@ -43,6 +45,24 @@ def import_one(client: TestClient, name: str, content: bytes, key: str):
     )
 
 
+def wait_for_import(client: TestClient, import_id: str) -> dict:
+    for _ in range(200):
+        payload = client.get(f"/api/v1/file-imports/{import_id}").json()
+        if payload["status"] in {"COMPLETED", "FAILED", "CANCELLED", "BLOCKED"}:
+            return payload
+        time.sleep(0.02)
+    raise AssertionError(f"导入任务未在测试窗口内完成: {import_id}")
+
+
+def wait_for_file(client: TestClient, file_id: str, statuses: set[str]) -> dict:
+    for _ in range(200):
+        payload = client.get(f"/api/v1/files/{file_id}").json()
+        if payload.get("status") in statuses:
+            return payload
+        time.sleep(0.02)
+    raise AssertionError(f"文件状态未在测试窗口内达到 {statuses}: {file_id}")
+
+
 def create_folder(client: TestClient, name: str, key: str, parent_id: str | None = None):
     return client.post(
         "/api/v1/folders",
@@ -57,10 +77,11 @@ def test_text_import_is_streamed_into_controlled_storage(file_client) -> None:
 
     assert response.status_code == 202
     payload = response.json()
-    assert payload["status"] == "COMPLETED"
+    assert payload["status"] in {"QUEUED", "COMPLETED"}
     item = payload["items"][0]
     assert item["status"] == "IMPORTED"
     file_id = item["file_id"]
+    wait_for_import(client, payload["import_id"])
 
     detail = client.get(f"/api/v1/files/{file_id}")
     assert detail.status_code == 200
@@ -150,9 +171,10 @@ def test_folder_tag_trash_restore_and_purge(file_client) -> None:
     assert client.get(f"/api/v1/files/{file_id}").json()["folder_id"] == folder_id
     assert client.get("/api/v1/files?q=重要").json()["items"][0]["file_id"] == file_id
 
+    current_version = client.get(f"/api/v1/files/{file_id}").json()["row_version"]
     trashed = client.delete(
         f"/api/v1/files/{file_id}",
-        params={"expected_version": 1},
+        params={"expected_version": current_version},
         headers=write_headers("trash-file-1"),
     )
     assert trashed.status_code == 200
@@ -260,7 +282,8 @@ def test_office_documents_use_isolated_parsers_and_blank_pdf_is_not_marked_parse
         },
     )
     docx_item = docx_response.json()["items"][0]
-    assert docx_item["parse_status"] == "PARSED"
+    assert docx_item["parse_status"] in {"QUEUED", "PARSED"}
+    wait_for_file(client, docx_item["file_id"], {"PARSED"})
     docx_preview = client.get(f"/api/v1/files/{docx_item['file_id']}/preview").json()
     assert "这是 Word 正文" in docx_preview["text"]
     assert docx_preview["metadata"]["paragraph_count"] >= 2
@@ -283,7 +306,8 @@ def test_office_documents_use_isolated_parsers_and_blank_pdf_is_not_marked_parse
         },
     )
     pptx_item = pptx_response.json()["items"][0]
-    assert pptx_item["parse_status"] == "PARSED"
+    assert pptx_item["parse_status"] in {"QUEUED", "PARSED"}
+    wait_for_file(client, pptx_item["file_id"], {"PARSED"})
     pptx_preview = client.get(f"/api/v1/files/{pptx_item['file_id']}/preview").json()
     assert "第一张幻灯片" in pptx_preview["text"]
     assert pptx_preview["metadata"]["slide_count"] == 1
@@ -299,8 +323,10 @@ def test_office_documents_use_isolated_parsers_and_blank_pdf_is_not_marked_parse
     )
     pdf_item = pdf_response.json()["items"][0]
     assert pdf_item["status"] == "IMPORTED"
-    assert pdf_item["parse_status"] == "PARSE_FAILED"
-    assert "OCR" in pdf_item["parse_error"]
+    pdf_task = wait_for_import(client, pdf_response.json()["import_id"])
+    pdf_result = pdf_task["items"][0]
+    assert pdf_result["parse_status"] == "PARSE_FAILED"
+    assert "OCR" in pdf_result["parse_error"]
 
 
 def test_mime_size_and_batch_limits_are_enforced(file_client, monkeypatch) -> None:
@@ -399,6 +425,7 @@ def test_folder_guards_null_semantics_and_multi_level_trash(file_client) -> None
         files={"files": ("nested.txt", b"nested", "text/plain")},
     ).json()
     file_id = imported["items"][0]["file_id"]
+    wait_for_file(client, file_id, {"PARSED"})
     deleted = client.delete(
         f"/api/v1/folders/{root['folder_id']}?deletion_strategy=TRASH_RECURSIVE&expected_version={root['row_version']}",
         headers=write_headers("folder-trash-deep"),
@@ -562,10 +589,13 @@ def test_parse_failure_fields_persist_and_successful_retry_clears_error(
             "PARSER_FAILED", f"Traceback: failed while reading {private_path}"
         )
 
-    monkeypatch.setattr(files_api, "parse_local_text", fail_parse)
+    client.app.state.settings.parse_worker_max_retries = 0
+    monkeypatch.setattr(parse_worker_service, "parse_local_text", fail_parse)
     imported = import_one(client, "retry.txt", b"retry me", "parse-failure-persist")
     assert imported.status_code == 202
     item = imported.json()["items"][0]
+    failed_import = wait_for_import(client, imported.json()["import_id"])
+    item = failed_import["items"][0]
     assert item["parse_status"] == "PARSE_FAILED"
     assert item["parse_failure_stage"] == "PARSING"
     assert item["parse_error_id"] == "PARSER_FAILED"
@@ -590,13 +620,15 @@ def test_parse_failure_fields_persist_and_successful_retry_clears_error(
         assert record.parse_error_id == "PARSER_FAILED"
         assert record.parse_retry_count == 0
 
-    monkeypatch.setattr(files_api, "parse_local_text", lambda _path: ("retry ok", {"line_count": 1}))
+    monkeypatch.setattr(parse_worker_service, "parse_local_text", lambda _path: ("retry ok", {"line_count": 1}))
     retried = client.post(
         f"/api/v1/files/{file_id}/reprocess",
         headers=write_headers("parse-failure-retry"),
     )
     assert retried.status_code == 202
     retried_file = retried.json()["file"]
+    wait_for_file(client, file_id, {"PARSED"})
+    retried_file = client.get(f"/api/v1/files/{file_id}").json()
     assert retried_file["status"] == "PARSED"
     assert retried_file["parse_failure_stage"] is None
     assert retried_file["parse_error_id"] is None
