@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from uuid6 import uuid7
 
@@ -49,6 +49,9 @@ class Folder(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     purge_after: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    row_version: Mapped[int] = mapped_column(
+        Integer, default=1, server_default=text("1"), nullable=False
+    )
 
 
 class Tag(Base):
@@ -59,6 +62,9 @@ class Tag(Base):
     color: Mapped[str | None] = mapped_column(String(20))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    row_version: Mapped[int] = mapped_column(
+        Integer, default=1, server_default=text("1"), nullable=False
+    )
 
 
 class FileRecord(Base):
@@ -76,6 +82,11 @@ class FileRecord(Base):
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     byte_size: Mapped[int] = mapped_column(Integer, nullable=False)
     parse_revision_id: Mapped[str | None] = mapped_column(String(36))
+    parse_failure_stage: Mapped[str | None] = mapped_column(String(80))
+    parse_error_id: Mapped[str | None] = mapped_column(String(100))
+    parse_retry_count: Mapped[int] = mapped_column(
+        Integer, default=0, server_default=text("0"), nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

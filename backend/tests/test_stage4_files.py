@@ -16,7 +16,7 @@ from mindmate.application.files import (
     validate_managed_content_path,
 )
 from mindmate.config import Settings
-from mindmate.infrastructure.models import Folder
+from mindmate.infrastructure.models import FileRecord, Folder
 from mindmate.main import create_app
 
 
@@ -160,7 +160,9 @@ def test_folder_tag_trash_restore_and_purge(file_client) -> None:
     assert client.get("/api/v1/trash").json()["files"][0]["file_id"] == file_id
 
     restored = client.post(
-        f"/api/v1/trash/file/{file_id}/restore", headers=write_headers("restore-file-1")
+        f"/api/v1/trash/file/{file_id}/restore",
+        params={"expected_version": trashed.json()["row_version"]},
+        headers=write_headers("restore-file-1"),
     )
     assert restored.status_code == 200
     assert client.get("/api/v1/files").json()["items"][0]["file_id"] == file_id
@@ -201,26 +203,30 @@ def test_folder_tree_restore_and_permanent_purge(file_client) -> None:
 
     deleted = client.delete(
         f"/api/v1/folders/{root['folder_id']}",
-        params={"deletion_strategy": "TRASH_RECURSIVE"},
+        params={"deletion_strategy": "TRASH_RECURSIVE", "expected_version": 1},
         headers=write_headers("tree-trash-1"),
     )
     assert deleted.status_code == 200
     assert client.get("/api/v1/files").json()["items"] == []
     restored = client.post(
         f"/api/v1/trash/folder/{root['folder_id']}/restore",
+        params={"expected_version": deleted.json()["row_version"]},
         headers=write_headers("tree-restore-1"),
     )
     assert restored.status_code == 200
     assert client.get("/api/v1/files").json()["items"][0]["file_id"] == file_id
 
-    client.delete(
+    deleted_again = client.delete(
         f"/api/v1/folders/{root['folder_id']}",
-        params={"deletion_strategy": "TRASH_RECURSIVE"},
+        params={
+            "deletion_strategy": "TRASH_RECURSIVE",
+            "expected_version": restored.json()["row_version"],
+        },
         headers=write_headers("tree-trash-2"),
     )
     purged = client.delete(
         f"/api/v1/trash/folder/{root['folder_id']}",
-        params={"confirmed": "true"},
+        params={"confirmed": "true", "expected_version": deleted_again.json()["row_version"]},
         headers=write_headers("tree-purge-1"),
     )
     assert purged.status_code == 200
@@ -382,7 +388,7 @@ def test_folder_guards_null_semantics_and_multi_level_trash(file_client) -> None
     cleared = client.patch(
         f"/api/v1/tags/{tag['tag_id']}",
         headers=write_headers("tag-clear-color"),
-        json={"color": None},
+        json={"color": None, "row_version": tag["row_version"]},
     )
     assert cleared.json()["color"] is None
 
@@ -393,23 +399,24 @@ def test_folder_guards_null_semantics_and_multi_level_trash(file_client) -> None
         files={"files": ("nested.txt", b"nested", "text/plain")},
     ).json()
     file_id = imported["items"][0]["file_id"]
-    client.delete(
-        f"/api/v1/folders/{root['folder_id']}?deletion_strategy=TRASH_RECURSIVE",
+    deleted = client.delete(
+        f"/api/v1/folders/{root['folder_id']}?deletion_strategy=TRASH_RECURSIVE&expected_version={root['row_version']}",
         headers=write_headers("folder-trash-deep"),
     )
     restored = client.post(
         f"/api/v1/trash/folder/{root['folder_id']}/restore",
+        params={"expected_version": deleted.json()["row_version"]},
         headers=write_headers("folder-restore-deep"),
     )
     assert restored.status_code == 200
     assert client.get(f"/api/v1/files/{file_id}").json()["status"] == "PARSED"
 
-    client.delete(
-        f"/api/v1/folders/{root['folder_id']}?deletion_strategy=TRASH_RECURSIVE",
+    deleted_again = client.delete(
+        f"/api/v1/folders/{root['folder_id']}?deletion_strategy=TRASH_RECURSIVE&expected_version={restored.json()['row_version']}",
         headers=write_headers("folder-trash-deep-2"),
     )
     purged = client.delete(
-        f"/api/v1/trash/folder/{root['folder_id']}?confirmed=true",
+        f"/api/v1/trash/folder/{root['folder_id']}?confirmed=true&expected_version={deleted_again.json()['row_version']}",
         headers=write_headers("folder-purge-deep"),
     )
     assert purged.status_code == 200
@@ -435,3 +442,162 @@ def test_corrupt_folder_cycle_is_rejected_without_hanging(file_client) -> None:
     )
     assert response.status_code == 409
     assert response.json()["code"] == "FOLDER_TREE_INVALID"
+
+
+def test_folder_and_tag_optimistic_locks_are_atomic(file_client) -> None:
+    client, _ = file_client
+    folder = create_folder(client, "资料", "lock-folder-create").json()
+    target = create_folder(client, "归档", "lock-target-create").json()
+    assert folder["row_version"] == 1
+
+    renamed = client.patch(
+        f"/api/v1/folders/{folder['folder_id']}",
+        headers=write_headers("lock-folder-rename"),
+        json={"name": "新资料", "row_version": 1},
+    )
+    assert renamed.status_code == 200
+    assert renamed.json()["row_version"] == 2
+
+    stale_rename = client.patch(
+        f"/api/v1/folders/{folder['folder_id']}",
+        headers=write_headers("lock-folder-stale-rename"),
+        json={"name": "旧客户端覆盖", "row_version": 1},
+    )
+    assert stale_rename.status_code == 412
+    assert stale_rename.json()["code"] == "RESOURCE_VERSION_CONFLICT"
+    assert stale_rename.json()["current_row_version"] == 2
+    assert client.get(f"/api/v1/folders/{folder['folder_id']}").json()["name"] == "新资料"
+
+    moved = client.post(
+        f"/api/v1/folders/{folder['folder_id']}/move",
+        headers=write_headers("lock-folder-move"),
+        json={"parent_folder_id": target["folder_id"], "row_version": 2},
+    )
+    assert moved.status_code == 200
+    assert moved.json()["row_version"] == 3
+
+    stale_delete = client.delete(
+        f"/api/v1/folders/{folder['folder_id']}",
+        params={"deletion_strategy": "TRASH_RECURSIVE", "expected_version": 2},
+        headers=write_headers("lock-folder-stale-delete"),
+    )
+    assert stale_delete.status_code == 412
+    assert client.get(f"/api/v1/folders/{folder['folder_id']}").status_code == 200
+
+    deleted = client.delete(
+        f"/api/v1/folders/{folder['folder_id']}",
+        params={"deletion_strategy": "TRASH_RECURSIVE", "expected_version": 3},
+        headers=write_headers("lock-folder-delete"),
+    )
+    assert deleted.status_code == 200
+    assert deleted.json()["row_version"] == 4
+
+    stale_restore = client.post(
+        f"/api/v1/trash/folder/{folder['folder_id']}/restore",
+        params={"expected_version": 3},
+        headers=write_headers("lock-folder-stale-restore"),
+    )
+    assert stale_restore.status_code == 412
+    restored = client.post(
+        f"/api/v1/trash/folder/{folder['folder_id']}/restore",
+        params={"expected_version": 4},
+        headers=write_headers("lock-folder-restore"),
+    )
+    assert restored.status_code == 200
+    assert restored.json()["row_version"] == 5
+
+    tag = client.post(
+        "/api/v1/tags",
+        headers=write_headers("lock-tag-create"),
+        json={"name": "重点", "color": "#176b87"},
+    ).json()
+    assert tag["row_version"] == 1
+    updated_tag = client.patch(
+        f"/api/v1/tags/{tag['tag_id']}",
+        headers=write_headers("lock-tag-update"),
+        json={"color": "#123456", "row_version": 1},
+    )
+    assert updated_tag.status_code == 200
+    assert updated_tag.json()["row_version"] == 2
+
+    stale_tag = client.patch(
+        f"/api/v1/tags/{tag['tag_id']}",
+        headers=write_headers("lock-tag-stale"),
+        json={"color": "#ffffff", "row_version": 1},
+    )
+    assert stale_tag.status_code == 412
+    current_tag = next(
+        item for item in client.get("/api/v1/tags").json()["items"] if item["tag_id"] == tag["tag_id"]
+    )
+    assert current_tag["color"] == "#123456"
+
+    stale_tag_delete = client.delete(
+        f"/api/v1/tags/{tag['tag_id']}",
+        params={"expected_version": 1},
+        headers=write_headers("lock-tag-stale-delete"),
+    )
+    assert stale_tag_delete.status_code == 412
+    deleted_tag = client.delete(
+        f"/api/v1/tags/{tag['tag_id']}",
+        params={"expected_version": 2},
+        headers=write_headers("lock-tag-delete"),
+    )
+    assert deleted_tag.status_code == 200
+    missing_tag = client.delete(
+        f"/api/v1/tags/{tag['tag_id']}",
+        params={"expected_version": 2},
+        headers=write_headers("lock-tag-delete-missing"),
+    )
+    assert missing_tag.status_code == 404
+
+
+def test_parse_failure_fields_persist_and_successful_retry_clears_error(
+    file_client, monkeypatch
+) -> None:
+    client, data_dir = file_client
+    private_path = str(data_dir / "private" / "notes.txt")
+
+    def fail_parse(_path: Path):
+        raise FileValidationError(
+            "PARSER_FAILED", f"Traceback: failed while reading {private_path}"
+        )
+
+    monkeypatch.setattr(files_api, "parse_local_text", fail_parse)
+    imported = import_one(client, "retry.txt", b"retry me", "parse-failure-persist")
+    assert imported.status_code == 202
+    item = imported.json()["items"][0]
+    assert item["parse_status"] == "PARSE_FAILED"
+    assert item["parse_failure_stage"] == "PARSING"
+    assert item["parse_error_id"] == "PARSER_FAILED"
+    assert item["parse_retry_count"] == 0
+    assert private_path not in item["parse_error"]
+    assert "Traceback" not in item["parse_error"]
+
+    file_id = item["file_id"]
+    detail = client.get(f"/api/v1/files/{file_id}")
+    assert detail.status_code == 200
+    assert detail.json()["parse_failure_stage"] == "PARSING"
+    assert detail.json()["parse_error_id"] == "PARSER_FAILED"
+    assert detail.json()["parse_retry_count"] == 0
+    assert private_path not in detail.text
+    assert "Traceback" not in detail.text
+
+    factory = client.app.state.session_factory
+    with factory() as session:
+        record = session.get(FileRecord, file_id)
+        assert record is not None
+        assert record.parse_failure_stage == "PARSING"
+        assert record.parse_error_id == "PARSER_FAILED"
+        assert record.parse_retry_count == 0
+
+    monkeypatch.setattr(files_api, "parse_local_text", lambda _path: ("retry ok", {"line_count": 1}))
+    retried = client.post(
+        f"/api/v1/files/{file_id}/reprocess",
+        headers=write_headers("parse-failure-retry"),
+    )
+    assert retried.status_code == 202
+    retried_file = retried.json()["file"]
+    assert retried_file["status"] == "PARSED"
+    assert retried_file["parse_failure_stage"] is None
+    assert retried_file["parse_error_id"] is None
+    assert retried_file["parse_retry_count"] == 1

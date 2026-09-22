@@ -2,9 +2,9 @@
 export interface components {
   "Body_create_file_import_api_v1_file_imports_post": {
     "files": Array<string>;
-    "folder_id"?: string | unknown;
-    "tag_ids"?: string | unknown;
-    "knowledge_base_id"?: string | unknown
+    "folder_id"?: string | null;
+    "tag_ids"?: string | null;
+    "knowledge_base_id"?: string | null
   };
   "DuplicateDecision": {
     "item_index": number;
@@ -16,28 +16,114 @@ export interface components {
   "FileBatchRequest": {
     "file_ids": Array<string>;
     "action": string;
-    "folder_id"?: string | unknown;
-    "tag_id"?: string | unknown
+    "folder_id"?: string | null;
+    "tag_id"?: string | null
+  };
+  "FileItemResponse": {
+    "file_id": string;
+    "display_name": string;
+    "source_name": string;
+    "extension": string;
+    "document_type": string;
+    "folder_id"?: string | null;
+    "folder_name"?: string | null;
+    "status": string;
+    "content_hash": string;
+    "byte_size": number;
+    "created_at": string;
+    "updated_at": string;
+    "deleted_at"?: string | null;
+    "purge_after"?: string | null;
+    "row_version": number;
+    "tags": Array<components["TagResponse"]>;
+    "parsed_metadata"?: Record<string, unknown> | null;
+    "has_parsed_text": boolean;
+    "content_available": boolean;
+    "parse_failure_stage"?: string | null;
+    "parse_error_id"?: string | null;
+    "parse_retry_count": number;
+    "can_reprocess": boolean
+  };
+  "FileListResponse": {
+    "items": Array<components["FileItemResponse"]>;
+    "next_cursor"?: string | null
   };
   "FilePatch": {
-    "display_name"?: string | unknown;
-    "folder_id"?: string | unknown;
+    "display_name"?: string | null;
+    "folder_id"?: string | null;
     "row_version": number
   };
   "FolderCreate": {
     "name": string;
-    "parent_folder_id"?: string | unknown
+    "parent_folder_id"?: string | null
+  };
+  "FolderListResponse": {
+    "items": Array<components["FolderResponse"]>
   };
   "FolderMove": {
-    "parent_folder_id"?: string | unknown;
+    "parent_folder_id"?: string | null;
     "row_version": number
   };
   "FolderPatch": {
-    "name"?: string | unknown;
+    "name"?: string | null;
     "row_version": number
+  };
+  "FolderResponse": {
+    "folder_id": string;
+    "parent_folder_id"?: string | null;
+    "name": string;
+    "file_count": number;
+    "row_version": number;
+    "created_at": string;
+    "updated_at": string
   };
   "HTTPValidationError": {
     "detail"?: Array<components["ValidationError"]>
+  };
+  "ImportItemResponse": {
+    "item_index": number;
+    "original_name": string;
+    "status": string;
+    "hash_status"?: string | null;
+    "duplicate_status": string;
+    "file_id"?: string | null;
+    "task_id"?: string | null;
+    "error"?: string | null;
+    "error_code"?: string | null;
+    "parse_status"?: string | null;
+    "parse_error"?: string | null;
+    "parse_failure_stage"?: string | null;
+    "parse_error_id"?: string | null;
+    "parse_retry_count"?: number | null
+  };
+  "ImportTaskResponse": {
+    "import_id": string;
+    "task_id": string;
+    "status": string;
+    "phase"?: string | null;
+    "progress"?: number | null;
+    "items": Array<components["ImportItemResponse"]>;
+    "folder_id"?: string | null;
+    "tag_ids": Array<string>;
+    "knowledge_base_id"?: string | null;
+    "error"?: string | null
+  };
+  "ProblemDetail": {
+    "type": string;
+    "title": string;
+    "status": number;
+    "code": string;
+    "detail": string;
+    "instance": string;
+    "request_id": string;
+    "retryable"?: boolean;
+    "current_row_version"?: number | null;
+    "field_errors"?: Array<Record<string, unknown>>;
+    "actions"?: Array<Record<string, unknown>>
+  };
+  "ReprocessResponse": {
+    "task_id": string;
+    "file": components["FileItemResponse"]
   };
   "ServiceStatus": {
     "status": string;
@@ -48,11 +134,34 @@ export interface components {
   };
   "TagCreate": {
     "name": string;
-    "color"?: string | unknown
+    "color"?: string | null
+  };
+  "TagListResponse": {
+    "items": Array<components["TagResponse"]>
   };
   "TagPatch": {
-    "name"?: string | unknown;
-    "color"?: string | unknown
+    "name"?: string | null;
+    "color"?: string | null;
+    "row_version": number
+  };
+  "TagResponse": {
+    "tag_id": string;
+    "name": string;
+    "color"?: string | null;
+    "row_version": number;
+    "created_at": string;
+    "updated_at": string
+  };
+  "TrashFolderResponse": {
+    "folder_id": string;
+    "name": string;
+    "row_version": number;
+    "deleted_at"?: string | null;
+    "purge_after"?: string | null
+  };
+  "TrashResponse": {
+    "files": Array<components["FileItemResponse"]>;
+    "folders": Array<components["TrashFolderResponse"]>
   };
   "ValidationError": {
     "loc": Array<string | number>;

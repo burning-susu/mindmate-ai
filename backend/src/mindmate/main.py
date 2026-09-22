@@ -11,13 +11,14 @@ from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from uuid6 import uuid7
 
 from mindmate import __version__
 from mindmate.api.files import FileApiError
 from mindmate.api.files import router as files_router
+from mindmate.api.problem import ProblemDetail
 from mindmate.config import Settings, get_settings
 from mindmate.infrastructure.db import create_session_factory, create_sqlite_engine, quick_check
 from mindmate.security.instance import SingleInstanceLock
@@ -32,21 +33,14 @@ class ServiceStatus(BaseModel):
     request_id: str
 
 
-class ProblemDetail(BaseModel):
-    type: str
-    title: str
-    status: int
-    code: str
-    detail: str
-    instance: str
-    request_id: str
-    retryable: bool = False
-    field_errors: list[dict[str, Any]] = Field(default_factory=list)
-    actions: list[dict[str, Any]] = Field(default_factory=list)
-
-
 def problem(
-    request: Request, status: int, code: str, title: str, detail: str, retryable: bool = False
+    request: Request,
+    status: int,
+    code: str,
+    title: str,
+    detail: str,
+    retryable: bool = False,
+    current_row_version: int | None = None,
 ) -> JSONResponse:
     request_id = getattr(request.state, "request_id", str(uuid7()))
     payload = ProblemDetail(
@@ -58,6 +52,7 @@ def problem(
         instance=request.url.path,
         request_id=request_id,
         retryable=retryable,
+        current_row_version=current_row_version,
     )
     return JSONResponse(
         status_code=status,
@@ -222,7 +217,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.exception_handler(FileApiError)
     async def file_api_error(request: Request, exc: FileApiError) -> JSONResponse:
-        return problem(request, exc.status, exc.code, "文件操作失败", exc.detail)
+        return problem(
+            request,
+            exc.status,
+            exc.code,
+            "文件操作失败",
+            exc.detail,
+            current_row_version=exc.current_row_version,
+        )
 
     @app.post("/api/v1/system/session", tags=["system"])
     async def session(request: Request, response: Response) -> dict[str, Any]:

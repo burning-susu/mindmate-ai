@@ -36,9 +36,12 @@
 - 阶段提交：`bc30e1f feat: implement secure local file management`
 - 收口审计起点：`9e0174a docs: record stage 4 file management evidence`
 - 收口修复提交：`3b29d22 fix: close stage 4 file management gaps`
+- 第四批交接提交：`0448d5b docs: establish stage 4 handoff baseline`
+- 第五批：新增 Alembic revision `9f3a1c7e2b40`；Folder/Tag 持久 `row_version`；重命名、移动、删除、恢复和 Tag 修改/删除的原子乐观锁；FileRecord 解析失败阶段、稳定错误 ID、重试次数；OpenAPI 与前端生成类型和冲突交互同步。
 - 已完成：文件夹、标签、文件 CRUD；multipart 导入校验；流式 staging；SHA-256 去重；同内容复用/独立记录；TXT/Markdown 解析；PDF/DOCX/PPTX 隔离子进程解析；正文搜索；受控内容读取；递归回收站恢复/永久删除；嵌套目录、筛选、批量操作、详情编辑和文件夹回收站前端。
-- 验收证据：后端 `19 passed`（阶段 4 `10 passed`）、Ruff、Pyright；前端 lint/typecheck、Vitest `4 passed`、build；Playwright 生命周期 `1 passed`；OpenAPI 3.1 与前端类型同步；迁移往返和 SQLite quick check 通过。详见 `docs/test-reports/stage-4-file-management.md`。
-- 阻塞：Folder/Tag 乐观锁和文件解析错误持久字段需要数据库迁移；解析子进程尚缺 Windows 硬内存限制，解析任务尚未由持久 Worker 异步领取；列表状态恢复和正式恶意文档/干净 Windows 验收未完成。
+- 验收证据：后端 `23 passed`（第五批定向 `14 passed`）、Ruff、Pyright、Python compileall；前端 lint/typecheck、Vitest `7 passed`、build；OpenAPI 3.1 `25 schemas / 37 operations` 与前端类型同步；空库和已有数据迁移往返、SQLite quick check 通过。详见 `docs/test-reports/stage-4-file-management.md`。
+- 阻塞：解析子进程尚缺 Windows Job Object 硬内存限制，解析任务尚未由持久 Worker 异步领取；列表状态恢复和正式恶意文档/干净 Windows 验收未完成。
+- 下一批次：第六批：阶段 4 持久解析 Worker 与资源安全收口。
 - 后续边界：FTS5、知识库索引、Embedding、向量与 RAG 仍属于阶段 5–6，本批次未提前实现。
 
 ## 进度口径

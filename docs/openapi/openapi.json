@@ -201,7 +201,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ImportTaskResponse"
+                }
               }
             }
           },
@@ -242,9 +244,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Get File Import Api V1 File Imports  Import Id  Get"
+                  "$ref": "#/components/schemas/ImportTaskResponse"
                 }
               }
             }
@@ -296,9 +296,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Decide Duplicates Api V1 File Imports  Import Id  Duplicate Decisions Post"
+                  "$ref": "#/components/schemas/ImportTaskResponse"
                 }
               }
             }
@@ -340,9 +338,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Cancel File Import Api V1 File Imports  Import Id  Cancel Post"
+                  "$ref": "#/components/schemas/ImportTaskResponse"
                 }
               }
             }
@@ -553,9 +549,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response List Files Api V1 Files Get"
+                  "$ref": "#/components/schemas/FileListResponse"
                 }
               }
             }
@@ -597,9 +591,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Get File Api V1 Files  File Id  Get"
+                  "$ref": "#/components/schemas/FileItemResponse"
                 }
               }
             }
@@ -649,9 +641,17 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Patch File Api V1 Files  File Id  Patch"
+                  "$ref": "#/components/schemas/FileItemResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "资源版本冲突，客户端必须刷新后重试。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
                 }
               }
             }
@@ -707,9 +707,17 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Trash File Api V1 Files  File Id  Delete"
+                  "$ref": "#/components/schemas/FileItemResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "资源版本冲突，客户端必须刷新后重试。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
                 }
               }
             }
@@ -946,9 +954,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Reprocess File Api V1 Files  File Id  Reprocess Post"
+                  "$ref": "#/components/schemas/ReprocessResponse"
                 }
               }
             }
@@ -1022,9 +1028,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "type": "object",
-                  "title": "Response List Folders Api V1 Folders Get"
+                  "$ref": "#/components/schemas/FolderListResponse"
                 }
               }
             }
@@ -1053,9 +1057,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "type": "object",
-                  "title": "Response Create Folder Api V1 Folders Post"
+                  "$ref": "#/components/schemas/FolderResponse"
                 }
               }
             }
@@ -1097,9 +1099,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Get Folder Api V1 Folders  Folder Id  Get"
+                  "$ref": "#/components/schemas/FolderResponse"
                 }
               }
             }
@@ -1149,9 +1149,17 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Patch Folder Api V1 Folders  Folder Id  Patch"
+                  "$ref": "#/components/schemas/FolderResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "资源版本冲突，客户端必须刷新后重试。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
                 }
               }
             }
@@ -1193,6 +1201,16 @@
               "default": "MOVE_CHILDREN",
               "title": "Deletion Strategy"
             }
+          },
+          {
+            "name": "expected_version",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Expected Version"
+            }
           }
         ],
         "responses": {
@@ -1204,6 +1222,16 @@
                   "type": "object",
                   "additionalProperties": true,
                   "title": "Response Delete Folder Api V1 Folders  Folder Id  Delete"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "资源版本冲突，客户端必须刷新后重试。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
                 }
               }
             }
@@ -1255,9 +1283,17 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Move Folder Api V1 Folders  Folder Id  Move Post"
+                  "$ref": "#/components/schemas/FolderResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "资源版本冲突，客户端必须刷新后重试。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
                 }
               }
             }
@@ -1288,9 +1324,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "type": "object",
-                  "title": "Response List Tags Api V1 Tags Get"
+                  "$ref": "#/components/schemas/TagListResponse"
                 }
               }
             }
@@ -1319,9 +1353,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "type": "object",
-                  "title": "Response Create Tag Api V1 Tags Post"
+                  "$ref": "#/components/schemas/TagResponse"
                 }
               }
             }
@@ -1373,9 +1405,17 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Patch Tag Api V1 Tags  Tag Id  Patch"
+                  "$ref": "#/components/schemas/TagResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "资源版本冲突，客户端必须刷新后重试。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
                 }
               }
             }
@@ -1407,6 +1447,16 @@
               "type": "string",
               "title": "Tag Id"
             }
+          },
+          {
+            "name": "expected_version",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Expected Version"
+            }
           }
         ],
         "responses": {
@@ -1418,6 +1468,16 @@
                   "type": "object",
                   "additionalProperties": true,
                   "title": "Response Delete Tag Api V1 Tags  Tag Id  Delete"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "资源版本冲突，客户端必须刷新后重试。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
                 }
               }
             }
@@ -1552,9 +1612,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "type": "object",
-                  "title": "Response List Trash Api V1 Trash Get"
+                  "$ref": "#/components/schemas/TrashResponse"
                 }
               }
             }
@@ -1587,6 +1645,16 @@
               "type": "string",
               "title": "Object Id"
             }
+          },
+          {
+            "name": "expected_version",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Expected Version"
+            }
           }
         ],
         "responses": {
@@ -1595,9 +1663,25 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/FileItemResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/FolderResponse"
+                    }
+                  ],
                   "title": "Response Restore Trash Api V1 Trash  Object Type   Object Id  Restore Post"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "资源版本冲突，客户端必须刷新后重试。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
                 }
               }
             }
@@ -1654,16 +1738,10 @@
           {
             "name": "expected_version",
             "in": "query",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "integer",
+              "minimum": 1,
               "title": "Expected Version"
             }
           }
@@ -1677,6 +1755,16 @@
                   "type": "object",
                   "additionalProperties": true,
                   "title": "Response Purge Trash Api V1 Trash  Object Type   Object Id  Delete"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "资源版本冲突，客户端必须刷新后重试。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
                 }
               }
             }
@@ -1827,6 +1915,206 @@
         ],
         "title": "FileBatchRequest"
       },
+      "FileItemResponse": {
+        "properties": {
+          "file_id": {
+            "type": "string",
+            "title": "File Id"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "source_name": {
+            "type": "string",
+            "title": "Source Name"
+          },
+          "extension": {
+            "type": "string",
+            "title": "Extension"
+          },
+          "document_type": {
+            "type": "string",
+            "title": "Document Type"
+          },
+          "folder_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Folder Id"
+          },
+          "folder_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Folder Name"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "content_hash": {
+            "type": "string",
+            "title": "Content Hash"
+          },
+          "byte_size": {
+            "type": "integer",
+            "title": "Byte Size"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "deleted_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deleted At"
+          },
+          "purge_after": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Purge After"
+          },
+          "row_version": {
+            "type": "integer",
+            "title": "Row Version"
+          },
+          "tags": {
+            "items": {
+              "$ref": "#/components/schemas/TagResponse"
+            },
+            "type": "array",
+            "title": "Tags"
+          },
+          "parsed_metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parsed Metadata"
+          },
+          "has_parsed_text": {
+            "type": "boolean",
+            "title": "Has Parsed Text"
+          },
+          "content_available": {
+            "type": "boolean",
+            "title": "Content Available"
+          },
+          "parse_failure_stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parse Failure Stage"
+          },
+          "parse_error_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parse Error Id"
+          },
+          "parse_retry_count": {
+            "type": "integer",
+            "title": "Parse Retry Count"
+          },
+          "can_reprocess": {
+            "type": "boolean",
+            "title": "Can Reprocess"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file_id",
+          "display_name",
+          "source_name",
+          "extension",
+          "document_type",
+          "status",
+          "content_hash",
+          "byte_size",
+          "created_at",
+          "updated_at",
+          "row_version",
+          "tags",
+          "has_parsed_text",
+          "content_available",
+          "parse_retry_count",
+          "can_reprocess"
+        ],
+        "title": "FileItemResponse"
+      },
+      "FileListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/FileItemResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "FileListResponse"
+      },
       "FilePatch": {
         "properties": {
           "display_name": {
@@ -1890,6 +2178,22 @@
         ],
         "title": "FolderCreate"
       },
+      "FolderListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/FolderResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "FolderListResponse"
+      },
       "FolderMove": {
         "properties": {
           "parent_folder_id": {
@@ -1940,6 +2244,57 @@
         ],
         "title": "FolderPatch"
       },
+      "FolderResponse": {
+        "properties": {
+          "folder_id": {
+            "type": "string",
+            "title": "Folder Id"
+          },
+          "parent_folder_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Folder Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "file_count": {
+            "type": "integer",
+            "title": "File Count"
+          },
+          "row_version": {
+            "type": "integer",
+            "title": "Row Version"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "folder_id",
+          "name",
+          "file_count",
+          "row_version",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "FolderResponse"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -1952,6 +2307,330 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "ImportItemResponse": {
+        "properties": {
+          "item_index": {
+            "type": "integer",
+            "title": "Item Index"
+          },
+          "original_name": {
+            "type": "string",
+            "title": "Original Name"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "hash_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hash Status"
+          },
+          "duplicate_status": {
+            "type": "string",
+            "title": "Duplicate Status"
+          },
+          "file_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Id"
+          },
+          "task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Id"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "parse_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parse Status"
+          },
+          "parse_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parse Error"
+          },
+          "parse_failure_stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parse Failure Stage"
+          },
+          "parse_error_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parse Error Id"
+          },
+          "parse_retry_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parse Retry Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "item_index",
+          "original_name",
+          "status",
+          "duplicate_status"
+        ],
+        "title": "ImportItemResponse"
+      },
+      "ImportTaskResponse": {
+        "properties": {
+          "import_id": {
+            "type": "string",
+            "title": "Import Id"
+          },
+          "task_id": {
+            "type": "string",
+            "title": "Task Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "phase": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phase"
+          },
+          "progress": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Progress"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ImportItemResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "folder_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Folder Id"
+          },
+          "tag_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tag Ids"
+          },
+          "knowledge_base_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Knowledge Base Id"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "import_id",
+          "task_id",
+          "status",
+          "items",
+          "tag_ids"
+        ],
+        "title": "ImportTaskResponse"
+      },
+      "ProblemDetail": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "status": {
+            "type": "integer",
+            "title": "Status"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          },
+          "instance": {
+            "type": "string",
+            "title": "Instance"
+          },
+          "request_id": {
+            "type": "string",
+            "title": "Request Id"
+          },
+          "retryable": {
+            "type": "boolean",
+            "title": "Retryable",
+            "default": false
+          },
+          "current_row_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Row Version"
+          },
+          "field_errors": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Field Errors"
+          },
+          "actions": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Actions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "title",
+          "status",
+          "code",
+          "detail",
+          "instance",
+          "request_id"
+        ],
+        "title": "ProblemDetail"
+      },
+      "ReprocessResponse": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "title": "Task Id"
+          },
+          "file": {
+            "$ref": "#/components/schemas/FileItemResponse"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_id",
+          "file"
+        ],
+        "title": "ReprocessResponse"
       },
       "ServiceStatus": {
         "properties": {
@@ -2014,6 +2693,22 @@
         ],
         "title": "TagCreate"
       },
+      "TagListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TagResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "TagListResponse"
+      },
       "TagPatch": {
         "properties": {
           "name": {
@@ -2040,10 +2735,135 @@
               }
             ],
             "title": "Color"
+          },
+          "row_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Row Version"
           }
         },
         "type": "object",
+        "required": [
+          "row_version"
+        ],
         "title": "TagPatch"
+      },
+      "TagResponse": {
+        "properties": {
+          "tag_id": {
+            "type": "string",
+            "title": "Tag Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
+          "row_version": {
+            "type": "integer",
+            "title": "Row Version"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tag_id",
+          "name",
+          "row_version",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "TagResponse"
+      },
+      "TrashFolderResponse": {
+        "properties": {
+          "folder_id": {
+            "type": "string",
+            "title": "Folder Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "row_version": {
+            "type": "integer",
+            "title": "Row Version"
+          },
+          "deleted_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deleted At"
+          },
+          "purge_after": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Purge After"
+          }
+        },
+        "type": "object",
+        "required": [
+          "folder_id",
+          "name",
+          "row_version"
+        ],
+        "title": "TrashFolderResponse"
+      },
+      "TrashResponse": {
+        "properties": {
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileItemResponse"
+            },
+            "type": "array",
+            "title": "Files"
+          },
+          "folders": {
+            "items": {
+              "$ref": "#/components/schemas/TrashFolderResponse"
+            },
+            "type": "array",
+            "title": "Folders"
+          }
+        },
+        "type": "object",
+        "required": [
+          "files",
+          "folders"
+        ],
+        "title": "TrashResponse"
       },
       "ValidationError": {
         "properties": {

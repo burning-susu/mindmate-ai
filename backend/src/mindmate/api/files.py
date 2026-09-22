@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import delete, exists, func, or_, select, update
 from sqlalchemy.orm import Session
 
+from mindmate.api.problem import ProblemDetail
 from mindmate.application.files import (
     MAX_BATCH_SIZE,
     MAX_FILE_COUNT,
@@ -58,11 +59,129 @@ router = APIRouter(prefix="/api/v1")
 
 
 class FileApiError(Exception):
-    def __init__(self, code: str, detail: str, status: int = 400) -> None:
+    def __init__(
+        self,
+        code: str,
+        detail: str,
+        status: int = 400,
+        current_row_version: int | None = None,
+    ) -> None:
         super().__init__(detail)
         self.code = code
         self.detail = detail
         self.status = status
+        self.current_row_version = current_row_version
+
+
+class TagResponse(BaseModel):
+    tag_id: str
+    name: str
+    color: str | None = None
+    row_version: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class FolderResponse(BaseModel):
+    folder_id: str
+    parent_folder_id: str | None = None
+    name: str
+    file_count: int
+    row_version: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class FileItemResponse(BaseModel):
+    file_id: str
+    display_name: str
+    source_name: str
+    extension: str
+    document_type: str
+    folder_id: str | None = None
+    folder_name: str | None = None
+    status: str
+    content_hash: str
+    byte_size: int
+    created_at: datetime
+    updated_at: datetime
+    deleted_at: datetime | None = None
+    purge_after: datetime | None = None
+    row_version: int
+    tags: list[TagResponse]
+    parsed_metadata: dict[str, Any] | None = None
+    has_parsed_text: bool
+    content_available: bool
+    parse_failure_stage: str | None = None
+    parse_error_id: str | None = None
+    parse_retry_count: int
+    can_reprocess: bool
+
+
+class FileListResponse(BaseModel):
+    items: list[FileItemResponse]
+    next_cursor: str | None = None
+
+
+class FolderListResponse(BaseModel):
+    items: list[FolderResponse]
+
+
+class TagListResponse(BaseModel):
+    items: list[TagResponse]
+
+
+class ReprocessResponse(BaseModel):
+    task_id: str
+    file: FileItemResponse
+
+
+class ImportItemResponse(BaseModel):
+    item_index: int
+    original_name: str
+    status: str
+    hash_status: str | None = None
+    duplicate_status: str
+    file_id: str | None = None
+    task_id: str | None = None
+    error: str | None = None
+    error_code: str | None = None
+    parse_status: str | None = None
+    parse_error: str | None = None
+    parse_failure_stage: str | None = None
+    parse_error_id: str | None = None
+    parse_retry_count: int | None = None
+
+
+class ImportTaskResponse(BaseModel):
+    import_id: str
+    task_id: str
+    status: str
+    phase: str | None = None
+    progress: int | None = None
+    items: list[ImportItemResponse]
+    folder_id: str | None = None
+    tag_ids: list[str]
+    knowledge_base_id: str | None = None
+    error: str | None = None
+
+
+class TrashFolderResponse(BaseModel):
+    folder_id: str
+    name: str
+    row_version: int
+    deleted_at: datetime | None = None
+    purge_after: datetime | None = None
+
+
+class TrashResponse(BaseModel):
+    files: list[FileItemResponse]
+    folders: list[TrashFolderResponse]
+
+
+VERSION_CONFLICT_RESPONSES: dict[int | str, dict[str, Any]] = {
+    412: {"model": ProblemDetail, "description": "资源版本冲突，客户端必须刷新后重试。"}
+}
 
 
 class FilePatch(BaseModel):
@@ -94,6 +213,7 @@ class TagCreate(BaseModel):
 class TagPatch(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=30)
     color: str | None = Field(default=None, max_length=20)
+    row_version: int = Field(ge=1)
 
 
 class DuplicateDecision(BaseModel):
@@ -145,7 +265,58 @@ def _folder_depth(session: Session, parent_id: str | None) -> int:
 
 def _assert_row_version(current: int, expected: int) -> None:
     if current != expected:
-        raise FileApiError("RESOURCE_VERSION_CONFLICT", "资源已被其他操作更新，请刷新后重试。", 412)
+        raise FileApiError(
+            "RESOURCE_VERSION_CONFLICT",
+            f"资源已被其他操作更新，当前版本为 {current}，本次请求不会覆盖最新数据。请刷新后重试。",
+            412,
+            current_row_version=current,
+        )
+
+
+def _atomic_folder_update(
+    session: Session,
+    folder_id: str,
+    expected_version: int,
+    values: dict[str, Any],
+    *,
+    deleted: bool,
+) -> None:
+    state_clause = Folder.deleted_at.is_not(None) if deleted else Folder.deleted_at.is_(None)
+    result = session.execute(
+        update(Folder)
+        .where(
+            Folder.folder_id == folder_id,
+            state_clause,
+            Folder.row_version == expected_version,
+        )
+        .values(**values, row_version=Folder.row_version + 1)
+        .execution_options(synchronize_session=False)
+    )
+    if getattr(result, "rowcount", 0) == 1:
+        return
+    session.rollback()
+    current = session.get(Folder, folder_id)
+    if current is None or (current.deleted_at is not None) != deleted:
+        raise FileApiError("FOLDER_NOT_FOUND", "文件夹不存在。", 404)
+    _assert_row_version(current.row_version, expected_version)
+
+
+def _atomic_tag_update(
+    session: Session, tag_id: str, expected_version: int, values: dict[str, Any]
+) -> None:
+    result = session.execute(
+        update(Tag)
+        .where(Tag.tag_id == tag_id, Tag.row_version == expected_version)
+        .values(**values, row_version=Tag.row_version + 1)
+        .execution_options(synchronize_session=False)
+    )
+    if getattr(result, "rowcount", 0) == 1:
+        return
+    session.rollback()
+    current = session.get(Tag, tag_id)
+    if current is None:
+        raise FileApiError("TAG_NOT_FOUND", "标签不存在。", 404)
+    _assert_row_version(current.row_version, expected_version)
 
 
 def _unique_display_name(
@@ -175,6 +346,7 @@ def _tag_payload(tag: Tag) -> dict[str, Any]:
         "tag_id": tag.tag_id,
         "name": tag.name,
         "color": tag.color,
+        "row_version": tag.row_version,
         "created_at": tag.created_at.isoformat(),
         "updated_at": tag.updated_at.isoformat(),
     }
@@ -191,7 +363,7 @@ def _folder_payload(session: Session, folder: Folder) -> dict[str, Any]:
         "parent_folder_id": folder.parent_folder_id,
         "name": folder.name,
         "file_count": int(count or 0),
-        "row_version": 1,
+        "row_version": folder.row_version,
         "created_at": folder.created_at.isoformat(),
         "updated_at": folder.updated_at.isoformat(),
     }
@@ -232,7 +404,49 @@ def _file_payload(session: Session, settings: Settings, record: FileRecord) -> d
         "parsed_metadata": parsed.get("metadata") if parsed else None,
         "has_parsed_text": parsed is not None,
         "content_available": content is not None and content.storage_state == "READY",
+        "parse_failure_stage": record.parse_failure_stage,
+        "parse_error_id": record.parse_error_id,
+        "parse_retry_count": record.parse_retry_count,
+        "can_reprocess": (
+            record.deleted_at is None and content is not None and content.storage_state == "READY"
+        ),
     }
+
+
+SAFE_PARSE_FAILURE_MESSAGES = {
+    "PARSER_TIMEOUT": "文件解析超时，可以稍后重新处理。",
+    "PARSER_OUTPUT_INVALID": "解析器未生成有效结果，可以重新处理。",
+    "PARSER_EMPTY": "文件中没有可提取的文本，扫描件可能需要 OCR。",
+    "PARSER_FAILED": "文件未能提取出文本，扫描件可能需要 OCR，也可以稍后重新处理。",
+    "FILE_TEXT_INVALID": "文本内容无法安全读取。",
+}
+
+
+def _safe_parse_failure(error: FileValidationError) -> str:
+    return SAFE_PARSE_FAILURE_MESSAGES.get(error.code, "文件解析失败，可以稍后重新处理。")
+
+
+def _mark_parse_succeeded(record: FileRecord) -> None:
+    record.status = "PARSED"
+    record.parse_revision_id = new_id()
+    record.parse_failure_stage = None
+    record.parse_error_id = None
+
+
+def _mark_parse_failed(record: FileRecord, error: FileValidationError) -> str:
+    record.status = "PARSE_FAILED"
+    record.parse_revision_id = None
+    record.parse_failure_stage = "PARSING"
+    record.parse_error_id = error.code
+    return _safe_parse_failure(error)
+
+
+def _restored_file_status(settings: Settings, record: FileRecord) -> str:
+    if read_parsed_text(settings, record.file_id):
+        return "PARSED"
+    if record.parse_error_id:
+        return "PARSE_FAILED"
+    return "QUEUED"
 
 
 def _task_items(task: BackgroundTask) -> list[dict[str, Any]]:
@@ -349,6 +563,9 @@ def _create_record_from_content(
         content_hash=content.sha256,
         byte_size=content.byte_size,
         parse_revision_id=None,
+        parse_failure_stage=None,
+        parse_error_id=None,
+        parse_retry_count=0,
         created_at=utc_now(),
         updated_at=utc_now(),
         row_version=1,
@@ -370,11 +587,9 @@ def _create_record_from_content(
                 parser=f"isolated-{document_type.casefold()}-v1",
                 locations=cast(list[dict[str, object]], parsed["locations"]),
             )
-        record.status = "PARSED"
-        record.parse_revision_id = new_id()
+        _mark_parse_succeeded(record)
     except FileValidationError as exc:
-        record.status = "PARSE_FAILED"
-        parse_error = exc.detail
+        parse_error = _mark_parse_failed(record, exc)
     content.reference_count += 1
     session.add(record)
     session.flush()
@@ -420,7 +635,9 @@ def _find_active_content(session: Session, sha256: str) -> ContentObject | None:
     )
 
 
-@router.post("/file-imports", status_code=202, tags=["files"])
+@router.post(
+    "/file-imports", status_code=202, response_model=ImportTaskResponse, tags=["files"]
+)
 async def create_file_import(
     request: Request,
     files: list[UploadFile] = File(...),
@@ -556,6 +773,9 @@ async def create_file_import(
                     "file_id": record.file_id,
                     "parse_status": record.status,
                     "parse_error": parse_error,
+                    "parse_failure_stage": record.parse_failure_stage,
+                    "parse_error_id": record.parse_error_id,
+                    "parse_retry_count": record.parse_retry_count,
                 }
             )
         except FileValidationError as exc:
@@ -585,7 +805,7 @@ async def create_file_import(
     return JSONResponse(status_code=202, content=_task_payload(task))
 
 
-@router.get("/file-imports/{import_id}", tags=["files"])
+@router.get("/file-imports/{import_id}", response_model=ImportTaskResponse, tags=["files"])
 def get_file_import(import_id: str, session: Session = Depends(get_session)) -> dict[str, Any]:
     task = session.get(BackgroundTask, import_id)
     if task is None or task.task_type != "FILE_IMPORT":
@@ -593,7 +813,11 @@ def get_file_import(import_id: str, session: Session = Depends(get_session)) -> 
     return _task_payload(task)
 
 
-@router.post("/file-imports/{import_id}/duplicate-decisions", tags=["files"])
+@router.post(
+    "/file-imports/{import_id}/duplicate-decisions",
+    response_model=ImportTaskResponse,
+    tags=["files"],
+)
 def decide_duplicates(
     import_id: str,
     payload: DuplicateDecisionRequest,
@@ -659,6 +883,9 @@ def decide_duplicates(
                     "file_id": record.file_id,
                     "parse_status": record.status,
                     "parse_error": parse_error,
+                    "parse_failure_stage": record.parse_failure_stage,
+                    "parse_error_id": record.parse_error_id,
+                    "parse_retry_count": record.parse_retry_count,
                 }
             )
         else:
@@ -676,7 +903,9 @@ def decide_duplicates(
     return _task_payload(task)
 
 
-@router.post("/file-imports/{import_id}/cancel", tags=["files"])
+@router.post(
+    "/file-imports/{import_id}/cancel", response_model=ImportTaskResponse, tags=["files"]
+)
 def cancel_file_import(
     import_id: str,
     session: Session = Depends(get_session),
@@ -693,7 +922,7 @@ def cancel_file_import(
     return _task_payload(task)
 
 
-@router.get("/files", tags=["files"])
+@router.get("/files", response_model=FileListResponse, tags=["files"])
 def list_files(
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
@@ -786,7 +1015,7 @@ def _get_file_or_404(session: Session, file_id: str) -> FileRecord:
     return record
 
 
-@router.get("/files/{file_id}", tags=["files"])
+@router.get("/files/{file_id}", response_model=FileItemResponse, tags=["files"])
 def get_file(
     file_id: str,
     session: Session = Depends(get_session),
@@ -795,7 +1024,12 @@ def get_file(
     return _file_payload(session, settings, _get_file_or_404(session, file_id))
 
 
-@router.patch("/files/{file_id}", tags=["files"])
+@router.patch(
+    "/files/{file_id}",
+    response_model=FileItemResponse,
+    responses=VERSION_CONFLICT_RESPONSES,
+    tags=["files"],
+)
 def patch_file(
     file_id: str,
     payload: FilePatch,
@@ -828,7 +1062,12 @@ def patch_file(
     return _file_payload(session, settings, record)
 
 
-@router.delete("/files/{file_id}", tags=["files"])
+@router.delete(
+    "/files/{file_id}",
+    response_model=FileItemResponse,
+    responses=VERSION_CONFLICT_RESPONSES,
+    tags=["files"],
+)
 def trash_file(
     file_id: str,
     expected_version: int | None = Query(default=None),
@@ -950,7 +1189,12 @@ def file_knowledge_bases(file_id: str, session: Session = Depends(get_session)) 
     }
 
 
-@router.post("/files/{file_id}/reprocess", status_code=202, tags=["files"])
+@router.post(
+    "/files/{file_id}/reprocess",
+    status_code=202,
+    response_model=ReprocessResponse,
+    tags=["files"],
+)
 def reprocess_file(
     file_id: str,
     request: Request,
@@ -961,6 +1205,7 @@ def reprocess_file(
     if record.deleted_at is not None:
         raise FileApiError("FILE_IN_TRASH", "回收站中的文件不能重新处理。", 409)
     record.status = "PARSING"
+    record.parse_retry_count += 1
     record.updated_at = utc_now()
     idempotency_key = (
         request.headers.get("idempotency-key") or f"reprocess:{file_id}:{record.row_version}"
@@ -987,17 +1232,16 @@ def reprocess_file(
                 parser=f"isolated-{record.document_type.casefold()}-v1",
                 locations=cast(list[dict[str, object]], parsed["locations"]),
             )
-        record.status = "PARSED"
-        record.parse_revision_id = new_id()
+        _mark_parse_succeeded(record)
         task.status = "COMPLETED"
         task.phase = "COMPLETED"
         task.progress = 100
         task.completed_at = utc_now()
     except FileValidationError as exc:
-        record.status = "PARSE_FAILED"
+        safe_error = _mark_parse_failed(record, exc)
         task.status = "FAILED"
         task.phase = "PARSING"
-        task.error_summary = exc.detail
+        task.error_summary = safe_error
         task.completed_at = utc_now()
     record.row_version += 1
     session.commit()
@@ -1060,6 +1304,8 @@ def batch_file_action(
             elif payload.action == "REPROCESS":
                 if record.deleted_at is not None:
                     raise FileApiError("FILE_IN_TRASH", "回收站中的文件不能重新处理。", 409)
+                record.status = "PARSING"
+                record.parse_retry_count += 1
                 content_path = _record_content_path(session, settings, record)
                 try:
                     if record.document_type in {"TXT", "MARKDOWN"}:
@@ -1082,11 +1328,10 @@ def batch_file_action(
                                 list[dict[str, object]], parsed["locations"]
                             ),
                         )
-                    record.status = "PARSED"
-                    record.parse_revision_id = new_id()
+                    _mark_parse_succeeded(record)
                 except FileValidationError as exc:
-                    record.status = "PARSE_FAILED"
-                    raise FileApiError(exc.code, exc.detail, 409) from exc
+                    safe_error = _mark_parse_failed(record, exc)
+                    raise FileApiError(exc.code, safe_error, 409) from exc
                 record.row_version += 1
             else:
                 raise FileApiError("BATCH_ACTION_INVALID", "批量操作类型无效。")
@@ -1098,7 +1343,7 @@ def batch_file_action(
     return {"items": results}
 
 
-@router.get("/folders", tags=["files"])
+@router.get("/folders", response_model=FolderListResponse, tags=["files"])
 def list_folders(session: Session = Depends(get_session)) -> dict[str, Any]:
     folders = session.scalars(
         select(Folder)
@@ -1108,7 +1353,7 @@ def list_folders(session: Session = Depends(get_session)) -> dict[str, Any]:
     return {"items": [_folder_payload(session, folder) for folder in folders]}
 
 
-@router.post("/folders", status_code=201, tags=["files"])
+@router.post("/folders", status_code=201, response_model=FolderResponse, tags=["files"])
 def create_folder(payload: FolderCreate, session: Session = Depends(get_session)) -> dict[str, Any]:
     name = " ".join(payload.name.strip().split())
     if not name:
@@ -1132,13 +1377,14 @@ def create_folder(payload: FolderCreate, session: Session = Depends(get_session)
         sort_order=0,
         created_at=utc_now(),
         updated_at=utc_now(),
+        row_version=1,
     )
     session.add(folder)
     session.commit()
     return _folder_payload(session, folder)
 
 
-@router.get("/folders/{folder_id}", tags=["files"])
+@router.get("/folders/{folder_id}", response_model=FolderResponse, tags=["files"])
 def get_folder(folder_id: str, session: Session = Depends(get_session)) -> dict[str, Any]:
     folder = session.get(Folder, folder_id)
     if folder is None or folder.deleted_at is not None:
@@ -1146,16 +1392,21 @@ def get_folder(folder_id: str, session: Session = Depends(get_session)) -> dict[
     return _folder_payload(session, folder)
 
 
-@router.patch("/folders/{folder_id}", tags=["files"])
+@router.patch(
+    "/folders/{folder_id}",
+    response_model=FolderResponse,
+    responses=VERSION_CONFLICT_RESPONSES,
+    tags=["files"],
+)
 def patch_folder(
     folder_id: str, payload: FolderPatch, session: Session = Depends(get_session)
 ) -> dict[str, Any]:
     folder = session.get(Folder, folder_id)
     if folder is None or folder.deleted_at is not None:
         raise FileApiError("FOLDER_NOT_FOUND", "文件夹不存在。", 404)
-    _assert_row_version(1, payload.row_version)
     if payload.name is None:
         raise FileApiError("FOLDER_PATCH_EMPTY", "至少提供一个需要更新的字段。")
+    values: dict[str, Any] = {"updated_at": utc_now()}
     if payload.name is not None:
         name = " ".join(payload.name.strip().split())
         if not name:
@@ -1170,11 +1421,15 @@ def patch_folder(
             )
         ):
             raise FileApiError("FOLDER_NAME_CONFLICT", "同一文件夹下不能有同名子文件夹。", 409)
-        folder.name = name
-        folder.normalized_name = normalized
-    folder.updated_at = utc_now()
+        values.update(name=name, normalized_name=normalized)
+    _atomic_folder_update(
+        session, folder_id, payload.row_version, values, deleted=False
+    )
     session.commit()
-    return _folder_payload(session, folder)
+    session.expire_all()
+    updated_folder = session.get(Folder, folder_id)
+    assert updated_folder is not None
+    return _folder_payload(session, updated_folder)
 
 
 def _folder_descendants(
@@ -1213,14 +1468,18 @@ def _folder_subtree_height(session: Session, folder_id: str) -> int:
     return 1 + max(_folder_subtree_height(session, child.folder_id) for child in direct_children)
 
 
-@router.post("/folders/{folder_id}/move", tags=["files"])
+@router.post(
+    "/folders/{folder_id}/move",
+    response_model=FolderResponse,
+    responses=VERSION_CONFLICT_RESPONSES,
+    tags=["files"],
+)
 def move_folder(
     folder_id: str, payload: FolderMove, session: Session = Depends(get_session)
 ) -> dict[str, Any]:
     folder = session.get(Folder, folder_id)
     if folder is None or folder.deleted_at is not None:
         raise FileApiError("FOLDER_NOT_FOUND", "文件夹不存在。", 404)
-    _assert_row_version(1, payload.row_version)
     if payload.parent_folder_id == folder_id:
         raise FileApiError("FOLDER_TREE_INVALID", "文件夹不能移动到自身。")
     descendants = {item.folder_id for item in _folder_descendants(session, folder_id)}
@@ -1242,16 +1501,27 @@ def move_folder(
         > MAX_FOLDER_DEPTH
     ):
         raise FileApiError("FOLDER_DEPTH_EXCEEDED", "移动后会超过 5 层限制。")
-    folder.parent_folder_id = payload.parent_folder_id
-    folder.updated_at = utc_now()
+    _atomic_folder_update(
+        session,
+        folder_id,
+        payload.row_version,
+        {"parent_folder_id": payload.parent_folder_id, "updated_at": utc_now()},
+        deleted=False,
+    )
     session.commit()
-    return _folder_payload(session, folder)
+    session.expire_all()
+    updated_folder = session.get(Folder, folder_id)
+    assert updated_folder is not None
+    return _folder_payload(session, updated_folder)
 
 
-@router.delete("/folders/{folder_id}", tags=["files"])
+@router.delete(
+    "/folders/{folder_id}", responses=VERSION_CONFLICT_RESPONSES, tags=["files"]
+)
 def delete_folder(
     folder_id: str,
     deletion_strategy: str = Query(default="MOVE_CHILDREN"),
+    expected_version: int = Query(ge=1),
     session: Session = Depends(get_session),
 ) -> dict[str, Any]:
     folder = session.get(Folder, folder_id)
@@ -1260,49 +1530,84 @@ def delete_folder(
     children = _folder_descendants(session, folder_id)
     if deletion_strategy not in {"MOVE_CHILDREN", "TRASH_RECURSIVE"}:
         raise FileApiError("DELETION_STRATEGY_INVALID", "文件夹删除策略无效。")
+    now = utc_now()
     if deletion_strategy == "MOVE_CHILDREN":
-        for item in session.scalars(
-            select(Folder).where(
-                Folder.parent_folder_id == folder_id,
-                Folder.deleted_at.is_(None),
+        _atomic_folder_update(
+            session,
+            folder_id,
+            expected_version,
+            {"deleted_at": now, "purge_after": now + timedelta(days=30), "updated_at": now},
+            deleted=False,
+        )
+        session.execute(
+            update(Folder)
+            .where(Folder.parent_folder_id == folder_id, Folder.deleted_at.is_(None))
+            .values(
+                parent_folder_id=folder.parent_folder_id,
+                updated_at=now,
+                row_version=Folder.row_version + 1,
             )
-        ):
-            item.parent_folder_id = folder.parent_folder_id
-            item.updated_at = utc_now()
-        session.query(FileRecord).filter(FileRecord.folder_id == folder_id).update(
-            {FileRecord.folder_id: folder.parent_folder_id}
+            .execution_options(synchronize_session=False)
         )
-        folder.deleted_at = utc_now()
+        session.execute(
+            update(FileRecord)
+            .where(FileRecord.folder_id == folder_id)
+            .values(
+                folder_id=folder.parent_folder_id,
+                updated_at=now,
+                row_version=FileRecord.row_version + 1,
+            )
+            .execution_options(synchronize_session=False)
+        )
     else:
-        now = utc_now()
-        all_ids = [folder_id, *(item.folder_id for item in children)]
-        session.query(Folder).filter(Folder.folder_id.in_(all_ids)).update(
-            {Folder.deleted_at: now, Folder.purge_after: now + timedelta(days=30)},
-            synchronize_session=False,
+        _atomic_folder_update(
+            session,
+            folder_id,
+            expected_version,
+            {"deleted_at": now, "purge_after": now + timedelta(days=30), "updated_at": now},
+            deleted=False,
         )
-        session.query(FileRecord).filter(FileRecord.folder_id.in_(all_ids)).update(
-            {
-                FileRecord.deleted_at: now,
-                FileRecord.purge_after: now + timedelta(days=30),
-                FileRecord.status: "IN_TRASH",
-                FileRecord.row_version: FileRecord.row_version + 1,
-            },
-            synchronize_session=False,
+        child_ids = [item.folder_id for item in children]
+        all_ids = [folder_id, *child_ids]
+        if child_ids:
+            session.execute(
+                update(Folder)
+                .where(Folder.folder_id.in_(child_ids), Folder.deleted_at.is_(None))
+                .values(
+                    deleted_at=now,
+                    purge_after=now + timedelta(days=30),
+                    updated_at=now,
+                    row_version=Folder.row_version + 1,
+                )
+                .execution_options(synchronize_session=False)
+            )
+        session.execute(
+            update(FileRecord)
+            .where(FileRecord.folder_id.in_(all_ids))
+            .values(
+                deleted_at=now,
+                purge_after=now + timedelta(days=30),
+                status="IN_TRASH",
+                updated_at=now,
+                row_version=FileRecord.row_version + 1,
+            )
+            .execution_options(synchronize_session=False)
         )
     session.commit()
     return {
         "folder_id": folder_id,
         "status": "TRASHED" if deletion_strategy == "TRASH_RECURSIVE" else "DELETED",
+        "row_version": expected_version + 1,
     }
 
 
-@router.get("/tags", tags=["files"])
+@router.get("/tags", response_model=TagListResponse, tags=["files"])
 def list_tags(session: Session = Depends(get_session)) -> dict[str, Any]:
     tags = list(session.scalars(select(Tag).order_by(Tag.name)))
     return {"items": [_tag_payload(tag) for tag in tags]}
 
 
-@router.post("/tags", status_code=201, tags=["files"])
+@router.post("/tags", status_code=201, response_model=TagResponse, tags=["files"])
 def create_tag(payload: TagCreate, session: Session = Depends(get_session)) -> dict[str, Any]:
     name = " ".join(payload.name.strip().split())
     normalized = normalize_name(name)
@@ -1317,21 +1622,28 @@ def create_tag(payload: TagCreate, session: Session = Depends(get_session)) -> d
         color=payload.color,
         created_at=utc_now(),
         updated_at=utc_now(),
+        row_version=1,
     )
     session.add(tag)
     session.commit()
     return _tag_payload(tag)
 
 
-@router.patch("/tags/{tag_id}", tags=["files"])
+@router.patch(
+    "/tags/{tag_id}",
+    response_model=TagResponse,
+    responses=VERSION_CONFLICT_RESPONSES,
+    tags=["files"],
+)
 def patch_tag(
     tag_id: str, payload: TagPatch, session: Session = Depends(get_session)
 ) -> dict[str, Any]:
     tag = session.get(Tag, tag_id)
     if tag is None:
         raise FileApiError("TAG_NOT_FOUND", "标签不存在。", 404)
-    if not payload.model_fields_set:
+    if not (payload.model_fields_set - {"row_version"}):
         raise FileApiError("TAG_PATCH_EMPTY", "至少提供一个需要更新的字段。")
+    values: dict[str, Any] = {"updated_at": utc_now()}
     if payload.name is not None:
         name = " ".join(payload.name.strip().split())
         if not name:
@@ -1342,24 +1654,33 @@ def patch_tag(
         )
         if other:
             raise FileApiError("TAG_NAME_CONFLICT", "标签名称已存在。", 409)
-        tag.name = name
-        tag.normalized_name = normalized
+        values.update(name=name, normalized_name=normalized)
     if "color" in payload.model_fields_set:
-        tag.color = payload.color
-    tag.updated_at = utc_now()
+        values["color"] = payload.color
+    _atomic_tag_update(session, tag_id, payload.row_version, values)
     session.commit()
-    return _tag_payload(tag)
+    session.expire_all()
+    updated_tag = session.get(Tag, tag_id)
+    assert updated_tag is not None
+    return _tag_payload(updated_tag)
 
 
-@router.delete("/tags/{tag_id}", tags=["files"])
-def delete_tag(tag_id: str, session: Session = Depends(get_session)) -> dict[str, Any]:
+@router.delete("/tags/{tag_id}", responses=VERSION_CONFLICT_RESPONSES, tags=["files"])
+def delete_tag(
+    tag_id: str,
+    expected_version: int = Query(ge=1),
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
     tag = session.get(Tag, tag_id)
     if tag is None:
         raise FileApiError("TAG_NOT_FOUND", "标签不存在。", 404)
+    _atomic_tag_update(session, tag_id, expected_version, {"updated_at": utc_now()})
     session.execute(delete(FileTag).where(FileTag.tag_id == tag_id))
-    session.delete(tag)
+    session.execute(
+        delete(Tag).where(Tag.tag_id == tag_id, Tag.row_version == expected_version + 1)
+    )
     session.commit()
-    return {"tag_id": tag_id, "status": "DELETED"}
+    return {"tag_id": tag_id, "status": "DELETED", "row_version": expected_version + 1}
 
 
 @router.put("/files/{file_id}/tags/{tag_id}", tags=["files"])
@@ -1390,7 +1711,7 @@ def remove_file_tag(
     return {"file_id": file_id, "tag_id": tag_id, "status": "REMOVED"}
 
 
-@router.get("/trash", tags=["files"])
+@router.get("/trash", response_model=TrashResponse, tags=["files"])
 def list_trash(
     session: Session = Depends(get_session), settings: Settings = Depends(get_settings)
 ) -> dict[str, Any]:
@@ -1408,6 +1729,7 @@ def list_trash(
             {
                 "folder_id": folder.folder_id,
                 "name": folder.name,
+                "row_version": folder.row_version,
                 "deleted_at": folder.deleted_at.isoformat() if folder.deleted_at else None,
                 "purge_after": folder.purge_after.isoformat() if folder.purge_after else None,
             }
@@ -1416,22 +1738,29 @@ def list_trash(
     }
 
 
-@router.post("/trash/{object_type}/{object_id}/restore", tags=["files"])
+@router.post(
+    "/trash/{object_type}/{object_id}/restore",
+    response_model=FileItemResponse | FolderResponse,
+    responses=VERSION_CONFLICT_RESPONSES,
+    tags=["files"],
+)
 def restore_trash(
     object_type: str,
     object_id: str,
+    expected_version: int = Query(ge=1),
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
     if object_type == "file":
         record = _get_file_or_404(session, object_id)
+        _assert_row_version(record.row_version, expected_version)
         if record.folder_id:
             folder = session.get(Folder, record.folder_id)
             if folder is None or folder.deleted_at is not None:
                 record.folder_id = None
         record.deleted_at = None
         record.purge_after = None
-        record.status = "PARSED" if read_parsed_text(settings, record.file_id) else "QUEUED"
+        record.status = _restored_file_status(settings, record)
         record.row_version += 1
         record.updated_at = utc_now()
         session.commit()
@@ -1448,33 +1777,61 @@ def restore_trash(
             if item.deleted_at is not None
         )
         folder_ids = [item.folder_id for item in related_folders]
+        root_values: dict[str, Any] = {
+            "deleted_at": None,
+            "purge_after": None,
+            "updated_at": now,
+        }
         if folder.parent_folder_id:
             parent = session.get(Folder, folder.parent_folder_id)
             if parent is None or parent.deleted_at is not None:
-                folder.parent_folder_id = None
-        for item in related_folders:
-            item.deleted_at = None
-            item.purge_after = None
-            item.updated_at = now
+                root_values["parent_folder_id"] = None
+        _atomic_folder_update(
+            session,
+            object_id,
+            expected_version,
+            root_values,
+            deleted=True,
+        )
+        descendant_ids = [item.folder_id for item in related_folders if item.folder_id != object_id]
+        if descendant_ids:
+            session.execute(
+                update(Folder)
+                .where(Folder.folder_id.in_(descendant_ids), Folder.deleted_at.is_not(None))
+                .values(
+                    deleted_at=None,
+                    purge_after=None,
+                    updated_at=now,
+                    row_version=Folder.row_version + 1,
+                )
+                .execution_options(synchronize_session=False)
+            )
         for record in session.scalars(
             select(FileRecord).where(FileRecord.folder_id.in_(folder_ids))
         ):
             record.deleted_at = None
             record.purge_after = None
-            record.status = "PARSED" if read_parsed_text(settings, record.file_id) else "QUEUED"
+            record.status = _restored_file_status(settings, record)
             record.row_version += 1
             record.updated_at = now
         session.commit()
-        return _folder_payload(session, folder)
+        session.expire_all()
+        restored_folder = session.get(Folder, object_id)
+        assert restored_folder is not None
+        return _folder_payload(session, restored_folder)
     raise FileApiError("TRASH_OBJECT_INVALID", "回收站对象类型无效。")
 
 
-@router.delete("/trash/{object_type}/{object_id}", tags=["files"])
+@router.delete(
+    "/trash/{object_type}/{object_id}",
+    responses=VERSION_CONFLICT_RESPONSES,
+    tags=["files"],
+)
 def purge_trash(
     object_type: str,
     object_id: str,
     confirmed: bool = Query(default=False),
-    expected_version: int | None = Query(default=None),
+    expected_version: int = Query(ge=1),
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
@@ -1485,8 +1842,7 @@ def purge_trash(
         record = _get_file_or_404(session, object_id)
         if record.deleted_at is None:
             raise FileApiError("FILE_NOT_IN_TRASH", "只有回收站中的文件才能永久删除。", 409)
-        if expected_version is not None:
-            _assert_row_version(record.row_version, expected_version)
+        _assert_row_version(record.row_version, expected_version)
         content = session.get(ContentObject, record.content_object_id)
         session.execute(delete(FileTag).where(FileTag.file_id == object_id))
         session.execute(delete(KnowledgeBaseFile).where(KnowledgeBaseFile.file_id == object_id))
@@ -1506,6 +1862,13 @@ def purge_trash(
         folder = session.get(Folder, object_id)
         if folder is None or folder.deleted_at is None:
             raise FileApiError("FOLDER_NOT_IN_TRASH", "只有回收站中的文件夹才能永久删除。", 409)
+        _atomic_folder_update(
+            session,
+            object_id,
+            expected_version,
+            {"updated_at": utc_now()},
+            deleted=True,
+        )
         folders = [folder]
         folders.extend(
             item
@@ -1540,6 +1903,10 @@ def purge_trash(
         )
         session.execute(delete(Folder).where(Folder.folder_id.in_(folder_ids)))
         session.commit()
-        return {"folder_id": object_id, "status": "PURGED"}
+        return {
+            "folder_id": object_id,
+            "status": "PURGED",
+            "row_version": expected_version + 1,
+        }
 
     raise FileApiError("TRASH_OBJECT_INVALID", "回收站对象类型无效。")

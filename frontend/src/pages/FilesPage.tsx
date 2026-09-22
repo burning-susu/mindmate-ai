@@ -4,26 +4,16 @@ import { useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { apiRequest, apiUpload } from '../api/client'
+import {
+  deleteFolder as deleteFolderRequest,
+  isVersionConflict,
+  type FileItem,
+  type FileListResponse,
+  type FolderItem,
+  type TagItem,
+} from '../api/files'
 
-type Tag = { tag_id: string; name: string; color?: string | null }
-type FolderItem = { folder_id: string; parent_folder_id?: string | null; name: string; file_count: number }
-export type FileItem = {
-  file_id: string
-  display_name: string
-  document_type: string
-  extension: string
-  folder_id?: string | null
-  folder_name?: string | null
-  status: string
-  content_hash: string
-  byte_size: number
-  updated_at: string
-  row_version: number
-  tags: Tag[]
-  has_parsed_text: boolean
-  parsed_metadata?: { line_count?: number; character_count?: number } | null
-}
-type FileListResponse = { items: FileItem[]; next_cursor?: string | null }
+export type { FileItem } from '../api/files'
 type ImportItem = {
   item_index: number
   original_name: string
@@ -88,6 +78,7 @@ export default function FilesPage() {
   const [importResult, setImportResult] = useState<ImportResponse | null>(null)
   const [newFolderName, setNewFolderName] = useState('')
   const [newTagName, setNewTagName] = useState('')
+  const [versionConflict, setVersionConflict] = useState<string | null>(null)
 
   const filesQuery = useQuery({
     queryKey: ['files', query, folderId, tagId, documentType, status, sort],
@@ -102,7 +93,7 @@ export default function FilesPage() {
     },
   })
   const foldersQuery = useQuery({ queryKey: ['folders'], queryFn: () => apiRequest<{ items: FolderItem[] }>('/api/v1/folders') })
-  const tagsQuery = useQuery({ queryKey: ['tags'], queryFn: () => apiRequest<{ items: Tag[] }>('/api/v1/tags') })
+  const tagsQuery = useQuery({ queryKey: ['tags'], queryFn: () => apiRequest<{ items: TagItem[] }>('/api/v1/tags') })
 
   const uploadMutation = useMutation({
     mutationFn: (files: File[]) => apiUpload<ImportResponse>('/api/v1/file-imports', files, { folder_id: folderId }),
@@ -118,6 +109,9 @@ export default function FilesPage() {
       setSelected([])
       void queryClient.invalidateQueries({ queryKey: ['files'] })
     },
+    onError: (error) => {
+      if (isVersionConflict(error)) setVersionConflict('文件已被其他操作修改，请重新加载后再试。')
+    },
   })
   const folderMutation = useMutation({
     mutationFn: (name: string) => apiRequest('/api/v1/folders', { method: 'POST', body: JSON.stringify({ name, parent_folder_id: folderId }) }),
@@ -127,11 +121,14 @@ export default function FilesPage() {
     },
   })
   const deleteFolderMutation = useMutation({
-    mutationFn: ({ folderId: targetId, strategy }: { folderId: string; strategy: string }) => apiRequest(`/api/v1/folders/${targetId}?deletion_strategy=${strategy}`, { method: 'DELETE' }),
+    mutationFn: ({ folder, strategy }: { folder: FolderItem; strategy: 'MOVE_CHILDREN' | 'TRASH_RECURSIVE' }) => deleteFolderRequest(folder, strategy),
     onSuccess: () => {
       setFolderId(undefined)
       void queryClient.invalidateQueries({ queryKey: ['folders'] })
       void queryClient.invalidateQueries({ queryKey: ['files'] })
+    },
+    onError: (error) => {
+      if (isVersionConflict(error)) setVersionConflict('文件夹已被其他操作修改，请重新加载后再试。')
     },
   })
   const tagMutation = useMutation({
@@ -185,7 +182,7 @@ export default function FilesPage() {
 
   function deleteFolder(folder: FolderItem, strategy: 'MOVE_CHILDREN' | 'TRASH_RECURSIVE') {
     const message = strategy === 'TRASH_RECURSIVE' ? `将“${folder.name}”及其内容移入回收站？` : `仅删除“${folder.name}”，保留并上移其内容？`
-    if (window.confirm(message)) deleteFolderMutation.mutate({ folderId: folder.folder_id, strategy })
+    if (window.confirm(message)) deleteFolderMutation.mutate({ folder, strategy })
   }
 
   return (
@@ -248,6 +245,7 @@ export default function FilesPage() {
           {tags.length > 0 && <div className="tag-hint"><TagIcon size={15} aria-hidden="true" />已创建 {tags.length} 个标签，可在文件详情中编辑。</div>}
         </div>
       </div>
+      {versionConflict && <div className="inline-error" role="alert"><span>{versionConflict}</span><button type="button" className="quiet-button" onClick={() => { setVersionConflict(null); void queryClient.invalidateQueries({ queryKey: ['folders'] }); void queryClient.invalidateQueries({ queryKey: ['files'] }) }}>重新加载</button></div>}
     </section>
   )
 }

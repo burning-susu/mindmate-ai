@@ -10,6 +10,7 @@ mkdirSync(path.dirname(outputPath), { recursive: true })
 const schema = JSON.parse(readFileSync(inputPath, 'utf8'))
 
 function tsType(definition) {
+  if (definition.type === 'null') return 'null'
   if (definition.enum) return definition.enum.map((value) => JSON.stringify(value)).join(' | ')
   if (definition.$ref) return `components[${JSON.stringify(definition.$ref.split('/').at(-1))}]`
   if (definition.anyOf || definition.oneOf) return (definition.anyOf ?? definition.oneOf).map(tsType).join(' | ')
