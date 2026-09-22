@@ -10,9 +10,10 @@
 
 ## 阶段 1
 
-- 状态：`IN_PROGRESS`
+- 状态：`COMPLETED_WITH_RELEASE_GAPS`
+- 阶段提交：待创建 `chore: validate windows ai and vector runtime`
 - 必须验证：sqlite-vec、ONNX、Credential Manager、随机回环端口、Mock SSE、PyInstaller 和干净 Windows 启动。
-- 当前结果：尚未开始原生依赖 Spike；不宣称技术可行性已验证。
+- 当前结果：前 7 项通过；干净 Windows 环境和正式 Inno Setup 尚未执行，详见 `docs/test-reports/stage-1-spike.md`。
 
 ## 进度口径
 
