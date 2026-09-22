@@ -5,7 +5,7 @@
 > 关联对象：PROJECT mindmate-ai
 > 状态：active
 
-本目录保存项目画像、治理评估、Capability 激活、Workflow、阶段策略、Runtime Context 和 Evidence 登记。
+本目录保存项目画像、治理评估、Capability 激活、Workflow、阶段策略、Runtime Context 和 Evidence 登记。V1 开发阶段的需求事实源是 `../requirements/v1/`，旧 G6 治理资产位于 `../../archive/2026-09-22-pre-v1/`，仅用于追溯。
 
 - PROJECT_PROFILE.yaml：项目是什么。
 - ASSESSMENT.yaml：项目复杂度、风险和触发条件。
@@ -16,5 +16,6 @@
 - EVIDENCE_REGISTER.yaml：完成声明的证据索引。
 - CONTEXT_INDEX.yaml：当前治理资源、摘要和哈希索引。
 - context-summaries/：可复用的最小上下文摘要。
+- `../DEVELOPMENT_BASELINE.md`：当前开发基线、事实源优先级和归档边界。
 
-决策交互版本由 `RUNTIME_CONTEXT.md` 和 `WORKFLOW_BLUEPRINT.yaml` 中的 `V3.2_IMMEDIATE_APPLY` 字段定义；迁移记录位于 `../baseline/DECISION_WORKFLOW_MIGRATION.md`，已应用决策的后续复核位于 `../decisions/REVIEW_BACKLOG.md`。
+开发阶段入口由 `../DEVELOPMENT_BASELINE.md` 和 `../requirements/v1/` 定义；历史 G6 迁移记录和决策复核位于 `../../archive/2026-09-22-pre-v1/`，只用于追溯。

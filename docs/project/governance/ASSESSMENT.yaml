@@ -1,16 +1,27 @@
 document:
   id: ASSESSMENT-MINDMATE-001
-  version: "1.1"
+  version: "2.0"
   type: governance
   status: active
   project: mindmate-ai
   created_at: "2026-09-20"
-  updated_at: "2026-09-21"
+  updated_at: "2026-09-22"
   source: SRC-001, SRC-002, SRC-003, DEC-BOOTSTRAP-001
 
-assessment_status: COMPLETED
-current_stage: G6
-workflow_effect: G6 架构 Draft 已生成；DEC-G6-004 已批量应用 DeepSeek Chat/deepseek-flash、本地 BGE Embedding、本地嵌入式向量存储方向和 USD 5 成本政策，EVID-033 Provider Guard 仍 BLOCKED，Provider runtime 仍禁用，本地 Spike/成本实现未完成；OPEN-01 仍阻断 G6 正式出口，G7 未开始
+assessment_status: DEVELOPMENT_BASELINE_ESTABLISHED
+current_stage: DEVELOPMENT
+workflow_effect: 00–18 V1 需求规格已冻结；历史 G6 治理文档已归档；当前进入阶段 0 工程基线和阶段 1 高风险技术 Spike，Provider Runtime 使用 Mock Provider
+
+development_baseline:
+  requirements_root: docs/project/requirements/v1/
+  requirements_authority: docs/project/requirements/v1/18_最终决策表.md
+  taskbook: docs/project/requirements/v1/16_Codex开发任务书.md
+  technical_constraints: docs/project/requirements/v1/15_技术架构与开发约束.md
+  branch: feat/v1-bootstrap
+  baseline_tag: baseline/pre-v1-rebaseline-2026-09-22
+  archived_history: docs/archive/2026-09-22-pre-v1/
+  provider_runtime_mode: MOCK_ONLY
+  current_stage_status: IN_PROGRESS
 
 decision_workflow:
   version: V3.2_IMMEDIATE_APPLY
@@ -20,7 +31,7 @@ decision_workflow:
   review_backlog_enabled: true
   review_backlog_path: docs/project/decisions/REVIEW_BACKLOG.md
   architecture_gates_preserved: true
-  migration_record: docs/project/baseline/DECISION_WORKFLOW_MIGRATION.md
+  migration_record: docs/project/DEVELOPMENT_BASELINE.md
   current_chat_provider: DEEPSEEK_API
   current_chat_model: deepseek-flash
   current_chat_model_status: APPLIED_CONDITIONAL
@@ -34,7 +45,7 @@ decision_workflow:
   cost_alert_threshold: USD 4
   cost_stop_threshold: USD 5
   provider_change_status: APPLIED_CONDITIONAL
-  provider_guard_status: BLOCKED
+  provider_guard_status: NOT_A_DEVELOPMENT_GATE
 
 dimensions:
   - id: ASSESS-SCALE

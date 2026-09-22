@@ -1,95 +1,50 @@
-# v3.2.6 治理与 Mindmate 状态摘要
+# V1 开发与治理状态摘要
 > 摘要编号：CTX-SUMMARY-001
-> 摘要版本：v1.3
-> 生成时间：2026-09-21
+> 摘要版本：v2.0
+> 生成时间：2026-09-22
 > 状态：CURRENT
 > 用途：任务前最小上下文复用
 
-## 来源
+## 当前事实源
 
-- doc/governance/通用文档提示词v3.2.md
-  - SHA-256：902C8C9F1C783742CB56AE803022FE0423D45D90B8AA9399606A9236ED265E25
-  - 覆盖：v3.2.7 变量、模型路由、Token/上下文治理、即时决策应用、G0-G11、Workflow、Runtime Context、Evidence 和目录规则。
-- doc/governance/通用文档提示词v3.2完整使用说明.md
-  - SHA-256：DB0AC53C5C76A098356B8951A6C115EE567C7D9AEF4DD116EA9ADC389CA86A2A
-  - 覆盖：v3.2.5 的 Token/context governance、model routing、即时决策应用、任务前运行顺序和索引规则。
-- docs/project/governance/WORKFLOW_BLUEPRINT.yaml
-  - 覆盖：WF-MINDMATE-001 v0.1 已确认，当前阶段 G6；G6 架构 Draft 已生成，OPEN-01 阻断正式出口。
-- docs/project/governance/RUNTIME_CONTEXT.md
-  - 覆盖：当前 G6 文档写入权限、架构出口阻断、Token 预算、上下文装载模式和模型路由降级。
-- docs/project/governance/EVIDENCE_REGISTER.yaml
-  - 覆盖：EVID-018 PRD 批准、EVID-021 模型路由降级、EVID-022/023 G5.5 出口及 EVID-024 G6 Draft/阻断证据。
-- docs/project/architecture/SYSTEM_ARCHITECTURE.md
-  - 覆盖：G6 供应商无关架构 Draft、模块/数据/RAG/Provider/备份/安全/NFR 边界。
-- docs/project/baseline/09_G6_ARCHITECTURE_REVIEW.md
-  - 覆盖：G6 入口核验、TECH-DEC 状态、OPEN-01 出口阻断及未决项统计。
-- docs/project/decisions/DEC-G6-001.md
-  - 覆盖：TECH-DEC-004=C 已应用为 Provider 详情确认前的 no-call 临时边界；不解除 OPEN-01 阻断。
-- docs/project/decisions/DEC-G6-002.md
-  - 覆盖：历史 Alibaba 条件性 Provider 基线；Chat route 已由 DEC-G6-003 修订替代；no-call 历史保留。
-- docs/project/decisions/DEC-G6-003.md
-  - 覆盖：当前 DeepSeek Chat Provider 条件性基线；剩余 G6 子决策由 DEC-G6-004 承接；runtime disabled。
-- docs/project/decisions/DEC-G6-004.md
-  - 覆盖：Chat Model、local BGE Embedding、本地嵌入式向量存储方向和 USD 5 成本政策的批量应用。
-- docs/project/baseline/10_G6_PROVIDER_DECISION_REVIEW.md
-  - 覆盖：官方 Provider/模型/Embedding 候选、价格与数据边界比较；DeepSeek Chat 已条件性应用，runtime disabled，guards 未完成。
-- docs/project/baseline/G6_DEEPSEEK_PROVIDER_CHANGE_REVIEW.md
-  - 覆盖：DeepSeek Provider 修订、官方 API 事实、目标架构和剩余决策批次。
-- docs/project/baseline/12_G6_DEEPSEEK_PROVIDER_GUARD_VERIFICATION.md
-  - 覆盖：DeepSeek 当前 Guard Matrix 和 G6 Exit Preflight；数据/账号/Embedding/成本 guards 阻断。
+- `docs/project/requirements/v1/18_最终决策表.md`：最终冻结选择。
+- `docs/project/requirements/v1/16_Codex开发任务书.md`：阶段 0–10、测试、停止条件和提交纪律。
+- `docs/project/requirements/v1/00_需求规格总纲.md`：V1 总纲和范围。
+- `docs/project/requirements/v1/15_技术架构与开发约束.md`：React/FastAPI/SQLite/sqlite-vec/ONNX/DeepSeek/打包和安全约束。
+- `docs/project/requirements/v1/01–14`：专题需求、API、验收、UI 和测试场景。
+- 当前代码、配置和测试证据：随开发阶段新增。
+- `docs/archive/2026-09-22-pre-v1/`：旧项目治理文档，只用于历史追溯。
 
-## 当前结论
+## 当前状态
 
-- PROJECT_STAGE：BOOTSTRAP。
-- WORKFLOW：WF-MINDMATE-001 v0.1 / CONFIRMED。
-- CURRENT_STAGE：G6；G6 入口已通过，架构 Draft 已生成。
-- G5_REVIEW_STATUS：COMPLETED。
-- PRD_APPROVAL_GATE：COMPLETED。
-- G5_5_ENTRY_GATE：READY。
-- G5_5_STATUS：COMPLETED。
-- G6_ENTRY_GATE：READY；G6_ENTRY_VERIFICATION：PASSED。
-- G6_STATUS：BLOCKED；ARCHITECTURE_STATUS：DRAFT。
-- ARCHITECTURE_DECISION_APPLY_STATUS：PARTIAL；DEC-G6-003/004 已条件性应用 DeepSeek Chat、local BGE、向量方向和成本政策，DEC-G6-001 no-call guards 保持有效。
-- G7_ENTRY_GATE：NOT_READY；G7_EXECUTION：NOT_STARTED。
-- TECH-DEC-004 Chat Provider 已通过 DEC-G6-003/004 / EVID-032/034 条件性应用为 DeepSeek API / `deepseek-flash`；Embedding=local BGE、Vector=local embedded direction、Cost policy=USD 5，runtime disabled。
-- PROVIDER_DECISION_STATUS：APPLIED_CONDITIONAL；DEC-G6-003/004 已应用 Chat 与剩余子决策，但 EVID-033 DeepSeek Guard BLOCKED、本地 Spike/成本实现未完成、runtime disabled、OPEN-01 仍阻断。
-- 唯一 G6 出口阻断：OPEN-01 的 DeepSeek API 数据处理/保留/训练/删除/地域条款、账号/模型/余额、成本运行门禁；本地 Embedding/Vector Spike 仍需完成。
-- 已创建总体技术架构 Draft、G6 评审记录和 REQ→Page/Mode→Architecture→Data/NFR/Security→Decision/Evidence 追踪。
-- 禁止：PRD 范围变更、真实 Provider 调用、代码/DDL/API/脚手架、G7、依赖安装、Git commit/tag/push。
-- Chat Provider/模型、local BGE Embedding、本地嵌入式 Vector 方向和 USD 5 成本政策已有 DEC-G6-003/004 条件性基线，但 API 条款、账号/模型/余额、地区、成本运行门禁和本地 Spike 仍未通过；前后端技术栈、数据库具体产品、流式协议仍按项目文档保持 TBD。
-- 决策工作流：`V3.2_IMMEDIATE_APPLY`；不要求二次确认或用户 `DECISION_APPLY`；每轮最多 5 个独立决策；已应用决策进入 `decisions/REVIEW_BACKLOG.md`。
-- 本轮迁移记录：`docs/project/baseline/DECISION_WORKFLOW_MIGRATION.md`；历史二次确认记录保持不变。
+```text
+PROJECT_STAGE=DEVELOPMENT
+CURRENT_STAGE=DEVELOPMENT
+DEVELOPMENT_BRANCH=feat/v1-bootstrap
+BASELINE_TAG=baseline/pre-v1-rebaseline-2026-09-22
+CODE_BASELINE_MODE=V1_BOOTSTRAP
+DEVELOPMENT_STATUS=IN_PROGRESS
+PROVIDER_RUNTIME_MODE=MOCK_ONLY
+REAL_PROVIDER_CALLS=DISABLED
+```
 
-## Token 与上下文规则
+## 冻结技术基线
 
-- 本轮按 G6 输入要求采用 TARGETED 读取，复用未变化的 Approved PRD 和 G5.5 Evidence。
-- 优先复用本摘要和 governance/CONTEXT_INDEX.yaml。
-- 只有来源变化、摘要失效或证据不足时才扩大读取。
-- 注册表状态 PARTIAL：当前 Codex 主机能力元数据可验证 gpt-6-astra、gpt-5.6-sol、gpt-5.6-terra、gpt-5.6-luna、gpt-5.5；gpt-6-pro 和 gpt-5.6-sol-pro 保持 enabled=false、availability=TBD。
-- MODEL_ROUTING_MODE=RECOMMEND_ONLY，MODEL_COST_LIMIT=TBD；G6 本轮未执行底层模型切换，ACTUAL_MODEL_ID=TBD，路由日志 routing_records 仍为空。
+- React 19 + TypeScript + Vite；React Router；TanStack Query；Zustand；Tailwind CSS + Radix UI。
+- Python 3.12 + FastAPI + Pydantic 2；SQLAlchemy 2；Alembic；httpx。
+- SQLite + WAL + FTS5 + sqlite-vec；本地嵌入式向量存储，经 Storage Adapter。
+- 本地 ONNX Runtime CPU + `BAAI/bge-small-zh-v1.5`，512 维。
+- DeepSeek API `deepseek-flash`，OpenAI-compatible Chat Completions，经本地后端 Adapter。
+- SQLite 持久 BackgroundTask；SSE 可恢复；Mock Provider 贯穿开发测试。
+- PyInstaller one-folder + Inno Setup；Windows 11 x64 正式支持。
 
-## 模型路由状态
+## 开发边界
 
-- 当前平台：CHATGPT_CODEX。
-- 当前任务：G6 总体技术架构 Draft/门禁。
-- 建议思考程度：HIGH。
-- 当前模型注册表：PARTIAL；成本上限 TBD。
-- 底层模型切换：未执行。
-- 跨 Provider 切换：禁用。
+- 不重新讨论冻结的产品、Provider、Embedding、向量存储、技术栈、页面结构或部署方式。
+- 不调用真实 Provider，不读取或验证 API Key，不上传用户文件，不提交凭据、用户数据、模型缓存、日志或构建产物。
+- 阶段 0 先建立可重复工程基线；阶段 1 先验证 sqlite-vec、ONNX、Credential Manager、Mock SSE、PyInstaller 和干净 Windows 启动。
+- Spike 失败、需求冲突、外部账号/费用权限或破坏性操作是停止询问条件。
 
-## 决策流程状态
+## 历史边界
 
-- `DECISION_WORKFLOW_VERSION=V3.2_IMMEDIATE_APPLY`
-- `SECOND_CONFIRMATION_REQUIRED=false`
-- `USER_DECISION_APPLY_COMMAND_REQUIRED=false`
-- `MAX_DECISIONS_PER_ROUND=5`
-- `REVIEW_BACKLOG_ENABLED=true`
-- `TECH_ARCHITECTURE_GATES_PRESERVED=true`
-- `CHAT_PROVIDER=DEEPSEEK_API`
-- `CURRENT_CHAT_MODEL=deepseek-flash`
-- `EMBEDDING_DECISION_STATUS=APPLIED_CONDITIONAL_SPIKE_REQUIRED`
-- `PROVIDER_CHANGE_STATUS=APPLIED_CONDITIONAL`
-- `EMBEDDING_PROVIDER=LOCAL`
-- `CURRENT_EMBEDDING_MODEL=BAAI/bge-small-zh-v1.5`
-- `VECTOR_STORE_STRATEGY=LOCAL_EMBEDDED_ADAPTER`
-- `COST_POLICY_STATUS=APPLIED_NOT_IMPLEMENTED`
+旧 G6 Provider/Guard/Decision 链已完整归档，不作为当前开发门禁。历史文件不得删除或改写；当前开发状态以本摘要和 00–18 规格为准。

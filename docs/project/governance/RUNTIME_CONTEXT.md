@@ -1,24 +1,24 @@
 # Mindmate AI 当前 Runtime Context
 > 文档编号：RUNTIME-CONTEXT-MINDMATE-001
-> 文档版本：v1.3
+> 文档版本：v2.0
 > 文档类型：governance
 > 关联对象：PROJECT mindmate-ai
 > 状态：active
 > 创建日期：2026-09-20
-> 更新时间：2026-09-21
+> 更新时间：2026-09-22
 > 关联 Workflow：WF-MINDMATE-001 v0.1
-> 关联阶段：G6
+> 关联阶段：DEVELOPMENT
 
 ## 当前上下文
 
 - PROJECT_SCENARIO：NEW_PROJECT
-- PROJECT_STAGE：BOOTSTRAP
-- CURRENT_STAGE：G6
+- PROJECT_STAGE：DEVELOPMENT
+- CURRENT_STAGE：DEVELOPMENT
 - CURRENT_STAGE_LEVEL：L3
-- WORKFLOW_STATUS：CONFIRMED
-- RUNTIME_WORK_MODE：DOCUMENT_WRITE
-- RUNTIME_PERMISSION_PROFILE：PROJECT_DOCUMENTS_ONLY
-- CODE_BASELINE_MODE：NONE
+- WORKFLOW_STATUS：ACTIVE_DEVELOPMENT
+- RUNTIME_WORK_MODE：CODE_DEVELOPMENT
+- RUNTIME_PERMISSION_PROFILE：PROJECT_CODE_AND_DOCUMENTS
+- CODE_BASELINE_MODE：V1_BOOTSTRAP
 - ASSESSMENT_STATUS：COMPLETED
 - G1_SOURCE_REGISTER：COMPLETED
 - G2_BASELINE：COMPLETED
@@ -41,9 +41,9 @@
 - UI_LOGIC_SCOPE_STATUS：DRAFT
 - G6_ENTRY_GATE：READY
 - G6_ENTRY_VERIFICATION：PASSED
-- G6_STATUS：BLOCKED
-- ARCHITECTURE_STATUS：DRAFT
-- G6_EXECUTION：BLOCKED_OPEN_01
+- G6_STATUS：SUPERSEDED_BY_V1_REQUIREMENTS
+- ARCHITECTURE_STATUS：FROZEN_BY_V1_REQUIREMENTS
+- G6_EXECUTION：ARCHIVED_HISTORY
 - ARCHITECTURE_DECISION_REVIEW_STATUS：IN_PROGRESS
 - ARCHITECTURE_DECISION_APPLY_STATUS：PARTIAL
 - TECH-DEC-004_C_STATUS：CONFIRMED_AND_APPLIED
@@ -71,8 +71,14 @@
 - PROVIDER_GUARD_STATUS：BLOCKED
 - G6_EXIT_PREFLIGHT：BLOCKED
 - OPEN-01_PROVIDER_DETAILS_STATUS：BLOCKED
-- G7_ENTRY_GATE：NOT_READY
-- G7_EXECUTION：NOT_STARTED
+- G7_ENTRY_GATE：SUPERSEDED_BY_V1_REQUIREMENTS
+- G7_EXECUTION：NOT_APPLICABLE_CURRENT_DEV
+- REQUIREMENTS_BASELINE：docs/project/requirements/v1/18_最终决策表.md
+- DEVELOPMENT_TASKS：docs/project/requirements/v1/16_Codex开发任务书.md
+- TECHNICAL_CONSTRAINTS：docs/project/requirements/v1/15_技术架构与开发约束.md
+- BASELINE_TAG：baseline/pre-v1-rebaseline-2026-09-22
+- DEVELOPMENT_BRANCH：feat/v1-bootstrap
+- PROVIDER_RUNTIME_MODE：MOCK_ONLY
 - DECISION_WORKFLOW_VERSION：V3.2_IMMEDIATE_APPLY
 - SECOND_CONFIRMATION_REQUIRED：false
 - USER_DECISION_APPLY_COMMAND_REQUIRED：false
@@ -113,22 +119,21 @@
 - CONTEXT_INDEX：governance/CONTEXT_INDEX.yaml
 - CONTEXT_SUMMARIES：governance/context-summaries/
 
-本次第十一轮已执行 Alibaba Provider Guard Verification 与 G6 Exit Preflight；其结果作为历史证据保留。DEC-G6-003/004 现已条件性应用为 DeepSeek API / deepseek-flash、local BGE Embedding、本地嵌入式向量存储方向和 USD 5 成本政策。DeepSeek API 数据处理/保留/训练/删除/地域、账号资格、余额和成本运行实现证据不足；本地 Embedding/向量 Spike 尚未执行，Provider runtime 仍禁用。OPEN-01 继续阻断 G6 Exit，G7 未开始。模型路由仍为 RECOMMEND_ONLY，实际开发执行模型未知，本次没有底层模型切换。
+本轮已完成仓库重置与 V1 开发预备：00–18 规格成为当前需求事实源，历史项目文档归档到 `docs/archive/2026-09-22-pre-v1/`。开发阶段使用 Mock Provider，不调用真实 DeepSeek API；阶段 0/1 的技术 Spike 和代码实现尚未完成。模型路由仍为 RECOMMEND_ONLY，实际开发执行模型未知，本次没有底层模型切换。
 
 本次流程迁移已生效：用户明确回复 `决策ID=方案` 后，系统在同一轮内部完成应用和同步，并将已应用决策登记到 `docs/project/decisions/REVIEW_BACKLOG.md`。不再要求二次确认或用户输入 `DECISION_APPLY`；历史 Evidence 和 DEC 中的二次确认文字保持不变。
 
-## 本轮允许写入
+## 当前允许写入
 
-- docs/project/baseline/10_G6_PROVIDER_DECISION_REVIEW.md、docs/project/baseline/11_G6_PROVIDER_GUARD_VERIFICATION.md、acceptance/TRACE_MATRIX.md、acceptance/OPEN_ITEMS.md 及相关 Evidence、Runtime/Workflow/Assessment/Context Index/摘要。
-- docs/project/baseline/DECISION_WORKFLOW_MIGRATION.md、docs/project/decisions/REVIEW_BACKLOG.md、docs/project/decisions/README.md 和本轮流程迁移相关治理字段。
-- docs/project/decisions/DEC-G6-003.md、docs/project/baseline/G6_DEEPSEEK_PROVIDER_CHANGE_REVIEW.md、docs/project/baseline/12_G6_DEEPSEEK_PROVIDER_GUARD_VERIFICATION.md 及其 Runtime/Workflow/Assessment/Trace/Open Items 同步。
+- docs/project/requirements/v1/、frontend/、backend/、packaging/、scripts/、docs/adr/、docs/test-reports/ 及相关 Evidence、Runtime/Workflow/Assessment/Context Index/摘要。
+- docs/archive/2026-09-22-pre-v1/ 只读追溯，不作为当前开发入口。
+- docs/project/requirements/v1/、frontend/、backend/、packaging/、scripts/、docs/adr/、docs/test-reports/ 及与当前阶段直接相关的治理记录。
 
-## 本轮禁止动作
+## 当前禁止动作
 
-- 不修改 AGENTS.md。
 - 不修改 doc/ 下通用治理、规则、Capability、手册或模板。
-- 不创建或修改前端、后端、测试、数据库、API 实现或项目脚手架。
-- 不安装依赖。
+- 不调用真实 Provider，不读取或验证 API Key，不执行真实付费请求。
+- 不提交 `.env`、用户数据、模型文件、日志、数据库或构建产物。
 - 不修改生产配置、真实凭据或真实数据。
 - 不修改 Approved PRD、PROJECT_PROFILE 或已确认 UI 逻辑范围。
 - 不生成代码、DDL、正式 OpenAPI、依赖配置或脚手架；不调用真实 Provider。
@@ -136,13 +141,13 @@
 
 ## 当前阶段有效 Capability
 
-本轮激活 CAP-ARCH-TECH-SELECTION；按需读取通用架构手册。UI/API/数据库/安全的具体实现能力只登记边界和后续触发条件，不在本轮执行。
+当前按 00–18 规格激活前端、FastAPI、SQLite/sqlite-vec、ONNX、测试、打包和安全实现能力；通用 Capability 只提供方法，不覆盖冻结规格。
 
 ## 退出条件
 
 当前 G6 出口阻断：
 
-1. EVID-033 的 DeepSeek Guard Matrix 判定 BLOCKED；Provider runtime 仍禁用。
-2. DEC-G6-001 no-call guards 继续生效；真实 Provider 调用仍禁用。
-3. 唯一出口阻断仍为 OPEN-01：DeepSeek API 数据条款、账号/模型资格、地区可用性、Embedding 和成本保护须完成核验。
-4. 阻断解决前不得解除 G6、进入 G7或调用真实 Provider。
+1. 开发必须先通过阶段 0 工程基线验收。
+2. 阶段 1 sqlite-vec、ONNX、Credential Manager、Mock SSE、PyInstaller 和干净 Windows 启动 Spike 失败时停止并报告证据。
+3. 真实 Provider、真实凭据和付费请求继续禁用；开发使用 Mock Provider。
+4. 任何需求冲突、冻结技术不可行、外部账号/费用权限或破坏性操作仍需停止询问。

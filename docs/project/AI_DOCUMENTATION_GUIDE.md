@@ -26,15 +26,16 @@
 - 原始业务资料：项目业务资料/需求文档/
 - 原始设计资料：项目业务资料/设计文件/
 - 来源总登记：sources/SOURCE_REGISTER.md
-- G2 来源和决策基线：baseline/
+- 当前 V1 需求事实源：requirements/v1/
+- 历史 G2/G6 来源和决策基线：../archive/2026-09-22-pre-v1/
 - 项目画像：governance/PROJECT_PROFILE.yaml
 - 治理评估：governance/ASSESSMENT.yaml
 - Capability 激活：governance/CAPABILITY_ACTIVATION.yaml
 - 候选流程：governance/WORKFLOW_BLUEPRINT.yaml
 - 当前运行上下文：governance/RUNTIME_CONTEXT.md
-- 项目决策：decisions/README.md 和 decisions/ 下对应 DEC
-- 待复核清单：decisions/REVIEW_BACKLOG.md
-- 决策流程迁移记录：baseline/DECISION_WORKFLOW_MIGRATION.md
+- 当前开发决策：requirements/v1/18_最终决策表.md
+- 开发任务入口：requirements/v1/16_Codex开发任务书.md
+- 历史决策：../archive/2026-09-22-pre-v1/decisions/
 
 衍生文档只能引用上述事实源，不得复制出第二份业务规则、API 契约或技术栈事实。
 

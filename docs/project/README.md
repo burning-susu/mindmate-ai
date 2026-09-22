@@ -1,25 +1,25 @@
 # Mindmate AI 项目文档
 > 文档编号：DOC-PROJECT-INDEX-001
-> 文档版本：v1.2
+> 文档版本：v2.0
 > 文档类型：governance
 > 关联对象：PROJECT mindmate-ai
 > 状态：active
 > 生效条件：当前项目
 > 创建日期：2026-09-20
-> 更新时间：2026-09-21
-> 关联来源：SRC-001 至 SRC-007
-> 关联决策：HIGH-01 至 LOW-02、DEC-G6-001 至 DEC-G6-003
+> 更新时间：2026-09-22
+> 关联来源：docs/project/requirements/v1/00–18、项目业务资料/
+> 关联决策：docs/project/requirements/v1/18_最终决策表.md
 
 ## 文档定位
 
-本目录是 mindmate-ai 的项目专属文档根目录。它记录当前项目的来源登记、决策基线、项目画像、治理评估、Capability 激活和 Workflow。仓库根目录的 AGENTS.md 与 doc/ 下的通用治理资产仍然是方法和路由来源，本目录才记录本项目已经确认或明确保留为 TBD 的内容。
+本目录是 mindmate-ai 的项目专属文档根目录。当前 V1 开发以 `docs/project/requirements/v1/` 的 00–18 规格为唯一需求输入；仓库根目录的 AGENTS.md 与 doc/ 下的通用治理资产提供方法和路由。旧的多轮 G6 治理文档已归档到 `docs/archive/2026-09-22-pre-v1/`，只用于追溯。
 
-G1/G2/G3/G4/G5/G5.5 已按证据完成；PRD v1.0-Draft.3 已批准。当前项目仍处于 BOOTSTRAP 代码基线，Workflow 已确认；G6 已通过入口核验并生成总体架构 Draft，但 OPEN-01 阻断 G6 正式出口。
+V1 需求规格已冻结并进入代码开发；当前仓库仍处于脚手架建立前的开发预备状态。
 
 ## 当前状态
 
-- PROJECT_STAGE：BOOTSTRAP
-- CURRENT_STAGE：G6 总体技术架构（BLOCKED）
+- PROJECT_STAGE：DEVELOPMENT
+- CURRENT_STAGE：DEVELOPMENT
 - G1_SOURCE_REGISTER：COMPLETED
 - G2_BASELINE：COMPLETED
 - G2_EXIT：PASSED_WORKFLOW_CONFIRMED
@@ -32,14 +32,12 @@ G1/G2/G3/G4/G5/G5.5 已按证据完成；PRD v1.0-Draft.3 已批准。当前项�
 - PRD_APPROVAL_GATE：COMPLETED
 - G5_APPROVAL_STATUS：COMPLETED
 - G5_5_STATUS：COMPLETED
-- G6_ENTRY_GATE：READY
-- G6_ENTRY_VERIFICATION：PASSED
-- TECH-DEC-004：DEC-G6-003/004 已条件性应用 DeepSeek API / `deepseek-flash`、本地 BGE Embedding、本地嵌入式向量存储方向和成本政策；Provider runtime disabled，DEC-G6-001 no-call guards 保持有效
-- G6_STATUS：BLOCKED（EVID-033 DeepSeek Guard Verification 未通过；OPEN-01 guards 未决）
-- PROVIDER_DECISION_STATUS：APPLIED_CONDITIONAL；DEC-G6-003/004 Chat=DeepSeek API、Embedding=Local BGE、Vector=Local Embedded Direction，Guard/Spike 仍未完成，runtime disabled
-- ARCHITECTURE_STATUS：DRAFT
-- G7_ENTRY_GATE：NOT_READY
-- G7_EXECUTION：NOT_STARTED
+- DEVELOPMENT_BASELINE：ESTABLISHED
+- REQUIREMENTS_BASELINE：docs/project/requirements/v1/18_最终决策表.md
+- DEVELOPMENT_TASKS：docs/project/requirements/v1/16_Codex开发任务书.md
+- TECHNICAL_CONSTRAINTS：docs/project/requirements/v1/15_技术架构与开发约束.md
+- PROVIDER_RUNTIME：MOCK_ONLY_FOR_DEVELOPMENT
+- REAL_PROVIDER_CALLS：DISABLED
 - DECISION_WORKFLOW_VERSION：V3.2_IMMEDIATE_APPLY
 - SECOND_CONFIRMATION_REQUIRED：false
 - USER_DECISION_APPLY_COMMAND_REQUIRED：false
@@ -50,36 +48,35 @@ G1/G2/G3/G4/G5/G5.5 已按证据完成；PRD v1.0-Draft.3 已批准。当前项�
 - WORKFLOW_VERSION：0.1
 - WORKFLOW_STATUS：CONFIRMED
 - WORKFLOW_CONFIRMATION：COMPLETED
-- RUNTIME_WORK_MODE：DOCUMENT_WRITE（仅本轮项目治理文档）
-- CODE_BASELINE_MODE：NONE
-- 本轮未修改代码、脚手架或依赖；未执行 Git commit/tag/push
+- RUNTIME_WORK_MODE：CODE_DEVELOPMENT
+- CODE_BASELINE_MODE：V1_BOOTSTRAP
+- BASELINE_TAG：baseline/pre-v1-rebaseline-2026-09-22
+- 本轮已建立开发分支、保护 tag 和文档基线提交；未执行 push
 
-当前 Provider/技术决策记录：[`DEC-G6-003.md`](decisions/DEC-G6-003.md)、[`DEC-G6-004.md`](decisions/DEC-G6-004.md)、[`G6_DEEPSEEK_PROVIDER_CHANGE_REVIEW.md`](baseline/G6_DEEPSEEK_PROVIDER_CHANGE_REVIEW.md)、[`12_G6_DEEPSEEK_PROVIDER_GUARD_VERIFICATION.md`](baseline/12_G6_DEEPSEEK_PROVIDER_GUARD_VERIFICATION.md)。
+当前开发基线：[`DEVELOPMENT_BASELINE.md`](DEVELOPMENT_BASELINE.md)。历史 Provider/技术决策记录位于 [`docs/archive/2026-09-22-pre-v1/`](../archive/2026-09-22-pre-v1/)，不作为当前开发入口。
 
-## 决策工作流
+## 当前开发入口
 
-用户明确回复 `决策ID=方案` 后，系统在同一轮内部完成应用和同步，不再要求二次确认或用户单独输入 `DECISION_APPLY`。每轮最多处理 5 个彼此独立的决策；已应用决策进入 [`decisions/REVIEW_BACKLOG.md`](decisions/REVIEW_BACKLOG.md)。历史决策中的二次确认记录保留为审计事实。
+1. [`requirements/v1/18_最终决策表.md`](requirements/v1/18_最终决策表.md)：最终冻结选择。
+2. [`requirements/v1/16_Codex开发任务书.md`](requirements/v1/16_Codex开发任务书.md)：阶段、测试和提交节点。
+3. [`requirements/v1/00_需求规格总纲.md`](requirements/v1/00_需求规格总纲.md)：总纲和范围。
+4. [`requirements/v1/15_技术架构与开发约束.md`](requirements/v1/15_技术架构与开发约束.md)：架构和安全边界。
 
 ## 阅读顺序
 
-1. sources/SOURCE_REGISTER.md
-2. baseline/01_SOURCE_INVENTORY.md
-3. baseline/02_DECISION_BASELINE.md
-4. baseline/04_CONFLICT_MATRIX.md
-5. governance/PROJECT_PROFILE.yaml
-6. governance/ASSESSMENT.yaml
-7. governance/CAPABILITY_ACTIVATION.yaml
-8. governance/WORKFLOW_BLUEPRINT.yaml
-9. governance/RUNTIME_CONTEXT.md
-10. decisions/DEC-BOOTSTRAP-001.md
-11. architecture/SYSTEM_ARCHITECTURE.md
-12. baseline/09_G6_ARCHITECTURE_REVIEW.md
+1. requirements/v1/18_最终决策表.md
+2. requirements/v1/16_Codex开发任务书.md
+3. requirements/v1/00_需求规格总纲.md
+4. requirements/v1/15_技术架构与开发约束.md
+5. requirements/v1/01–14 专题规格
+6. 当前代码、配置和测试证据
+7. governance/RUNTIME_CONTEXT.md
+8. DEVELOPMENT_BASELINE.md
+9. ../archive/2026-09-22-pre-v1/（仅追溯）
 
 ## 状态边界
 
-- 本目录中的已确认决策记录的是用户确认的项目方向，不等同于 Approved PRD、最终技术架构或已发布系统。
-- Provider Chat 基线已由 DEC-G6-003/004 条件性应用为 DeepSeek API / `deepseek-flash`；Alibaba Chat 路线由 DEC-G6-002 保留为历史；Embedding、本地向量存储方向和成本政策已应用但 Spike/运行实现未完成，API 数据条款、账号资格、地区可用性和 Provider guards 未通过；Provider runtime 仍禁用。前后端框架、数据库具体产品、文件上传协议和流式协议仍以 TBD 记录。
-- Workflow 已确认；G3/G4/G5/G5.5 已完成。PRD v1.0-Draft.3 为 Approved。
-- G6 已生成供应商无关架构 Draft；DeepSeek Chat 的条件性基线已记录，但 Embedding、API 数据条款、账号资格、地区可用性和成本 guards 未确认，G6 Exit 与 G7 入口保持阻断。
-- Provider、数据库和向量产品、流式协议、备份技术细节仍按相应 TECH-DEC/OPEN ITEM 保持 TBD。
-- 原始 DOCX、Figma 和 Sketch 文件继续保留在 项目业务资料/，不复制到本目录。
+- 00–18 规格是当前开发事实源；历史治理文档不再参与当前决策。
+- Provider Runtime 在开发和自动化测试中使用 Mock Provider；真实 DeepSeek API 仅在明确的连接/发布流程中处理。
+- 原始 DOCX、Figma 和 Sketch 文件继续保留在 `项目业务资料/`，不移动、不修改。
+- 旧项目治理文档完整保存在 `docs/archive/2026-09-22-pre-v1/`。

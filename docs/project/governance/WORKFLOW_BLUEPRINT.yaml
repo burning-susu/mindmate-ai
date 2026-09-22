@@ -1,11 +1,11 @@
 document:
   id: WF-MINDMATE-001
-  version: "0.1"
+  version: "0.2"
   type: governance
   status: CONFIRMED
   project: mindmate-ai
   created_at: "2026-09-20"
-  updated_at: "2026-09-21"
+  updated_at: "2026-09-22"
   source:
     - SRC-007
     - PROJECT-PROFILE-MINDMATE-001
@@ -28,10 +28,16 @@ document:
 workflow:
   base_lifecycle: G0-G11
   scenario: NEW_PROJECT
-  current_stage: G6
+  current_stage: DEVELOPMENT
   current_stage_level: L3
-  workflow_status: CONFIRMED
-  provider_decision_status: APPLIED_CONDITIONAL
+  workflow_status: ACTIVE_DEVELOPMENT
+  requirements_baseline: docs/project/requirements/v1/18_最终决策表.md
+  development_taskbook: docs/project/requirements/v1/16_Codex开发任务书.md
+  technical_constraints: docs/project/requirements/v1/15_技术架构与开发约束.md
+  baseline_tag: baseline/pre-v1-rebaseline-2026-09-22
+  development_branch: feat/v1-bootstrap
+  provider_runtime_mode: MOCK_ONLY
+  provider_decision_status: FROZEN_BY_V1_REQUIREMENTS
   provider_change_status: APPLIED_CONDITIONAL
   current_chat_provider: DEEPSEEK_API
   current_chat_model: deepseek-flash
@@ -46,7 +52,7 @@ workflow:
   cost_alert_threshold: USD 4
   cost_stop_threshold: USD 5
   provider_runtime_enabled: false
-  provider_guard_status: BLOCKED
+  provider_guard_status: NOT_A_DEVELOPMENT_GATE
   workflow_confirmation_constraints:
     - 本地单用户 MVP
     - 外部 Provider 只发送完成当前任务所必需的文本和上下文
@@ -193,6 +199,14 @@ stage_policy:
     purpose: 实施、联调、测试、发布和维护
     simplified: 默认不计入完整压测、专业渗透和云服务器发布
     cannot_omit: 核心闭环、基础安全、引用质量、异常恢复、验收和交接
+  - id: DEVELOPMENT
+    enabled: true
+    level: L3
+    purpose: 按冻结的 V1 规格进行代码、测试和打包开发
+    entry: docs/project/requirements/v1/18_最终决策表.md、16_Codex开发任务书.md、15_技术架构与开发约束.md 已存在
+    cannot_omit: 阶段 0/1 基线与 Spike、Mock Provider、测试、Evidence 和独立 Git 提交
+    current_status: IN_PROGRESS
+    stop_conditions: 需求冲突、冻结技术 Spike 不可行、凭据/费用权限、破坏性操作
 
 active_capabilities_by_stage:
   G2:
@@ -235,7 +249,7 @@ gates:
     before: G3
     evidence: EVID-007；用户确认 WORKFLOW_ID=WF-MINDMATE-001、版本 0.1 和限制条件
   architecture_confirmation:
-    status: BLOCKED
+    status: SUPERSEDED_BY_V1_REQUIREMENTS
     before: G6 exit or architecture-dependent implementation
     blocker: TECH-DEC-004 / OPEN-01
     applied_interim_decision: DEC-G6-001
@@ -247,12 +261,12 @@ gates:
     before: G8
     evidence: MODULE_BOUNDARIES review and apply
   code_gate:
-    status: NOT_REACHED
-    rule: 不因本轮文档生成进入代码实现
+    status: ACTIVE
+    rule: 按 16_Codex开发任务书阶段 0–10 执行，阶段验收通过后独立提交
   g6_entry_gate: READY
   g6_entry_verification: PASSED
-  g6_execution: BLOCKED
-  g6_exit_gate: BLOCKED_TECH-DEC-004
+  g6_execution: ARCHIVED_HISTORY
+  g6_exit_gate: SUPERSEDED_BY_V1_REQUIREMENTS
   architecture_decision_apply_status: PARTIAL
   provider_change_status: APPLIED_CONDITIONAL
   current_chat_provider: DEEPSEEK_API
@@ -269,8 +283,11 @@ gates:
   cost_stop_threshold: USD 5
   provider_runtime_enabled: false
   provider_guard_status: BLOCKED
-  g7_entry_gate: NOT_READY
-  g7_execution: NOT_STARTED
+  g7_entry_gate: SUPERSEDED_BY_V1_REQUIREMENTS
+  g7_execution: NOT_APPLICABLE_CURRENT_DEV
+  development_stage: IN_PROGRESS
+  development_taskbook_status: ACTIVE
+  provider_runtime_mode: MOCK_ONLY
   decision_workflow_version: V3.2_IMMEDIATE_APPLY
   second_confirmation_required: false
   user_decision_apply_command_required: false

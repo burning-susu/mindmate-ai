@@ -40,6 +40,18 @@
 
 若高层事实源与当前代码冲突，不得自动选择一方“看起来更合理”；应登记冲突并进入变更/校准流程。
 
+## 2.1 V1 开发基线（2026-09-22）
+
+当前项目已从历史 G0-G11 文档治理阶段切换到 V1 代码开发阶段：
+
+- `PROJECT_STAGE=DEVELOPMENT`；当前代码开发输入是 `docs/project/requirements/v1/`。
+- 当前需求事实源优先级为：`18_最终决策表.md` → `16_Codex开发任务书.md` → `00_需求规格总纲.md` → `01–15` 专题需求文件 → 当前代码与测试证据。
+- `docs/archive/2026-09-22-pre-v1/` 只用于历史追溯，不参与当前产品、技术或实现决策。
+- `项目业务资料/` 中的 Figma、Sketch 和 Word 原始资料必须保留，不修改、不删除。
+- 当前已冻结的技术基线包括 React 19 + TypeScript + Vite、Python 3.12 + FastAPI、SQLite + FTS5 + sqlite-vec、本地 ONNX `BAAI/bge-small-zh-v1.5`、DeepSeek `deepseek-flash`、SQLite 持久任务、PyInstaller one-folder 和 Inno Setup。
+- Provider Runtime 仍必须使用 Mock Provider 进行开发；真实 DeepSeek 请求、真实凭据和付费外部调用不属于日常自动化测试。
+- 当前开发阶段不得重新发起产品、Provider、Embedding、向量存储、技术栈、页面结构或部署方式决策；普通实现细节按 15/16 的冻结方案处理。
+
 ## 3. 启动路由
 
 每次新对话、重新接手任务、较大修改或发布前，先判断工作场景：
@@ -55,7 +67,7 @@
 
 ### 3.3 继续开发已有 REQ
 读取：
-`AGENTS.md` → 当前 REQ Spec / Baseline → `progress-log` / Evidence → 最近变更 → 本次任务所需 Capability / Rule。
+`AGENTS.md` → `docs/project/requirements/v1/18_最终决策表.md` → `docs/project/requirements/v1/16_Codex开发任务书.md` → 当前阶段专题需求 → `progress-log` / Evidence → 最近变更 → 本次任务所需 Capability / Rule。
 只读取与当前任务相关的专项资产，不默认扫描全部 `doc/`。
 
 ### 3.4 Bug / 缺陷修复

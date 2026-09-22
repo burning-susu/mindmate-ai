@@ -1,11 +1,11 @@
 document:
   id: PROJECT-PROFILE-MINDMATE-001
-  version: "1.0"
+  version: "2.0"
   type: governance
   status: active
   project: mindmate-ai
   created_at: "2026-09-20"
-  updated_at: "2026-09-20"
+  updated_at: "2026-09-22"
   sources:
     - SRC-001
     - SRC-002
@@ -26,23 +26,23 @@ project:
     state: CONFIRMED
     source: SRC-001, SRC-002, SRC-003
   scenario:
-    value: NEW_PROJECT
+    value: V1_DEVELOPMENT
     state: CONFIRMED
     source: SRC-007
   lifecycle:
-    value: NEW
+    value: DEVELOPMENT
     state: CONFIRMED
     source: SRC-007
   stage:
-    value: BOOTSTRAP
+    value: DEVELOPMENT
     state: CONFIRMED
     source: SRC-007
   repository_role:
-    value: NONE
+    value: V1_BOOTSTRAP
     state: CONFIRMED
     source: SRC-007, EVID-001
   code_baseline_mode:
-    value: NONE
+    value: V1_BOOTSTRAP
     state: CONFIRMED
     source: SRC-007, EVID-001
 
@@ -102,8 +102,9 @@ scale:
   capacity_targets:
     knowledge_bases_per_user: 10
     files_per_knowledge_base: 50
-    single_file_size: 20MB
-    files_per_upload: 5
+    single_file_size: 50MB
+    files_per_upload: 20
+    batch_total_size: 500MB
     state: CONFIRMED_FOR_V1
     source: SRC-003, DEC-BOOTSTRAP-001
 
@@ -151,25 +152,25 @@ ai:
     state: CONFIRMED
     source: DEC-BOOTSTRAP-001
   embedding_provider_mode:
-    value: EXTERNAL_PROVIDER
-    state: CONFIRMED
-    source: DEC-BOOTSTRAP-001
+    value: LOCAL_ONNX
+    state: FINAL
+    source: docs/project/requirements/v1/18_最终决策表.md
   provider_adapter:
     value: LOCAL_BACKEND_ADAPTER
     state: CONFIRMED
     source: DEC-BOOTSTRAP-001
   provider_name:
-    value: TBD
-    state: TBD
-    source: OPEN-01
+    value: DeepSeek API
+    state: FINAL
+    source: docs/project/requirements/v1/18_最终决策表.md
   model_name:
-    value: TBD
-    state: TBD
-    source: OPEN-01
+    value: deepseek-flash
+    state: FINAL
+    source: docs/project/requirements/v1/18_最终决策表.md
   embedding_model_name:
-    value: TBD
-    state: TBD
-    source: OPEN-01
+    value: BAAI/bge-small-zh-v1.5
+    state: FINAL
+    source: docs/project/requirements/v1/18_最终决策表.md
   external_data_boundary:
     value: 仅发送当前任务必要的问题、文本片段和上下文，并提示外部模型可能接收必要文本
     state: CONFIRMED
@@ -302,4 +303,3 @@ delivery:
     value: TBD
     state: TBD
     source: OPEN-10
-

@@ -1,12 +1,20 @@
 document:
   id: CONTEXT-INDEX-MINDMATE-001
-  version: "1.1"
+  version: "2.0"
   type: governance
   status: active
   project: mindmate-ai
   created_at: "2026-09-20"
-  updated_at: "2026-09-21"
+  updated_at: "2026-09-22"
   governance_version: v3.2.7
+  current_stage: DEVELOPMENT
+  requirements_root: docs/project/requirements/v1/
+  requirements_authority:
+    - docs/project/requirements/v1/18_最终决策表.md
+    - docs/project/requirements/v1/16_Codex开发任务书.md
+    - docs/project/requirements/v1/00_需求规格总纲.md
+    - docs/project/requirements/v1/15_技术架构与开发约束.md
+  archive_root: docs/archive/2026-09-22-pre-v1/
   summary_root: docs/project/governance/context-summaries/
 
 runtime_defaults:
@@ -32,15 +40,23 @@ model_routing_defaults:
   registry_path: docs/project/governance/MODEL_REGISTRY.yaml
   log_path: docs/project/governance/MODEL_ROUTING_LOG.yaml
 
-decision_workflow_defaults:
+  decision_workflow_defaults:
   decision_workflow_version: V3.2_IMMEDIATE_APPLY
   second_confirmation_required: false
   user_decision_apply_command_required: false
   max_decisions_per_round: 5
   review_backlog_enabled: true
-  review_backlog_path: docs/project/decisions/REVIEW_BACKLOG.md
+  review_backlog_path: docs/archive/2026-09-22-pre-v1/decisions/REVIEW_BACKLOG.md
   architecture_gates_preserved: true
-  migration_record: docs/project/baseline/DECISION_WORKFLOW_MIGRATION.md
+  migration_record: docs/project/DEVELOPMENT_BASELINE.md
+
+development_baseline:
+  branch: feat/v1-bootstrap
+  baseline_tag: baseline/pre-v1-rebaseline-2026-09-22
+  taskbook: docs/project/requirements/v1/16_Codex开发任务书.md
+  technical_constraints: docs/project/requirements/v1/15_技术架构与开发约束.md
+  provider_runtime_mode: MOCK_ONLY
+  current_status: IN_PROGRESS
 
 resources:
   - path: doc/governance/通用文档提示词v3.2.md
@@ -56,14 +72,14 @@ resources:
     last_verified_at: "2026-09-21"
     status: CURRENT
   - path: docs/project/governance/PROJECT_PROFILE.yaml
-    version_or_hash: 2C8D0B0EAFB82DBE852705A43D32CF5A544EF9DEFE0277403CF39BCAD80855CC
-    coverage: project identity, scope, data, AI, UI and delivery profile
+    version_or_hash: 94A3CDB4EFE37C402E03E6FA95C17A6F5D327B0EE96AF52119AA00ECC9026EAA
+    coverage: project identity, frozen V1 development profile, data, AI, UI and delivery profile
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
     last_verified_at: "2026-09-21"
     status: CURRENT
   - path: docs/project/governance/ASSESSMENT.yaml
-    version_or_hash: B80A334A383492C6C9099B52032165A97A654750C2C12265108F2CB09564935F
-    coverage: complexity, risks, triggers, G6 workflow impacts and immediate decision workflow
+    version_or_hash: 8157390562B8D9F374268043FEF1D48458AA1965EB1FA70FE73759521D716354
+    coverage: development baseline assessment, risks, triggers and V1 implementation workflow
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
     last_verified_at: "2026-09-21"
     status: CURRENT
@@ -74,36 +90,36 @@ resources:
     last_verified_at: "2026-09-21"
     status: CURRENT
   - path: docs/project/governance/WORKFLOW_BLUEPRINT.yaml
-    version_or_hash: 82D03B51706746F8976BA42817DB675B34622FCC68AB92C376B5821453BFAD00
-    coverage: confirmed WF-MINDMATE-001 v0.1, immediate decision apply, G6 blocked by OPEN-01
+    version_or_hash: C5E3E6079FF518656D86C627E9D4117B18CE4DBE88B877E93546240E4B75ADBF
+    coverage: V1 development workflow, frozen requirements entry and historical governance boundary
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
     last_verified_at: "2026-09-21"
     status: CURRENT
   - path: docs/project/governance/RUNTIME_CONTEXT.md
-    version_or_hash: 60CFF1481B27443CB863CBAD3B83D92FC6CDB1D972A242D52561D8D3B75538B3
-    coverage: G6 runtime permissions, V3.2 immediate decision apply, model routing degradation and OPEN-01 exit block
+    version_or_hash: 31D8BB669DB1468F925205CB98A88F63F5258B7636FC60024500FFC2E9172B30
+    coverage: DEVELOPMENT runtime permissions, V1 requirements entry, Mock Provider and stage 0/1 boundaries
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
     last_verified_at: "2026-09-21"
     status: CURRENT
   - path: docs/project/governance/EVIDENCE_REGISTER.yaml
-    version_or_hash: A19AAF7732933E144217B8E9A4C2F9C892555460D6BD1DF5F38C4C5BBF0EB836
-    coverage: G6 evidence through EVID-034, including immediate decision migration, DeepSeek Provider revision/Guard and residual decision batch apply
+    version_or_hash: 1597263FAA3B1E8606F5C22EBBCEA771001E2585E151A9A99AE0A70645AF12BE
+    coverage: historical evidence plus V1 development baseline evidence and current stage claims
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
     last_verified_at: "2026-09-21"
     status: CURRENT
-  - path: docs/project/prd/PRODUCT_PRD.md
+  - path: docs/archive/2026-09-22-pre-v1/prd/PRODUCT_PRD.md
     version_or_hash: 87D82CCBA0E5EA1F5437DBE7233B7E2DDBA7D4B62E4DC0DC4B2C79EE5435DB00
     coverage: V1.0-Draft.3 Approved PRD with G5 backup decision and architecture TBD
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
     last_verified_at: "2026-09-21"
     status: CURRENT
-  - path: docs/project/acceptance/TRACE_MATRIX.md
+  - path: docs/archive/2026-09-22-pre-v1/acceptance/TRACE_MATRIX.md
     version_or_hash: F0B0E5C47D966D4E4FDA40FCC9609174C33DCF427DAB8EA78F0BFF36863FC19D
     coverage: PRD requirements to sources, G5.5 pages and current DeepSeek/batch-applied G6 architecture/data decision evidence
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
     last_verified_at: "2026-09-21"
     status: CURRENT
-  - path: docs/project/acceptance/OPEN_ITEMS.md
+  - path: docs/archive/2026-09-22-pre-v1/acceptance/OPEN_ITEMS.md
     version_or_hash: 1556C210A0B1640F642D28CEAFEF5CC40E757BB2EDC31F5E92CCA020F74B5732
     coverage: current DeepSeek Chat revision, batch-applied Embedding/vector/cost decisions and OPEN-01 G6 exit blocker
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
@@ -121,49 +137,49 @@ resources:
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
     last_verified_at: "2026-09-20"
     status: CURRENT
-  - path: docs/project/baseline/07_G3_PRD_ADMISSION_AUDIT.md
+  - path: docs/archive/2026-09-22-pre-v1/baseline/07_G3_PRD_ADMISSION_AUDIT.md
     version_or_hash: 35E6AB8027FE65413D91769E5176F64260151F6BF5EDFEBE25064BD07476A9E4
     coverage: G3 passed conclusion, applied blocker, major/minor gaps and G4 entry conditions
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
     last_verified_at: "2026-09-21"
     status: CURRENT
-  - path: docs/project/decisions/DEC-G3-001.md
+  - path: docs/archive/2026-09-22-pre-v1/decisions/DEC-G3-001.md
     version_or_hash: 14CA2420BE3BA5FC7B2E4FDAABF25494F5A97E214C387AFA61BEE76B42E30978
     coverage: applied V1 page tree and first-level navigation decision
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
     last_verified_at: "2026-09-21"
     status: CURRENT
-  - path: docs/project/baseline/02_DECISION_BASELINE.md
+  - path: docs/archive/2026-09-22-pre-v1/baseline/02_DECISION_BASELINE.md
     version_or_hash: 66C15B5C8797E0717AC141FE4FE41ADCFBD7028538D176124FB97B88CD3E8F0A
     coverage: confirmed project decisions and unresolved TBD
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
     last_verified_at: "2026-09-21"
     status: CURRENT
-  - path: docs/project/baseline/05_PENDING_QUESTIONS.md
+  - path: docs/archive/2026-09-22-pre-v1/baseline/05_PENDING_QUESTIONS.md
     version_or_hash: 44005F4F91535431467A406202E2E98FF57C2A1B708E471B85A185DDF80A3FA1
     coverage: current G6 pending questions including DeepSeek guards and G8 vector/Embedding Spike boundaries
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
     last_verified_at: "2026-09-21"
     status: CURRENT
-  - path: docs/project/baseline/08_G5_PRD_REVIEW.md
+  - path: docs/archive/2026-09-22-pre-v1/baseline/08_G5_PRD_REVIEW.md
     version_or_hash: 88F1E2BF93DAF188FBCD102BCF8A23AD72AED4D89C2BE530A1035FA18549DE44
     coverage: G5 review, applied backup decision, PRD revision and user approval gate
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
     last_verified_at: "2026-09-21"
     status: CURRENT
-  - path: docs/project/decisions/DEC-G5-001.md
+  - path: docs/archive/2026-09-22-pre-v1/decisions/DEC-G5-001.md
     version_or_hash: A71AF39302F6B5FD22C335757C66E319897218442EBBFF26FA8B04979A21065A
     coverage: applied V1 local backup and recovery direction
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
     last_verified_at: "2026-09-21"
     status: CURRENT
-  - path: docs/project/ui/README.md
+  - path: docs/archive/2026-09-22-pre-v1/ui/README.md
     version_or_hash: 9E0AFA03BD45151463EA5B2EFCC9E0BB80B93E6749F9DF63959C2CAF76207373
     coverage: G5.5 UI logic scope directory rules
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
     last_verified_at: "2026-09-21"
     status: CURRENT
-  - path: docs/project/ui/UI_LOGIC_SCOPE.md
+  - path: docs/archive/2026-09-22-pre-v1/ui/UI_LOGIC_SCOPE.md
     version_or_hash: FBB6CF0F0DCE8598C9382C99AFD1EE16E22B7CA63350693B6BD1E226A2EE99D7
     coverage: G5.5 pages, hierarchy, states, flows, responsibilities and open items
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
@@ -182,8 +198,8 @@ resources:
     last_verified_at: "2026-09-21"
     status: CURRENT
   - path: docs/project/README.md
-    version_or_hash: 0AC9E01C8EF4B7F8E6EFF2E517C9782DC9869332FC3A3630405E4D05411EEFCE
-    coverage: project document index, immediate decision workflow, current DeepSeek Chat revision and provider blocker status
+    version_or_hash: 4637DB86B6C0DD924CDEF4D1595F67CA5C5C9CA346DD2DB6F2FAEC514E4077E7
+    coverage: current V1 development source order, stage and archive boundary
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
     last_verified_at: "2026-09-21"
     status: CURRENT
@@ -199,111 +215,147 @@ resources:
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
     last_verified_at: "2026-09-21"
     status: CURRENT
-  - path: docs/project/architecture/README.md
+  - path: docs/archive/2026-09-22-pre-v1/architecture/README.md
     version_or_hash: E8E5C53EAA12CA8636E7E0AE8EB8C155733680E2FFBC996F938717E281BDC977
     coverage: architecture directory and current Draft/blocked boundary
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
     last_verified_at: "2026-09-21"
     status: CURRENT
-  - path: docs/project/architecture/SYSTEM_ARCHITECTURE.md
+  - path: docs/archive/2026-09-22-pre-v1/architecture/SYSTEM_ARCHITECTURE.md
     version_or_hash: 6C1FC1569EDB27D5B8F20D3FC0312ABEA1E4135D614DDD65695265FE77737F5E
     coverage: G6 architecture, DeepSeek/local BGE/vector/cost conditional boundaries, Secret/no-call rules and OPEN-01 block
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
     last_verified_at: "2026-09-21"
     status: CURRENT
-  - path: docs/project/baseline/09_G6_ARCHITECTURE_REVIEW.md
+  - path: docs/archive/2026-09-22-pre-v1/baseline/09_G6_ARCHITECTURE_REVIEW.md
     version_or_hash: 576D71D9BFD6B5A86B5FE3CB4E6843D078FA390559DC9CCA33F5FED6DC42783B
     coverage: G6 DeepSeek/batch decision revision, historical Alibaba route, remaining OPEN-01 exit gate and partial architecture apply status
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
     last_verified_at: "2026-09-21"
     status: CURRENT
-  - path: docs/project/decisions/README.md
+  - path: docs/archive/2026-09-22-pre-v1/decisions/README.md
     version_or_hash: 4837A1E70FDCA57D0F9DFFE4BE8D936C9EA03F3575D27DD50459A39EB5351913
     coverage: project decision register and immediate apply / Review Backlog navigation
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
     last_verified_at: "2026-09-21"
     status: CURRENT
-  - path: docs/project/decisions/DEC-G6-001.md
+  - path: docs/archive/2026-09-22-pre-v1/decisions/DEC-G6-001.md
     version_or_hash: D0E75284631A72D5B26DAC49237A1AE73171D9AE9AEDB31B7BDB21C9A4DD5C86
     coverage: user-confirmed interim no-call boundary while Provider details remain TBD
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
     last_verified_at: "2026-09-21"
     status: CURRENT
-  - path: docs/project/decisions/DEC-G6-002.md
+  - path: docs/archive/2026-09-22-pre-v1/decisions/DEC-G6-002.md
     version_or_hash: 8904221ECAD733EBF1FF85293EFE1B3CC3CE352AA2DBA78356F98EE802CB4902
     coverage: historical conditional Alibaba Provider baseline; Chat route superseded by DEC-G6-003; no-call history retained
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
     last_verified_at: "2026-09-21"
     status: CURRENT
-  - path: docs/project/decisions/DEC-G6-003.md
+  - path: docs/archive/2026-09-22-pre-v1/decisions/DEC-G6-003.md
     version_or_hash: 7C6EE02819467045942C06B70CE051C840C500339BA79E5B85AC0D19DF0F61E2
     coverage: current conditional DeepSeek Chat Provider revision; residual G6 decisions delegated to DEC-G6-004; runtime disabled
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
     last_verified_at: "2026-09-21"
     status: CURRENT
-  - path: docs/project/decisions/DEC-G6-004.md
+  - path: docs/archive/2026-09-22-pre-v1/decisions/DEC-G6-004.md
     version_or_hash: E166DF9DD6CDDBF90CAB7D36F39E540211597ECB5291FF779FADCEA78220CBD0
     coverage: applied batch of Chat Model, local Embedding, local vector direction and USD 5 cost policy decisions
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
     last_verified_at: "2026-09-21"
     status: CURRENT
-  - path: docs/project/baseline/10_G6_PROVIDER_DECISION_REVIEW.md
+  - path: docs/archive/2026-09-22-pre-v1/baseline/10_G6_PROVIDER_DECISION_REVIEW.md
     version_or_hash: 03A77EFA9C5B2976FECBE4C480E975EDEF72923F330FFB3F51C030CFA73B4517
     coverage: historical Alibaba/current DeepSeek Provider review plus DEC-G6-004 batch application and official docs/guards
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
     last_verified_at: "2026-09-21"
     status: CURRENT
-  - path: docs/project/baseline/11_G6_PROVIDER_GUARD_VERIFICATION.md
+  - path: docs/archive/2026-09-22-pre-v1/baseline/11_G6_PROVIDER_GUARD_VERIFICATION.md
     version_or_hash: F2CC7E9C85C34A7721F8A6446F95AA43D7F2DDF543940E3D83D7F9C205F4EF1C
     coverage: historical Alibaba Provider guard matrix, preserved as SUPERSEDED_NOT_CURRENT_PROVIDER
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
     last_verified_at: "2026-09-21"
     status: CURRENT
-  - path: docs/project/baseline/12_G6_DEEPSEEK_PROVIDER_GUARD_VERIFICATION.md
+  - path: docs/archive/2026-09-22-pre-v1/baseline/12_G6_DEEPSEEK_PROVIDER_GUARD_VERIFICATION.md
     version_or_hash: 8EAC9A1E2EA6BCC9792266B920F62DFD24AD24669AB0FA1EABFBE867A10E8F93
     coverage: current DeepSeek Provider Guard Matrix, Secret boundary and G6 Exit Preflight
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
     last_verified_at: "2026-09-21"
     status: CURRENT
-  - path: docs/project/baseline/G6_DEEPSEEK_PROVIDER_CHANGE_REVIEW.md
+  - path: docs/archive/2026-09-22-pre-v1/baseline/G6_DEEPSEEK_PROVIDER_CHANGE_REVIEW.md
     version_or_hash: F486909274D7CD47C56CAEE4E57336690F16A28F771A1396B4AA34FB74DE3CDA
     coverage: DeepSeek Provider revision chain, official API facts, target architecture and applied residual decision batch
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
     last_verified_at: "2026-09-21"
     status: CURRENT
-  - path: docs/project/baseline/DECISION_WORKFLOW_MIGRATION.md
+  - path: docs/archive/2026-09-22-pre-v1/baseline/DECISION_WORKFLOW_MIGRATION.md
     version_or_hash: 4F529FBEEF4C957D23AF80936822B3B020AC56A8AB5FB0EBC8253AE3AF25DDC6
     coverage: V3.2 immediate decision apply migration, source mapping, conflict inventory and preserved G6/G7 gates
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
     last_verified_at: "2026-09-21"
     status: CURRENT
-  - path: docs/project/decisions/REVIEW_BACKLOG.md
+  - path: docs/archive/2026-09-22-pre-v1/decisions/REVIEW_BACKLOG.md
     version_or_hash: F23FE2105441C375202F796E8D6521E42AB2C79931F28CDE38DE65E4C239393A
     coverage: applied decision review queue, Alibaba superseded route, DeepSeek guards and DEC-G6-004 residual decision review
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
     last_verified_at: "2026-09-21"
     status: CURRENT
   - path: docs/project/AI_DOCUMENTATION_GUIDE.md
-    version_or_hash: DAAD7B11BA5EE5AF4ABFF3634B28BCD02F6380358F4836BA83DD6EBE5D6A8F1E
-    coverage: project documentation source separation, immediate decision application and review backlog routing
+    version_or_hash: 9441E55073696AC6BE7EE60455B3C94319D654AF33C7E12E25AD1AA21240D8E9
+    coverage: project documentation source separation and V1 development requirements routing
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
     last_verified_at: "2026-09-21"
     status: CURRENT
+  - path: docs/project/DEVELOPMENT_BASELINE.md
+    version_or_hash: AC1300FC49ADE8CB06168B0C8F1EAA2ADCF652A6FEB2D9F697C1263108996853
+    coverage: V1 development stage, requirements authority, archive boundary and frozen implementation baseline
+    summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
+    last_verified_at: "2026-09-22"
+    status: CURRENT
   - path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
-    version_or_hash: 4BD54BA23964657F4BF29FF5754A40C370C9A7E010A5ACDD798E3FA11178CF43
-    coverage: current governance and project state summary including V3.2 immediate decision workflow
+    version_or_hash: B2DD5AEEAA239F4E5BB93CCF25E35290E8FDB8A81603466D12BEDE048AD37E33
+    coverage: current V1 development baseline, requirements authority and archive boundary
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
     last_verified_at: "2026-09-21"
     status: CURRENT
   - path: docs/project/governance/README.md
-    version_or_hash: A68D0B1766B7401D99ADCC08E4EF8DF7A78C106F903166A5C29E1A580C54C82B
-    coverage: project governance directory routing, context index and immediate decision workflow entry points
+    version_or_hash: DD2C23DAAE8BE3CDBCD3EA12B9D4FDF586A367430CACD7F8E0F88DAF715E9B9C
+    coverage: project governance directory routing and V1 development entry points
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
     last_verified_at: "2026-09-21"
     status: CURRENT
-  - path: docs/project/baseline/README.md
+  - path: docs/archive/2026-09-22-pre-v1/baseline/README.md
     version_or_hash: 22CA58450D1E14F95BD19B3D48277135BE095C6BDBAFDF194A56FC2CB89FA4E7
     coverage: G2 baseline directory routing including decision workflow migration record
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
     last_verified_at: "2026-09-21"
+    status: CURRENT
+  - path: docs/project/requirements/v1/README.md
+    version_or_hash: E000361FCDD3A3F61B32B92694F32C6849141279215752B5E3738A283BE7631C
+    coverage: frozen V1 requirements package index and development entry rules
+    summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
+    last_verified_at: "2026-09-22"
+    status: CURRENT
+  - path: docs/project/requirements/v1/00_需求规格总纲.md
+    version_or_hash: 06E2F798B3EE8790DF162F8DC471C0A14CD074F78867BF981673AF12BDD04698
+    coverage: V1 product scope, data principles and frozen requirements package rules
+    summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
+    last_verified_at: "2026-09-22"
+    status: CURRENT
+  - path: docs/project/requirements/v1/15_技术架构与开发约束.md
+    version_or_hash: C2767EDC83207282F335C517090A2912D49A16C57F633592CA835B60495BBFAE
+    coverage: frozen technical stack, architecture, security, testing, packaging and Spike constraints
+    summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
+    last_verified_at: "2026-09-22"
+    status: CURRENT
+  - path: docs/project/requirements/v1/16_Codex开发任务书.md
+    version_or_hash: 813847C1E2C56BA4ED88D396544A528E729F0A674E0B70D256F610FDF764C3CB
+    coverage: direct Codex development stages, acceptance, stop conditions and Git discipline
+    summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
+    last_verified_at: "2026-09-22"
+    status: CURRENT
+  - path: docs/project/requirements/v1/18_最终决策表.md
+    version_or_hash: 42394DAB6F121156E81496965F06DDA7B65FFD1C5B41B326231B6D56ED895315
+    coverage: final frozen V1 product, technical, Provider, data, API, security and packaging decisions
+    summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
+    last_verified_at: "2026-09-22"
     status: CURRENT
