@@ -34,6 +34,7 @@ backend/build/
 packaging/dist/
 packaging/build/
 docs/test-reports/generated/
+docs/openapi/generated/
 
 # Java / Spring Boot
 target/

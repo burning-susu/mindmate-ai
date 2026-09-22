@@ -12,6 +12,7 @@ dependencies = [
   "python-multipart>=0.0.20,<1",
   "sqlalchemy>=2.0,<3",
   "uvicorn[standard]>=0.34,<1",
+  "uuid6>=2024.7,<2026",
 ]
 
 [build-system]
@@ -41,6 +42,7 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
+ignore = ["E501"]
 
 [tool.pyright]
 include = ["src", "tests"]

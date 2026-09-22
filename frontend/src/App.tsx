@@ -3,6 +3,7 @@ import { Activity, BookOpen, Boxes, FileText, Home, Menu, MessageSquare, Setting
 import { NavLink, Route, Routes } from 'react-router-dom'
 import { create } from 'zustand'
 
+import { apiRequest } from './api/client'
 import './App.css'
 
 type UiState = {
@@ -32,11 +33,7 @@ const navigation = [
 function BackendStatus() {
   const { data, isError, isLoading } = useQuery({
     queryKey: ['health'],
-    queryFn: async () => {
-      const response = await fetch('/api/v1/health')
-      if (!response.ok) throw new Error('backend unavailable')
-      return (await response.json()) as { status: string; version: string }
-    },
+    queryFn: () => apiRequest<{ status: string; version: string }>('/api/v1/health'),
     retry: false,
   })
 

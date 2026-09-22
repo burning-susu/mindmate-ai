@@ -1,11 +1,21 @@
 import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { BrowserRouter } from 'react-router-dom'
 
 import App from '../App'
 
 describe('stage 0 application shell', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
   it('renders the primary navigation', () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      return new Response(JSON.stringify(url.includes('/system/session') ? { status: 'ready' } : { status: 'ok', version: '0.1.0' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }))
+
     render(
       <BrowserRouter>
         <App />
