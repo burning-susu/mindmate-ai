@@ -10,7 +10,7 @@ document:
 
 assessment_status: DEVELOPMENT_BASELINE_ESTABLISHED
 current_stage: DEVELOPMENT
-workflow_effect: 00–18 V1 需求规格已冻结；历史 G6 治理文档已归档；当前进入阶段 0 工程基线和阶段 1 高风险技术 Spike，Provider Runtime 使用 Mock Provider
+workflow_effect: 00–18 V1 需求规格已冻结；历史 G6 治理文档已归档；阶段 0–3 已完成，阶段 4 文件管理垂直切片已完成，Provider Runtime 使用 Mock Provider，继续按阶段推进
 
 development_baseline:
   requirements_root: docs/project/requirements/v1/
@@ -21,7 +21,7 @@ development_baseline:
   baseline_tag: baseline/pre-v1-rebaseline-2026-09-22
   archived_history: docs/archive/2026-09-22-pre-v1/
   provider_runtime_mode: MOCK_ONLY
-  current_stage_status: IN_PROGRESS
+  current_stage_status: STAGE_4_COMPLETED_WITH_PARSER_FOLLOW_UP
 
 decision_workflow:
   version: V3.2_IMMEDIATE_APPLY

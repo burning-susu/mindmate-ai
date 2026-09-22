@@ -16,8 +16,10 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from uuid6 import uuid7
 
 from mindmate import __version__
+from mindmate.api.files import FileApiError
+from mindmate.api.files import router as files_router
 from mindmate.config import Settings, get_settings
-from mindmate.infrastructure.db import create_sqlite_engine, quick_check
+from mindmate.infrastructure.db import create_session_factory, create_sqlite_engine, quick_check
 from mindmate.security.instance import SingleInstanceLock
 from mindmate.security.session import SESSION_COOKIE, LocalSession
 
@@ -77,6 +79,7 @@ async def lifespan(app: FastAPI):
         app.state.instance_lock = lock
         app.state.engine = create_sqlite_engine(settings.database_path)
         app.state.database_status = quick_check(app.state.engine)
+        app.state.session_factory = create_session_factory(app.state.engine)
         app.state.session = LocalSession()
         yield
     finally:
@@ -217,6 +220,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             retryable=True,
         )
 
+    @app.exception_handler(FileApiError)
+    async def file_api_error(request: Request, exc: FileApiError) -> JSONResponse:
+        return problem(request, exc.status, exc.code, "文件操作失败", exc.detail)
+
     @app.post("/api/v1/system/session", tags=["system"])
     async def session(request: Request, response: Response) -> dict[str, Any]:
         local_session = getattr(request.app.state, "session", None)
@@ -288,6 +295,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/v1/system/openapi.json", include_in_schema=False)
     async def openapi_json() -> dict[str, Any]:
         return app.openapi()
+
+    app.include_router(files_router)
 
     return app
 

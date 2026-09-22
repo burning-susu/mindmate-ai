@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlalchemy import Engine, create_engine, event, text
+from sqlalchemy.orm import sessionmaker
 
 
 def create_sqlite_engine(path: Path) -> Engine:
@@ -22,6 +23,11 @@ def create_sqlite_engine(path: Path) -> Engine:
         cursor.close()
 
     return engine
+
+
+def create_session_factory(engine: Engine) -> sessionmaker:
+    """Create the application-scoped SQLAlchemy session factory."""
+    return sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
 
 def quick_check(engine: Engine) -> str:

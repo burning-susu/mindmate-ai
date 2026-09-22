@@ -47,6 +47,9 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
   await ensureLocalSession()
   const headers = new Headers(init.headers)
   headers.set('X-Request-ID', uuidv7())
+  if (init.body && typeof init.body === 'string' && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json')
+  }
   if (init.method && !['GET', 'HEAD', 'OPTIONS'].includes(init.method.toUpperCase())) {
     headers.set('Idempotency-Key', uuidv7())
   }
@@ -55,6 +58,34 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
     headers,
     credentials: 'same-origin',
     cache: 'no-store',
+  })
+  if (!response.ok) {
+    const problem = (await response.json()) as ProblemDetail
+    throw new ApiError(response.status, problem)
+  }
+  return (await response.json()) as T
+}
+
+export async function apiUpload<T>(
+  path: string,
+  files: File[],
+  fields: Record<string, string | undefined> = {},
+): Promise<T> {
+  await ensureLocalSession()
+  const body = new FormData()
+  files.forEach((file) => body.append('files', file, file.name))
+  Object.entries(fields).forEach(([key, value]) => {
+    if (value !== undefined) body.append(key, value)
+  })
+  const response = await fetch(path, {
+    method: 'POST',
+    body,
+    credentials: 'same-origin',
+    cache: 'no-store',
+    headers: {
+      'X-Request-ID': uuidv7(),
+      'Idempotency-Key': uuidv7(),
+    },
   })
   if (!response.ok) {
     const problem = (await response.json()) as ProblemDetail

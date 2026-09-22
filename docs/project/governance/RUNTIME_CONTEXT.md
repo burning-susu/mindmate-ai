@@ -119,7 +119,7 @@
 - CONTEXT_INDEX：governance/CONTEXT_INDEX.yaml
 - CONTEXT_SUMMARIES：governance/context-summaries/
 
-本轮已完成仓库重置与 V1 开发预备：00–18 规格成为当前需求事实源，历史项目文档归档到 `docs/archive/2026-09-22-pre-v1/`。开发阶段使用 Mock Provider，不调用真实 DeepSeek API；阶段 0/1 的技术 Spike 和代码实现尚未完成。模型路由仍为 RECOMMEND_ONLY，实际开发执行模型未知，本次没有底层模型切换。
+本轮已完成仓库重置与 V1 开发推进：00–18 规格成为当前需求事实源，历史项目文档归档到 `docs/archive/2026-09-22-pre-v1/`。阶段 0–3 已完成，阶段 4 文件管理垂直切片已完成；PDF/DOCX/PPTX 解析器、FTS5、知识库/RAG 和后续 AI 闭环继续按阶段推进。开发阶段使用 Mock Provider，不调用真实 DeepSeek API。模型路由仍为 RECOMMEND_ONLY，实际开发执行模型未知，本次没有底层模型切换。
 
 本次流程迁移已生效：用户明确回复 `决策ID=方案` 后，系统在同一轮内部完成应用和同步，并将已应用决策登记到 `docs/project/decisions/REVIEW_BACKLOG.md`。不再要求二次确认或用户输入 `DECISION_APPLY`；历史 Evidence 和 DEC 中的二次确认文字保持不变。
 
@@ -136,7 +136,7 @@
 - 不提交 `.env`、用户数据、模型文件、日志、数据库或构建产物。
 - 不修改生产配置、真实凭据或真实数据。
 - 不修改 Approved PRD、PROJECT_PROFILE 或已确认 UI 逻辑范围。
-- 不生成代码、DDL、正式 OpenAPI、依赖配置或脚手架；不调用真实 Provider。
+- 不在未授权范围外生成代码、DDL、依赖配置或脚手架；当前阶段允许在 00–18 需求和阶段任务书范围内修改代码、测试和正式 OpenAPI；不调用真实 Provider。
 - 不进入 G7 或生成开发计划、开发批次。
 
 ## 当前阶段有效 Capability
@@ -147,7 +147,6 @@
 
 当前 G6 出口阻断：
 
-1. 开发必须先通过阶段 0 工程基线验收。
-2. 阶段 1 sqlite-vec、ONNX、Credential Manager、Mock SSE、PyInstaller 和干净 Windows 启动 Spike 失败时停止并报告证据。
+1. 阶段 0 工程基线和阶段 1 高风险 Spike 已通过；干净 Windows 安装包验证仍是发布门禁。
+2. 当前阶段后续解析器/RAG Spike 失败、需求冲突、冻结技术不可行、外部账号/费用权限或破坏性操作仍需停止并报告证据。
 3. 真实 Provider、真实凭据和付费请求继续禁用；开发使用 Mock Provider。
-4. 任何需求冲突、冻结技术不可行、外部账号/费用权限或破坏性操作仍需停止询问。

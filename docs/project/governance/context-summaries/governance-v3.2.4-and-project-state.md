@@ -42,7 +42,7 @@ REAL_PROVIDER_CALLS=DISABLED
 
 - 不重新讨论冻结的产品、Provider、Embedding、向量存储、技术栈、页面结构或部署方式。
 - 不调用真实 Provider，不读取或验证 API Key，不上传用户文件，不提交凭据、用户数据、模型缓存、日志或构建产物。
-- 阶段 0 先建立可重复工程基线；阶段 1 先验证 sqlite-vec、ONNX、Credential Manager、Mock SSE、PyInstaller 和干净 Windows 启动。
+- 阶段 0 先建立可重复工程基线；阶段 1 的 sqlite-vec、ONNX、Credential Manager、Mock SSE 和 PyInstaller Spike 已通过；阶段 2–4 已完成，当前继续文件解析器、知识库和 RAG 垂直闭环。
 - Spike 失败、需求冲突、外部账号/费用权限或破坏性操作是停止询问条件。
 
 ## 历史边界

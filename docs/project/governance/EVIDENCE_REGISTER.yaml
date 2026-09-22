@@ -557,9 +557,44 @@ evidence:
       - 未调用 DeepSeek/Alibaba API，未读取或验证任何 Key
       - 成本政策已记录但运行时计数和停止实现尚未完成
 
+  - id: EVID-035
+    type: development_stage_4_file_management
+    scope: V1 DEVELOPMENT / Stage 4
+    claim: 文件管理垂直切片已实现并通过后端、前端、OpenAPI 和浏览器验证
+    result: STAGE_4=COMPLETED_WITH_PARSER_FOLLOW_UP；STAGE_0_1_2_3=COMPLETED；PROVIDER_RUNTIME=MOCK_ONLY；REAL_PROVIDER_CALLS=DISABLED
+    verified_at: "2026-09-22"
+    verifier: assistant
+    ref: docs/test-reports/stage-4-file-management.md、docs/progress/v1-development-progress.md、backend/tests/test_stage4_files.py
+    relates_to:
+      - DEVELOPMENT
+      - STAGE-4
+      - FILES
+      - FILE_IMPORT
+      - TRASH
+    implemented:
+      - multipart 流式 staging、文件格式/大小/批次校验和 SHA-256 去重
+      - TXT/Markdown 本地解析；PDF/DOCX/PPTX 保留明确的解析任务边界
+      - 文件夹、标签、文件 CRUD、搜索、详情、受控内容读取和回收站
+      - 重复决策、共享 ContentObject、软删除、递归恢复和明确确认后的永久删除
+      - React 文件工作台、详情页和回收站页面
+    evidence:
+      backend_tests: 14 passed
+      backend_ruff: passed
+      backend_pyright: passed
+      frontend_lint: passed
+      frontend_typecheck: passed
+      frontend_vitest: 1 passed
+      frontend_build: passed
+      openapi: 3.1.0 exported; 13 schemas; 37 operations
+      browser: /files rendered; folder creation verified
+    limitations:
+      - PDF/DOCX/PPTX 解析 Adapter 与受限子进程尚未完成
+      - FTS5、知识库索引、Embedding、向量和引用链路尚未完成
+      - 未调用真实 Provider，未读取、创建或验证 API Key
+
 completion_claims:
-  code_complete: NOT_STARTED
-  tests_passed: NOT_STARTED
+  code_complete: STAGE_4_IN_PROGRESS_WITH_FOLLOW_UP
+  tests_passed: STAGE_4_VERIFIED
   acceptance_complete: NOT_STARTED
   workflow_confirmed: CONFIRMED
   g3_audit: PASSED
@@ -601,6 +636,9 @@ completion_claims:
   release_complete: NOT_STARTED
   current_stage: DEVELOPMENT
   development_baseline: ESTABLISHED
-  stage_0_engineering_baseline: NOT_STARTED
-  stage_1_high_risk_spike: NOT_STARTED
+  stage_0_engineering_baseline: COMPLETED
+  stage_1_high_risk_spike: COMPLETED_WITH_RELEASE_GAPS
+  stage_2_application_shell: COMPLETED
+  stage_3_data_task_backup: COMPLETED
+  stage_4_file_management: COMPLETED_WITH_PARSER_FOLLOW_UP
   code_baseline_mode: V1_BOOTSTRAP

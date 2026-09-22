@@ -78,10 +78,10 @@ resources:
     last_verified_at: "2026-09-21"
     status: CURRENT
   - path: docs/project/governance/ASSESSMENT.yaml
-    version_or_hash: 8157390562B8D9F374268043FEF1D48458AA1965EB1FA70FE73759521D716354
+    version_or_hash: 3CAF4955FFFAFD9759EE2A1E139B1FB2BA76A182B4ED5EE2FA5A1B8B214459BD
     coverage: development baseline assessment, risks, triggers and V1 implementation workflow
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
-    last_verified_at: "2026-09-21"
+    last_verified_at: "2026-09-22"
     status: CURRENT
   - path: docs/project/governance/CAPABILITY_ACTIVATION.yaml
     version_or_hash: 55BA005C5677DE337A7AEDDA95FAE28AC6A13872F5553072EAF175381C48B01A
@@ -96,16 +96,16 @@ resources:
     last_verified_at: "2026-09-21"
     status: CURRENT
   - path: docs/project/governance/RUNTIME_CONTEXT.md
-    version_or_hash: 31D8BB669DB1468F925205CB98A88F63F5258B7636FC60024500FFC2E9172B30
-    coverage: DEVELOPMENT runtime permissions, V1 requirements entry, Mock Provider and stage 0/1 boundaries
+    version_or_hash: DFB74E17C2E2FE7920E8AEBAA09510204956267CB9C924656ADA4F652B7F680E
+    coverage: DEVELOPMENT runtime permissions, V1 requirements entry, Mock Provider and current stage 4 boundary
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
-    last_verified_at: "2026-09-21"
+    last_verified_at: "2026-09-22"
     status: CURRENT
   - path: docs/project/governance/EVIDENCE_REGISTER.yaml
-    version_or_hash: 1597263FAA3B1E8606F5C22EBBCEA771001E2585E151A9A99AE0A70645AF12BE
-    coverage: historical evidence plus V1 development baseline evidence and current stage claims
+    version_or_hash: 5E28EFDD9422AA092A824DF9B4774B6620E2FBB39A651F0996F27478788BD911
+    coverage: historical evidence plus V1 development baseline and stage 4 file-management evidence
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
-    last_verified_at: "2026-09-21"
+    last_verified_at: "2026-09-22"
     status: CURRENT
   - path: docs/archive/2026-09-22-pre-v1/prd/PRODUCT_PRD.md
     version_or_hash: 87D82CCBA0E5EA1F5437DBE7233B7E2DDBA7D4B62E4DC0DC4B2C79EE5435DB00
@@ -198,10 +198,10 @@ resources:
     last_verified_at: "2026-09-21"
     status: CURRENT
   - path: docs/project/README.md
-    version_or_hash: 4637DB86B6C0DD924CDEF4D1595F67CA5C5C9CA346DD2DB6F2FAEC514E4077E7
+    version_or_hash: 4D2AAF9C711B5E91E62C8E2A65413D4017ADBED8DF27F39C05F70A4AA6C8870F
     coverage: current V1 development source order, stage and archive boundary
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
-    last_verified_at: "2026-09-21"
+    last_verified_at: "2026-09-22"
     status: CURRENT
   - path: doc/capabilities/architecture/technical-selection.md
     version_or_hash: 9A547239B4FED1D22E79E68FD2BD85B426027EE9C506D36135134219DBE36BCB
@@ -312,10 +312,10 @@ resources:
     last_verified_at: "2026-09-22"
     status: CURRENT
   - path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
-    version_or_hash: B2DD5AEEAA239F4E5BB93CCF25E35290E8FDB8A81603466D12BEDE048AD37E33
-    coverage: current V1 development baseline, requirements authority and archive boundary
+    version_or_hash: F7C201DB675CEFA8CCFAD29513E84BA60B2D4F4AC79C57098C74E727C55FF1CA
+    coverage: current V1 development baseline, stage 0–4 evidence, requirements authority and archive boundary
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
-    last_verified_at: "2026-09-21"
+    last_verified_at: "2026-09-22"
     status: CURRENT
   - path: docs/project/governance/README.md
     version_or_hash: DD2C23DAAE8BE3CDBCD3EA12B9D4FDF586A367430CACD7F8E0F88DAF715E9B9C
@@ -356,6 +356,18 @@ resources:
   - path: docs/project/requirements/v1/18_最终决策表.md
     version_or_hash: 42394DAB6F121156E81496965F06DDA7B65FFD1C5B41B326231B6D56ED895315
     coverage: final frozen V1 product, technical, Provider, data, API, security and packaging decisions
+    summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
+    last_verified_at: "2026-09-22"
+    status: CURRENT
+  - path: docs/progress/v1-development-progress.md
+    version_or_hash: BE56114E12E11A3725E6B38A61BF3D628E7F6DDA41408DA081628581D3D13905
+    coverage: stage 0–4 development progress and evidence links
+    summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
+    last_verified_at: "2026-09-22"
+    status: CURRENT
+  - path: docs/test-reports/stage-4-file-management.md
+    version_or_hash: 9F2C69EA283A31F67CB8E097E6849BBA969D328C9949A60BD3DB74FCAC01B002
+    coverage: stage 4 file-management verification, browser evidence and parser follow-up
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
     last_verified_at: "2026-09-22"
     status: CURRENT

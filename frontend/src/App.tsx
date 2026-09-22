@@ -4,6 +4,9 @@ import { NavLink, Route, Routes } from 'react-router-dom'
 import { create } from 'zustand'
 
 import { apiRequest } from './api/client'
+import FileDetailPage from './pages/FileDetailPage'
+import FilesPage from './pages/FilesPage'
+import TrashPage from './pages/TrashPage'
 import './App.css'
 
 type UiState = {
@@ -98,7 +101,9 @@ function AppShell() {
             <Route path="/learning" element={<Placeholder title="学习" description="学习首页和陪练闭环将在后续开发阶段接入。" />} />
             <Route path="/chat" element={<Placeholder title="AI 对话" description="Mock Provider 和 SSE 流式链路将在后续阶段接入。" />} />
             <Route path="/knowledge-bases" element={<Placeholder title="知识库" description="知识库、索引和引用功能将在后续阶段接入。" />} />
-            <Route path="/files" element={<Placeholder title="文件" description="文件导入、解析和任务状态将在后续阶段接入。" />} />
+            <Route path="/files" element={<FilesPage />} />
+            <Route path="/files/:fileId" element={<FileDetailPage />} />
+            <Route path="/trash" element={<TrashPage />} />
             <Route path="/settings" element={<Placeholder title="设置" description="运行配置和诊断入口将在后续阶段接入。" />} />
           </Routes>
         </div>
