@@ -6,7 +6,7 @@
 - 当前远程提交：以 `git ls-remote --heads origin feat/v1-bootstrap` 为准；本文件随本批次收口提交推送
 - 最后更新时间：`2026-09-22`
 - 当前开发阶段：阶段 4 文件管理收口
-- 当前批次状态：第六批实现与自动化验证完成，批次结论 `PARTIAL`；阶段 4 仍为 `PARTIAL`，第七批最终验收尚未执行
+- 当前批次状态：第六批实现与自动化验证完成，批次结论 `PASS`；阶段 4 仍为 `PARTIAL`，第七批最终验收尚未执行
 
 ## 已完成阶段
 
@@ -44,7 +44,7 @@
 
 ## 本批次交接
 
-- 第六批状态：`PARTIAL`（实现和自动化证据完成；不代表阶段 4 最终验收）
+- 第六批状态：`PASS`（实现和自动化证据完成；不代表阶段 4 最终验收）
 - Worker：应用 lifespan 启动单实例进程内 Worker，关闭时停止接单、终止解析子进程并把自有运行任务标为 `INTERRUPTED`。
 - 任务：`QUEUED/RUNNING/INTERRUPTED/COMPLETED/FAILED/CANCELLED`；`RUNNING` 使用可配置 60 秒租约，解析失败默认最多 2 次重试；不可重试错误直接最终失败。
 - 资源：Windows Job Object 默认进程内存上限 `512 MiB`，启用 `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`；创建、配置、分配失败映射为稳定 `PARSER_RESOURCE_LIMIT`，不向前端暴露 Win32 细节。

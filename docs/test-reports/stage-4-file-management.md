@@ -10,7 +10,7 @@
 
 ## 本批次结论
 
-第五批数据模型与契约收口结果为 `PASS`：Folder/Tag 乐观锁、解析失败持久字段、Alembic 迁移、OpenAPI、前端类型与冲突交互均已实现并通过自动化验证。第六批已完成持久解析 Worker、租约/恢复/重试和 Windows Job Object 资源安全收口；阶段 4 最终验收尚未执行，因此阶段和第六批结论均保持 `PARTIAL`。
+第五批数据模型与契约收口结果为 `PASS`：Folder/Tag 乐观锁、解析失败持久字段、Alembic 迁移、OpenAPI、前端类型与冲突交互均已实现并通过自动化验证。第六批已完成持久解析 Worker、租约/恢复/重试和 Windows Job Object 资源安全收口，第六批结论为 `PASS`；阶段 4 最终验收尚未执行，因此阶段结论继续保持 `PARTIAL`。
 
 ## 第六批增量收口
 
