@@ -33,7 +33,7 @@
 ## 阶段 4
 
 - 状态：`COMPLETED_WITH_PARSER_FOLLOW_UP`
-- 阶段提交：待创建 `feat: implement secure local file management`
+- 阶段提交：`bc30e1f feat: implement secure local file management`
 - 已完成：文件夹、标签、文件 CRUD；multipart 导入校验；流式 staging；SHA-256 去重；同内容复用/独立记录；TXT/Markdown 本地解析；受控文件内容与预览；回收站恢复/永久删除；文件工作台和详情页。
 - 验收证据：后端 `14 passed`、Ruff、Pyright；前端 lint/typecheck/Vitest/build；OpenAPI 3.1 导出与前端类型生成；浏览器验证 `/files` 与文件夹创建；详见 `docs/test-reports/stage-4-file-management.md`。
 - 未完成：PDF/DOCX/PPTX 解析 Adapter 与受限子进程、FTS5、知识库索引和向量链路留在阶段 5–6。

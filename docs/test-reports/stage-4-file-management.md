@@ -2,7 +2,7 @@
 
 > 阶段：`4`
 > 状态：`COMPLETED_WITH_PARSER_FOLLOW_UP`
-> 目标提交：`feat: implement secure local file management`
+> 阶段提交：`bc30e1f feat: implement secure local file management`
 > Provider：`MOCK_ONLY`
 > 真实外部请求：`DISABLED`
 

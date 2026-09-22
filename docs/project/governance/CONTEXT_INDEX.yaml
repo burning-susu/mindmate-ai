@@ -360,13 +360,13 @@ resources:
     last_verified_at: "2026-09-22"
     status: CURRENT
   - path: docs/progress/v1-development-progress.md
-    version_or_hash: BE56114E12E11A3725E6B38A61BF3D628E7F6DDA41408DA081628581D3D13905
+    version_or_hash: 3FA9C5A8A396588B4D35FCA1C35AA4AB6F0246D8E65940D800F9E811C9BF9F6B
     coverage: stage 0–4 development progress and evidence links
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
     last_verified_at: "2026-09-22"
     status: CURRENT
   - path: docs/test-reports/stage-4-file-management.md
-    version_or_hash: 9F2C69EA283A31F67CB8E097E6849BBA969D328C9949A60BD3DB74FCAC01B002
+    version_or_hash: 86BFF1EBE4568A165EE2CF1D63D407C39555C87330F1554CBE7E2E241B8E308D
     coverage: stage 4 file-management verification, browser evidence and parser follow-up
     summary_path: docs/project/governance/context-summaries/governance-v3.2.4-and-project-state.md
     last_verified_at: "2026-09-22"
