@@ -237,8 +237,9 @@ def test_windows_job_object_smoke_does_not_exhaust_memory() -> None:
     try:
         assert job.supported is True
         job.assign(process)
-        process.terminate()
+        job.close()
         process.wait(timeout=3)
+        assert process.poll() is not None
     finally:
         if process.poll() is None:
             process.kill()

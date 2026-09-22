@@ -171,6 +171,7 @@ def test_folder_tag_trash_restore_and_purge(file_client) -> None:
     assert client.get(f"/api/v1/files/{file_id}").json()["folder_id"] == folder_id
     assert client.get("/api/v1/files?q=重要").json()["items"][0]["file_id"] == file_id
 
+    wait_for_file(client, file_id, {"PARSED"})
     current_version = client.get(f"/api/v1/files/{file_id}").json()["row_version"]
     trashed = client.delete(
         f"/api/v1/files/{file_id}",
