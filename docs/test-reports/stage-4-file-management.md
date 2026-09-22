@@ -10,7 +10,17 @@
 
 ## 本批次结论
 
-第五批数据模型与契约收口结果为 `PASS`：Folder/Tag 乐观锁、解析失败持久字段、Alembic 迁移、OpenAPI、前端类型与冲突交互均已实现并通过自动化验证。阶段 4 因持久解析 Worker、Windows Job Object 和最终验收尚未完成，继续保持 `PARTIAL`。
+第五批数据模型与契约收口结果为 `PASS`：Folder/Tag 乐观锁、解析失败持久字段、Alembic 迁移、OpenAPI、前端类型与冲突交互均已实现并通过自动化验证。第六批已完成持久解析 Worker、租约/恢复/重试和 Windows Job Object 资源安全收口；阶段 4 最终验收尚未执行，因此阶段和第六批结论均保持 `PARTIAL`。
+
+## 第六批增量收口
+
+- 导入和重新处理在文件记录与任务提交后立即返回，不再在 HTTP 请求内等待 PDF、DOCX、PPTX、TXT 或 Markdown 的完整解析。
+- 复用现有 `BackgroundTask`，任务类型为 `FILE_IMPORT` / `FILE_REPROCESS`；任务状态使用 `QUEUED`、`RUNNING`、`INTERRUPTED`、`COMPLETED`、`FAILED`、`CANCELLED`，重复文件的导入决策继续使用 `BLOCKED`。
+- `claim_task` 使用带状态和租约条件的单条原子 `UPDATE`；默认租约 60 秒，过期运行任务可恢复，Worker 退出时停止接单并中断自有运行任务。
+- 同一文件存在 `BLOCKED/QUEUED/RUNNING/INTERRUPTED` 解析任务时不会重复排队；成功任务不会重新执行。结果发布前后校验文件未删除、内容对象仍为 `READY` 且 SHA-256 未变化，旧任务结果不会覆盖新状态。
+- 默认最多 2 次解析重试；`PARSER_TIMEOUT`、`PARSER_FAILED`、`PARSER_OUTPUT_INVALID`、`PARSER_RESOURCE_LIMIT` 可有限重试，格式/编码等确定性错误不重试；`parse_retry_count` 只累计真实重试，成功后保留累计次数并清除失败字段。
+- Windows 解析子进程使用 Job Object，设置 `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` 和进程内存硬限制，默认 `512 MiB`；Handle 确定性关闭，创建/配置/分配失败映射为稳定 `PARSER_RESOURCE_LIMIT`。非 Windows 路径明确标记为兼容实现，不宣称硬限制。
+- 新增 `GET /api/v1/tasks/{task_id}`；OpenAPI 3.1 和前端生成类型同步为 `25 schemas / 38 operations`，文件列表/详情对 `QUEUED/PARSING` 状态轮询。
 
 ## 已实现并验证
 
@@ -30,7 +40,7 @@
 - FileRecord 持久化 `parse_failure_stage`、`parse_error_id` 和 `parse_retry_count`；解析失败信息脱敏，成功重试清除失败状态但保留累计次数。
 - 前端保存并传递 Folder/Tag 版本；成功后使用后端最新版本；收到 `412` 时提示重新加载且不自动覆盖。
 
-## 自动化证据
+## 第五批基线自动化证据
 
 ```text
 backend\> uv run pytest
@@ -75,6 +85,49 @@ frontend\> npm run test:e2e -- --grep "stage 4 file lifecycle"
 1 passed
 ```
 
+## 第六批自动化证据
+
+```text
+backend> uv run pytest
+30 passed
+
+backend> uv run pytest tests/test_stage4_files.py tests/test_stage4_migration.py tests/test_stage6_parser_worker.py -q
+21 passed
+
+backend> uv run ruff check src tests
+All checks passed
+
+backend> uv run pyright
+0 errors, 0 warnings, 0 informations
+
+backend> uv run python -m compileall -q src
+通过
+
+frontend> npm run lint
+通过（ESLint + oxlint）
+
+frontend> npm run typecheck
+通过（tsc -b）
+
+frontend> npm run test
+4 test files, 7 tests passed
+
+frontend> npm run build
+Vite production build succeeded
+
+repo> .\scripts\generate-api.ps1
+OpenAPI 3.1.0 exported
+Generated 25 schemas and 38 operations
+
+backend> 空库/已有数据 Alembic upgrade、downgrade、再 upgrade + PRAGMA quick_check
+通过；最终 revision 9f3a1c7e2b40，quick_check=ok
+
+repo> git diff --check
+通过
+```
+
+Windows 当前运行平台为 Windows。Job Object 专项冒烟已实际创建 Job、设置 512 MiB 进程限制、分配受控子进程、终止并关闭 Handle；未通过真实大规模内存耗尽验证。Worker 专项测试覆盖请求提前返回、原子领取、租约恢复、健康检查不阻塞、有限重试、不可重试错误、删除/版本幂等和 Job Object 失败映射。
+
 ## 安全测试覆盖
 
 - 伪装扩展名、冲突 MIME、不可读文本、损坏 Office 包。
@@ -88,19 +141,18 @@ frontend\> npm run test:e2e -- --grep "stage 4 file lifecycle"
 - Folder/Tag 初始版本、更新递增、旧版本 `412`、最新数据不被覆盖、删除/恢复锁、`404/412` 区分。
 - 解析失败阶段、稳定错误 ID、重试次数持久化；响应不包含本地路径或堆栈；成功重试清除失败字段。
 - 空库和带现有 Folder/Tag/FileRecord 数据的上一 revision 升级、降级、再升级和 quick check。
+- Worker 退出/恢复、活跃任务去重、旧任务结果不回写、解析错误脱敏、非 Windows 兼容能力和 Windows Job Object 资源释放。
 
 ## 已知缺口与阻塞
 
-1. 解析已在隔离子进程执行并有限时、页数和输出上限，但尚未通过 Windows Job Object 对子进程施加硬内存上限。
-2. 导入和解析仍在请求生命周期内执行；持久任务记录存在，但尚未由可恢复 Worker 异步领取解析工作。该项留给第六批，不得用文档将同步实现伪装成后台完成。
-3. 文件列表状态（筛选、排序、滚动位置）在离开详情后尚未持久恢复。
-4. “批量加入知识库”依赖阶段 5 的知识库管理闭环，本批次没有提前实现知识库、FTS5、Embedding、向量或 RAG。
-5. 还未执行全部 `AC-FILE-*` 的正式发布级恶意文档集、资源耗尽和干净 Windows 安装包验收；留给第七批最终验收。
+1. 文件列表状态（筛选、排序、滚动位置）在离开详情后尚未持久恢复。
+2. “批量加入知识库”依赖阶段 5 的知识库管理闭环，本批次没有提前实现知识库、FTS5、Embedding、向量或 RAG。
+3. 还未执行全部 `AC-FILE-*` 的正式发布级恶意文档集、资源耗尽和干净 Windows 安装包验收；留给第七批最终验收。
 
 ## 下一批次
 
-第六批：阶段 4 持久解析 Worker 与资源安全收口
+第七批：阶段 4 最终验收与状态定版
 
 ## 范围声明
 
-本批次没有实现或调用真实 DeepSeek、Embedding、FTS5、sqlite-vec 索引、RAG、AI 对话或学习陪练。新增解析依赖严格使用 `15_技术架构与开发约束.md` 已冻结的 `pypdf`、`python-docx` 和 `python-pptx`。
+本批次没有实现或调用真实 DeepSeek、Embedding、FTS5、sqlite-vec 索引、RAG、AI 对话或学习陪练；没有新增数据库迁移，继续使用 `9f3a1c7e2b40`。解析依赖严格使用 `15_技术架构与开发约束.md` 已冻结的 `pypdf`、`python-docx` 和 `python-pptx`。
