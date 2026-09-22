@@ -5,9 +5,9 @@ from __future__ import annotations
 import json
 import mimetypes
 from collections.abc import Iterator
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
@@ -28,6 +28,7 @@ from mindmate.application.files import (
     delete_parsed_text,
     document_spec,
     normalize_name,
+    parse_document_in_subprocess,
     parse_local_text,
     promote_staged_file,
     read_parsed_text,
@@ -35,6 +36,8 @@ from mindmate.application.files import (
     sanitize_display_name,
     utc_now,
     validate_file_format,
+    validate_managed_content_path,
+    validate_upload_mime,
     write_parsed_text,
 )
 from mindmate.application.tasks import add_event, cancel_task, create_task
@@ -331,7 +334,7 @@ def _create_record_from_content(
     folder_id: str | None,
     tag_ids: list[str],
     knowledge_base_id: str | None,
-) -> FileRecord:
+) -> tuple[FileRecord, str | None]:
     file_id = new_id()
     display_name = _unique_display_name(session, original_name, folder_id)
     record = FileRecord(
@@ -350,18 +353,34 @@ def _create_record_from_content(
         updated_at=utc_now(),
         row_version=1,
     )
-    if document_type in {"TXT", "MARKDOWN"}:
-        source = resolve_storage_path(settings, content.storage_relative_path)
-        text, metadata = parse_local_text(source)
-        write_parsed_text(settings, file_id, content.sha256, text, metadata)
+    parse_error: str | None = None
+    source = resolve_storage_path(settings, content.storage_relative_path)
+    try:
+        if document_type in {"TXT", "MARKDOWN"}:
+            text, metadata = parse_local_text(source)
+            write_parsed_text(settings, file_id, content.sha256, text, metadata)
+        else:
+            parsed = parse_document_in_subprocess(source, document_type)
+            write_parsed_text(
+                settings,
+                file_id,
+                content.sha256,
+                str(parsed["text"]),
+                cast(dict[str, object], parsed["metadata"]),
+                parser=f"isolated-{document_type.casefold()}-v1",
+                locations=cast(list[dict[str, object]], parsed["locations"]),
+            )
         record.status = "PARSED"
         record.parse_revision_id = new_id()
+    except FileValidationError as exc:
+        record.status = "PARSE_FAILED"
+        parse_error = exc.detail
     content.reference_count += 1
     session.add(record)
     session.flush()
     _attach_tags(session, file_id, tag_ids)
     _attach_knowledge_base(session, file_id, knowledge_base_id)
-    return record
+    return record, parse_error
 
 
 def _promote_new_content(
@@ -469,6 +488,7 @@ async def create_file_import(
         try:
             safe_name = sanitize_display_name(upload.filename or "")
             spec = document_spec(safe_name)
+            validate_upload_mime(spec, upload.content_type)
             staged = _safe_staging_path(settings, task.task_id, index)
             size, digest, header = copy_stream_to_staging(upload.file, staged)
             total_bytes += size
@@ -519,7 +539,7 @@ async def create_file_import(
                 spec.extension,
                 spec.mime_type,
             )
-            record = _create_record_from_content(
+            record, parse_error = _create_record_from_content(
                 session,
                 settings,
                 content,
@@ -530,7 +550,14 @@ async def create_file_import(
                 tag_id_list,
                 knowledge_base_id,
             )
-            item.update({"status": "IMPORTED", "file_id": record.file_id})
+            item.update(
+                {
+                    "status": "IMPORTED",
+                    "file_id": record.file_id,
+                    "parse_status": record.status,
+                    "parse_error": parse_error,
+                }
+            )
         except FileValidationError as exc:
             item["error"] = exc.detail
             item["error_code"] = exc.code
@@ -614,7 +641,7 @@ def decide_duplicates(
             )
         elif decision == "CREATE_SEPARATE_RECORD":
             spec = document_spec(str(item["original_name"]))
-            record = _create_record_from_content(
+            record, parse_error = _create_record_from_content(
                 session,
                 settings,
                 content,
@@ -630,6 +657,8 @@ def decide_duplicates(
                     "status": "IMPORTED",
                     "duplicate_status": "SEPARATE_RECORD",
                     "file_id": record.file_id,
+                    "parse_status": record.status,
+                    "parse_error": parse_error,
                 }
             )
         else:
@@ -673,6 +702,9 @@ def list_files(
     tag_id: str | None = None,
     document_type: str | None = None,
     status: str | None = None,
+    knowledge_base_id: str | None = None,
+    created_from: datetime | None = None,
+    created_to: datetime | None = None,
     include_deleted: bool = False,
     sort: str = Query(default="updated_at"),
     cursor: str | None = None,
@@ -687,15 +719,34 @@ def list_files(
         query = query.where(FileRecord.document_type == document_type.upper())
     if status:
         query = query.where(FileRecord.status == status.upper())
+    if knowledge_base_id:
+        query = query.join(
+            KnowledgeBaseFile, KnowledgeBaseFile.file_id == FileRecord.file_id
+        ).where(
+            KnowledgeBaseFile.knowledge_base_id == knowledge_base_id,
+            KnowledgeBaseFile.membership_status == "ACTIVE",
+        )
+    if created_from:
+        query = query.where(FileRecord.created_at >= created_from)
+    if created_to:
+        query = query.where(FileRecord.created_at <= created_to)
     if tag_id:
         query = query.join(FileTag, FileTag.file_id == FileRecord.file_id).where(
             FileTag.tag_id == tag_id
         )
     if q:
         pattern = f"%{q.strip().casefold()}%"
+        normalized_query = q.strip().casefold()
+        parsed_match_ids = [
+            record.file_id
+            for record in session.scalars(select(FileRecord))
+            if normalized_query
+            in str((read_parsed_text(settings, record.file_id) or {}).get("text", "")).casefold()
+        ]
         query = query.where(
             or_(
                 func.lower(FileRecord.display_name).like(pattern),
+                FileRecord.file_id.in_(parsed_match_ids),
                 exists(
                     select(FileTag.file_tag_id)
                     .join(Tag, Tag.tag_id == FileTag.tag_id)
@@ -802,7 +853,10 @@ def _record_content_path(session: Session, settings: Settings, record: FileRecor
     content = session.get(ContentObject, record.content_object_id)
     if content is None or content.storage_state != "READY":
         raise FileApiError("FILE_CONTENT_UNAVAILABLE", "文件内容不可用。", 409)
-    path = resolve_storage_path(settings, content.storage_relative_path)
+    try:
+        path = validate_managed_content_path(settings, content.storage_relative_path)
+    except FileValidationError as exc:
+        raise FileApiError(exc.code, exc.detail, 409) from exc
     if not path.is_file():
         record.status = "STORAGE_MISSING"
         raise FileApiError("FILE_CONTENT_MISSING", "应用管理的文件副本不存在。", 409)
@@ -918,18 +972,33 @@ def reprocess_file(
         {"file_id": file_id, "status": "QUEUED"},
     )
     content_path = _record_content_path(session, settings, record)
-    if record.document_type in {"TXT", "MARKDOWN"}:
-        text, metadata = parse_local_text(content_path)
-        write_parsed_text(settings, file_id, record.content_hash, text, metadata)
+    try:
+        if record.document_type in {"TXT", "MARKDOWN"}:
+            text, metadata = parse_local_text(content_path)
+            write_parsed_text(settings, file_id, record.content_hash, text, metadata)
+        else:
+            parsed = parse_document_in_subprocess(content_path, record.document_type)
+            write_parsed_text(
+                settings,
+                file_id,
+                record.content_hash,
+                str(parsed["text"]),
+                cast(dict[str, object], parsed["metadata"]),
+                parser=f"isolated-{record.document_type.casefold()}-v1",
+                locations=cast(list[dict[str, object]], parsed["locations"]),
+            )
         record.status = "PARSED"
         record.parse_revision_id = new_id()
         task.status = "COMPLETED"
         task.phase = "COMPLETED"
         task.progress = 100
         task.completed_at = utc_now()
-    else:
-        task.status = "QUEUED"
-        task.phase = "PARSER_PENDING"
+    except FileValidationError as exc:
+        record.status = "PARSE_FAILED"
+        task.status = "FAILED"
+        task.phase = "PARSING"
+        task.error_summary = exc.detail
+        task.completed_at = utc_now()
     record.row_version += 1
     session.commit()
     return {"task_id": task.task_id, "file": _file_payload(session, settings, record)}
@@ -941,7 +1010,7 @@ def batch_file_action(
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
-    if payload.action == "MOVE" and payload.folder_id is None:
+    if payload.action == "MOVE" and "folder_id" not in payload.model_fields_set:
         raise FileApiError("FOLDER_REQUIRED", "移动文件需要目标文件夹。")
     if payload.action in {"ADD_TAG", "REMOVE_TAG"} and payload.tag_id is None:
         raise FileApiError("TAG_REQUIRED", "标签操作需要标签。")
@@ -955,6 +1024,12 @@ def batch_file_action(
             record = _get_file_or_404(session, file_id)
             if payload.action == "MOVE":
                 record.folder_id = payload.folder_id
+                record.display_name = _unique_display_name(
+                    session,
+                    record.display_name,
+                    record.folder_id,
+                    exclude_file_id=record.file_id,
+                )
                 record.row_version += 1
             elif payload.action == "ADD_TAG":
                 if (
@@ -983,7 +1058,35 @@ def batch_file_action(
                 record.status = "IN_TRASH"
                 record.row_version += 1
             elif payload.action == "REPROCESS":
-                record.status = "PARSING"
+                if record.deleted_at is not None:
+                    raise FileApiError("FILE_IN_TRASH", "回收站中的文件不能重新处理。", 409)
+                content_path = _record_content_path(session, settings, record)
+                try:
+                    if record.document_type in {"TXT", "MARKDOWN"}:
+                        text, metadata = parse_local_text(content_path)
+                        write_parsed_text(
+                            settings, record.file_id, record.content_hash, text, metadata
+                        )
+                    else:
+                        parsed = parse_document_in_subprocess(
+                            content_path, record.document_type
+                        )
+                        write_parsed_text(
+                            settings,
+                            record.file_id,
+                            record.content_hash,
+                            str(parsed["text"]),
+                            cast(dict[str, object], parsed["metadata"]),
+                            parser=f"isolated-{record.document_type.casefold()}-v1",
+                            locations=cast(
+                                list[dict[str, object]], parsed["locations"]
+                            ),
+                        )
+                    record.status = "PARSED"
+                    record.parse_revision_id = new_id()
+                except FileValidationError as exc:
+                    record.status = "PARSE_FAILED"
+                    raise FileApiError(exc.code, exc.detail, 409) from exc
                 record.row_version += 1
             else:
                 raise FileApiError("BATCH_ACTION_INVALID", "批量操作类型无效。")
@@ -1051,8 +1154,12 @@ def patch_folder(
     if folder is None or folder.deleted_at is not None:
         raise FileApiError("FOLDER_NOT_FOUND", "文件夹不存在。", 404)
     _assert_row_version(1, payload.row_version)
+    if payload.name is None:
+        raise FileApiError("FOLDER_PATCH_EMPTY", "至少提供一个需要更新的字段。")
     if payload.name is not None:
         name = " ".join(payload.name.strip().split())
+        if not name:
+            raise FileApiError("FOLDER_NAME_INVALID", "文件夹名称不能为空。")
         normalized = normalize_name(name)
         if session.scalar(
             select(Folder).where(
@@ -1078,11 +1185,15 @@ def _folder_descendants(
         query = query.where(Folder.deleted_at.is_(None))
     all_folders = list(session.scalars(query))
     descendants: list[Folder] = []
+    visited = {folder_id}
     queue = [folder_id]
     while queue:
         current = queue.pop()
         for folder in all_folders:
             if folder.parent_folder_id == current:
+                if folder.folder_id in visited:
+                    raise FileApiError("FOLDER_TREE_INVALID", "文件夹层级存在循环。", 409)
+                visited.add(folder.folder_id)
                 descendants.append(folder)
                 queue.append(folder.folder_id)
     return descendants
@@ -1115,6 +1226,15 @@ def move_folder(
     descendants = {item.folder_id for item in _folder_descendants(session, folder_id)}
     if payload.parent_folder_id in descendants:
         raise FileApiError("FOLDER_TREE_INVALID", "文件夹不能移动到自己的子目录。")
+    if session.scalar(
+        select(Folder).where(
+            Folder.parent_folder_id == payload.parent_folder_id,
+            Folder.normalized_name == normalize_name(folder.name),
+            Folder.folder_id != folder_id,
+            Folder.deleted_at.is_(None),
+        )
+    ):
+        raise FileApiError("FOLDER_NAME_CONFLICT", "目标目录已有同名文件夹。", 409)
     if (
         _folder_depth(session, payload.parent_folder_id)
         + 1
@@ -1141,7 +1261,12 @@ def delete_folder(
     if deletion_strategy not in {"MOVE_CHILDREN", "TRASH_RECURSIVE"}:
         raise FileApiError("DELETION_STRATEGY_INVALID", "文件夹删除策略无效。")
     if deletion_strategy == "MOVE_CHILDREN":
-        for item in children:
+        for item in session.scalars(
+            select(Folder).where(
+                Folder.parent_folder_id == folder_id,
+                Folder.deleted_at.is_(None),
+            )
+        ):
             item.parent_folder_id = folder.parent_folder_id
             item.updated_at = utc_now()
         session.query(FileRecord).filter(FileRecord.folder_id == folder_id).update(
@@ -1160,6 +1285,7 @@ def delete_folder(
                 FileRecord.deleted_at: now,
                 FileRecord.purge_after: now + timedelta(days=30),
                 FileRecord.status: "IN_TRASH",
+                FileRecord.row_version: FileRecord.row_version + 1,
             },
             synchronize_session=False,
         )
@@ -1204,8 +1330,12 @@ def patch_tag(
     tag = session.get(Tag, tag_id)
     if tag is None:
         raise FileApiError("TAG_NOT_FOUND", "标签不存在。", 404)
+    if not payload.model_fields_set:
+        raise FileApiError("TAG_PATCH_EMPTY", "至少提供一个需要更新的字段。")
     if payload.name is not None:
         name = " ".join(payload.name.strip().split())
+        if not name:
+            raise FileApiError("TAG_NAME_INVALID", "标签名称不能为空。")
         normalized = normalize_name(name)
         other = session.scalar(
             select(Tag).where(Tag.normalized_name == normalized, Tag.tag_id != tag_id)
@@ -1214,7 +1344,7 @@ def patch_tag(
             raise FileApiError("TAG_NAME_CONFLICT", "标签名称已存在。", 409)
         tag.name = name
         tag.normalized_name = normalized
-    if payload.color is not None:
+    if "color" in payload.model_fields_set:
         tag.color = payload.color
     tag.updated_at = utc_now()
     session.commit()
@@ -1311,11 +1441,17 @@ def restore_trash(
         if folder is None or folder.deleted_at is None:
             raise FileApiError("FOLDER_NOT_FOUND", "回收站中的文件夹不存在。", 404)
         now = utc_now()
-        related_folders = [
-            folder,
-            *_folder_descendants(session, object_id, include_deleted=True),
-        ]
+        related_folders = [folder]
+        related_folders.extend(
+            item
+            for item in _folder_descendants(session, object_id, include_deleted=True)
+            if item.deleted_at is not None
+        )
         folder_ids = [item.folder_id for item in related_folders]
+        if folder.parent_folder_id:
+            parent = session.get(Folder, folder.parent_folder_id)
+            if parent is None or parent.deleted_at is not None:
+                folder.parent_folder_id = None
         for item in related_folders:
             item.deleted_at = None
             item.purge_after = None
@@ -1370,7 +1506,12 @@ def purge_trash(
         folder = session.get(Folder, object_id)
         if folder is None or folder.deleted_at is None:
             raise FileApiError("FOLDER_NOT_IN_TRASH", "只有回收站中的文件夹才能永久删除。", 409)
-        folders = [folder, *_folder_descendants(session, object_id, include_deleted=True)]
+        folders = [folder]
+        folders.extend(
+            item
+            for item in _folder_descendants(session, object_id, include_deleted=True)
+            if item.deleted_at is not None
+        )
         folder_ids = [item.folder_id for item in folders]
         records = list(session.scalars(select(FileRecord).where(FileRecord.folder_id.in_(folder_ids))))
         contents: dict[str, ContentObject] = {}

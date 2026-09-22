@@ -5,9 +5,11 @@ import hashlib
 import json
 import os
 import re
+import subprocess
+import sys
 import tempfile
 import zipfile
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -20,6 +22,11 @@ MAX_FILE_COUNT = 20
 MAX_BATCH_SIZE = 500 * 1024 * 1024
 MAX_FOLDER_DEPTH = 5
 MAX_FILE_TAGS = 10
+MAX_ARCHIVE_ENTRIES = 10_000
+MAX_ARCHIVE_EXPANDED_SIZE = 200 * 1024 * 1024
+MAX_ARCHIVE_COMPRESSION_RATIO = 100
+MAX_PARSED_OUTPUT_SIZE = 20 * 1024 * 1024
+PARSER_TIMEOUT_SECONDS = 30
 
 
 @dataclass(frozen=True)
@@ -125,6 +132,15 @@ def copy_stream_to_staging(source: BinaryIO, destination: Path) -> tuple[int, st
 def _zip_package_kind(path: Path) -> str | None:
     try:
         with zipfile.ZipFile(path) as archive:
+            entries = archive.infolist()
+            if len(entries) > MAX_ARCHIVE_ENTRIES:
+                return None
+            expanded_size = sum(entry.file_size for entry in entries)
+            compressed_size = sum(max(1, entry.compress_size) for entry in entries)
+            if expanded_size > MAX_ARCHIVE_EXPANDED_SIZE:
+                return None
+            if expanded_size > compressed_size * MAX_ARCHIVE_COMPRESSION_RATIO:
+                return None
             names = {name.replace("\\", "/") for name in archive.namelist()}
             if "[Content_Types].xml" not in names:
                 return None
@@ -165,11 +181,41 @@ def validate_file_format(path: Path, spec: DocumentSpec, header: bytes) -> None:
         raise FileValidationError("FILE_SIGNATURE_INVALID", "文本文件无法按受支持的编码读取。")
 
 
+def validate_upload_mime(spec: DocumentSpec, supplied_mime: str | None) -> None:
+    if not supplied_mime or supplied_mime == "application/octet-stream":
+        return
+    aliases = {
+        "TXT": {"text/plain"},
+        "MARKDOWN": {"text/markdown", "text/plain", "text/x-markdown"},
+        "PDF": {"application/pdf"},
+        "DOCX": {spec.mime_type},
+        "PPTX": {spec.mime_type},
+    }
+    if supplied_mime.casefold() not in aliases[spec.document_type]:
+        raise FileValidationError("FILE_MIME_INVALID", "文件 MIME 类型与扩展名不匹配。")
+
+
 def resolve_storage_path(settings: Settings, relative_path: str) -> Path:
     root = settings.resolved_data_dir.resolve()
     path = (root / relative_path).resolve()
     if path != root and root not in path.parents:
         raise FileValidationError("STORAGE_PATH_INVALID", "受控文件路径无效。")
+    return path
+
+
+def validate_managed_content_path(settings: Settings, relative_path: str) -> Path:
+    root = settings.resolved_data_dir.resolve()
+    candidate = root
+    for part in Path(relative_path).parts:
+        candidate /= part
+        if candidate.exists() and (
+            candidate.is_symlink()
+            or (hasattr(os.path, "isjunction") and os.path.isjunction(candidate))
+        ):
+            raise FileValidationError("STORAGE_PATH_INVALID", "受控文件路径包含链接或重解析点。")
+    path = resolve_storage_path(settings, relative_path)
+    if path.exists() and path.stat().st_nlink > 1:
+        raise FileValidationError("STORAGE_PATH_INVALID", "受控文件不允许使用硬链接。")
     return path
 
 
@@ -205,16 +251,24 @@ def parse_local_text(path: Path) -> tuple[str, dict[str, int]]:
 
 
 def write_parsed_text(
-    settings: Settings, file_id: str, content_hash: str, text: str, metadata: dict[str, int]
+    settings: Settings,
+    file_id: str,
+    content_hash: str,
+    text: str,
+    metadata: Mapping[str, object],
+    *,
+    parser: str = "local-text-v1",
+    locations: list[dict[str, object]] | None = None,
 ) -> None:
     destination = resolve_storage_path(settings, parsed_relative_path(file_id))
     destination.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "file_id": file_id,
         "content_hash": content_hash,
-        "parser": "local-text-v1",
+        "parser": parser,
         "parsed_at": utc_now().isoformat(),
         "metadata": metadata,
+        "locations": locations or [],
         "text": text,
     }
     with tempfile.NamedTemporaryFile(
@@ -223,6 +277,41 @@ def write_parsed_text(
         temporary = Path(handle.name)
         json.dump(payload, handle, ensure_ascii=False)
     os.replace(temporary, destination)
+
+
+def parse_document_in_subprocess(path: Path, document_type: str) -> dict[str, object]:
+    worker = Path(__file__).with_name("parser_worker.py")
+    with tempfile.TemporaryDirectory(prefix="mindmate-parser-") as temporary_value:
+        temporary = Path(temporary_value)
+        output = temporary / "result.json"
+        try:
+            result = subprocess.run(
+                [sys.executable, "-I", str(worker), document_type, str(path), str(output)],
+                cwd=temporary,
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                check=False,
+                timeout=PARSER_TIMEOUT_SECONDS,
+                env={"SystemRoot": os.environ.get("SystemRoot", ""), "TEMP": str(temporary), "TMP": str(temporary)},
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise FileValidationError("PARSER_TIMEOUT", "文件解析超时，已安全终止。") from exc
+        if result.returncode != 0:
+            detail = result.stderr.decode("utf-8", errors="replace").strip()[:300]
+            raise FileValidationError("PARSER_FAILED", detail or "文件解析失败。")
+        if not output.is_file() or output.stat().st_size > MAX_PARSED_OUTPUT_SIZE:
+            raise FileValidationError("PARSER_OUTPUT_INVALID", "解析结果不存在或超过安全上限。")
+        try:
+            payload = json.loads(output.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise FileValidationError("PARSER_OUTPUT_INVALID", "解析结果格式无效。") from exc
+    if not isinstance(payload, dict) or not isinstance(payload.get("text"), str):
+        raise FileValidationError("PARSER_OUTPUT_INVALID", "解析结果缺少文本。")
+    metadata = payload.get("metadata")
+    locations = payload.get("locations")
+    if not isinstance(metadata, dict) or not isinstance(locations, list):
+        raise FileValidationError("PARSER_OUTPUT_INVALID", "解析结果缺少元数据或定位信息。")
+    return payload
 
 
 def read_parsed_text(settings: Settings, file_id: str) -> dict[str, object] | None:
