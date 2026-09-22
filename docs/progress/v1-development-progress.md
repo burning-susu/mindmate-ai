@@ -32,11 +32,14 @@
 
 ## 阶段 4
 
-- 状态：`COMPLETED_WITH_PARSER_FOLLOW_UP`
+- 状态：`PARTIAL`
 - 阶段提交：`bc30e1f feat: implement secure local file management`
-- 已完成：文件夹、标签、文件 CRUD；multipart 导入校验；流式 staging；SHA-256 去重；同内容复用/独立记录；TXT/Markdown 本地解析；受控文件内容与预览；回收站恢复/永久删除；文件工作台和详情页。
-- 验收证据：后端 `14 passed`、Ruff、Pyright；前端 lint/typecheck/Vitest/build；OpenAPI 3.1 导出与前端类型生成；浏览器验证 `/files` 与文件夹创建；详见 `docs/test-reports/stage-4-file-management.md`。
-- 未完成：PDF/DOCX/PPTX 解析 Adapter 与受限子进程、FTS5、知识库索引和向量链路留在阶段 5–6。
+- 收口审计起点：`9e0174a docs: record stage 4 file management evidence`
+- 收口修复提交：`3b29d22 fix: close stage 4 file management gaps`
+- 已完成：文件夹、标签、文件 CRUD；multipart 导入校验；流式 staging；SHA-256 去重；同内容复用/独立记录；TXT/Markdown 解析；PDF/DOCX/PPTX 隔离子进程解析；正文搜索；受控内容读取；递归回收站恢复/永久删除；嵌套目录、筛选、批量操作、详情编辑和文件夹回收站前端。
+- 验收证据：后端 `19 passed`（阶段 4 `10 passed`）、Ruff、Pyright；前端 lint/typecheck、Vitest `4 passed`、build；Playwright 生命周期 `1 passed`；OpenAPI 3.1 与前端类型同步；迁移往返和 SQLite quick check 通过。详见 `docs/test-reports/stage-4-file-management.md`。
+- 阻塞：Folder/Tag 乐观锁和文件解析错误持久字段需要数据库迁移；解析子进程尚缺 Windows 硬内存限制，解析任务尚未由持久 Worker 异步领取；列表状态恢复和正式恶意文档/干净 Windows 验收未完成。
+- 后续边界：FTS5、知识库索引、Embedding、向量与 RAG 仍属于阶段 5–6，本批次未提前实现。
 
 ## 进度口径
 
