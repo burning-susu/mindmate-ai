@@ -18,6 +18,22 @@ build/
 .cache/
 coverage/
 *.tsbuildinfo
+frontend/.playwright/
+frontend/test-results/
+frontend/playwright-report/
+frontend/coverage/
+backend/.venv/
+backend/.pytest_cache/
+backend/.mypy_cache/
+backend/.ruff_cache/
+backend/.pyright/
+backend/*.db
+backend/*.sqlite*
+backend/dist/
+backend/build/
+packaging/dist/
+packaging/build/
+docs/test-reports/generated/
 
 # Java / Spring Boot
 target/
@@ -83,4 +99,3 @@ allure-report/
 
 # Local Docker overrides
 docker-compose.override.yml
-

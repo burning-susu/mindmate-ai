@@ -42,3 +42,11 @@ Windows PowerShell 等价脚本位于 `scripts/`。完成阶段 0 后使用：
 ```
 
 具体命令和阶段验收以 [`16_Codex开发任务书.md`](docs/project/requirements/v1/16_Codex开发任务书.md) 为准。
+
+阶段 0 的本地启动方式：
+
+```powershell
+.\scripts\dev.ps1
+```
+
+前端默认运行在 `http://127.0.0.1:5173`，本地 API 默认运行在 `http://127.0.0.1:8000`。阶段 0 只提供健康检查和应用壳，不代表业务闭环已完成。
