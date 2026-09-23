@@ -1,8 +1,9 @@
 # 阶段 4：文件管理收口审计报告
 
 > 阶段：`4`
-> 审计日期：`2026-09-22`
-> 结论：`PARTIAL`
+> 审计日期：`2026-09-23`
+> 第七批结论：`PASS`
+> 阶段 4 最终状态：`PASS`
 > 分支：`feat/v1-bootstrap`
 > 第五批起点：`0448d5bd8cf81609d48da228b1c45166f648c9d5`
 > Provider：`MOCK_ONLY`
@@ -10,7 +11,7 @@
 
 ## 本批次结论
 
-第五批数据模型与契约收口结果为 `PASS`：Folder/Tag 乐观锁、解析失败持久字段、Alembic 迁移、OpenAPI、前端类型与冲突交互均已实现并通过自动化验证。第六批已完成持久解析 Worker、租约/恢复/重试和 Windows Job Object 资源安全收口，第六批结论为 `PASS`；阶段 4 最终验收尚未执行，因此阶段结论继续保持 `PARTIAL`。
+第五批数据模型与契约收口结果为 `PASS`，第六批持久解析 Worker、租约/恢复/重试和 Windows Job Object 资源安全收口结果为 `PASS`。第七批补齐列表状态恢复和返回前列表刷新，完成阶段 4 逐项追踪及最终门禁复核；阶段 4 必须项均有可重复证据，最终状态定版为 `PASS`。
 
 ## 第六批增量收口
 
@@ -39,6 +40,34 @@
 - Folder/Tag 使用真实数据库 `row_version`；修改、移动、删除、恢复通过单条带版本条件的 SQL 原子更新，版本冲突返回统一 `412 RESOURCE_VERSION_CONFLICT`，不存在记录返回 `404`。
 - FileRecord 持久化 `parse_failure_stage`、`parse_error_id` 和 `parse_retry_count`；解析失败信息脱敏，成功重试清除失败状态但保留累计次数。
 - 前端保存并传递 Folder/Tag 版本；成功后使用后端最新版本；收到 `412` 时提示重新加载且不自动覆盖。
+
+## 第七批需求追踪与最终结论
+
+阶段 4 必须验收项共 `19` 项，已通过 `19` 项，未通过 `0` 项。下表把需求/验收项、实现位置和可重复证据绑定在一起；发布候选门禁不计入阶段 4 未通过项，单独列于本报告末尾。
+
+| ID | 验收项 | 实现位置 | 测试证据 | 结论 |
+| --- | --- | --- | --- | --- |
+| S4-01 | 五类格式导入、托管复制、异步任务 | `backend/src/mindmate/api/files.py`、`application/parser_worker.py` | `test_stage4_files.py`、后端 30 tests、Playwright | PASS |
+| S4-02 | 50 MB/20 个/500 MB 限制与部分成功 | `backend/src/mindmate/api/files.py` | `test_stage4_files.py` 边界场景 | PASS |
+| S4-03 | SHA-256 去重、三种决策与幂等 | `backend/src/mindmate/api/files.py` | `test_stage4_files.py` 重复/幂等场景 | PASS |
+| S4-04 | 文件夹、标签、目录树和树约束 | `backend/src/mindmate/api/files.py`、`frontend/src/pages/FilesPage.tsx` | `test_stage4_files.py`、组件测试 | PASS |
+| S4-05 | 搜索、筛选、排序、游标分页 | `backend/src/mindmate/api/files.py`、`FilesPage.tsx` | `test_stage4_files.py`、组件测试 | PASS |
+| S4-06 | 详情返回保留筛选/排序/滚动状态 | `frontend/src/pages/FilesPage.tsx`、`FileDetailPage.tsx` | `stage4-files.test.tsx` 状态恢复回归 | PASS |
+| S4-07 | 批量移动、标签、重新处理和删除 | `backend/src/mindmate/api/files.py`、`FilesPage.tsx` | `test_stage4_files.py` | PASS |
+| S4-08 | 文件详情、解析文本预览和受控内容读取 | `FileDetailPage.tsx`、`backend/src/mindmate/api/files.py` | `test_stage4_files.py`、Playwright | PASS |
+| S4-09 | 解析 Adapter、隔离子进程和限制 | `backend/src/mindmate/application/parser_worker.py`、`resource_limits.py` | `test_stage4_files.py`、Worker 专项 | PASS |
+| S4-10 | 失败阶段、稳定错误 ID、重试次数 | `FileRecord`、`parser_worker.py`、`FileDetailPage.tsx` | `test_stage4_files.py`、组件测试 | PASS |
+| S4-11 | 文件软删除、恢复和永久删除 | `backend/src/mindmate/api/files.py`、`TrashPage.tsx` | 文件生命周期测试、Playwright | PASS |
+| S4-12 | 文件夹递归删除、恢复和永久删除 | `backend/src/mindmate/api/files.py` | `test_stage4_files.py` | PASS |
+| S4-13 | `row_version`/412 乐观并发控制 | `backend/src/mindmate/api/files.py`、`files.ts` | `test_stage4_files.py`、组件冲突测试 | PASS |
+| S4-14 | 持久任务、租约、重试、取消和重启恢复 | `application/tasks.py`、`parse_worker_service.py` | `test_stage6_parser_worker.py` | PASS |
+| S4-15 | Windows Job Object、资源映射和确定性清理 | `backend/src/mindmate/application/resource_limits.py` | Worker/Job Object 专项冒烟 | PASS（受控边界） |
+| S4-16 | 路径安全、外链不访问、日志脱敏、Mock Provider | `backend/src/mindmate/security`、解析器和配置 | 安全场景、Worker 错误脱敏测试 | PASS（受控边界） |
+| S4-17 | OpenAPI 3.1 与前端生成类型无漂移 | `docs/openapi/openapi.json`、`frontend/src/api/generated/openapi.ts` | `generate-api.ps1`、25 schemas/38 operations | PASS |
+| S4-18 | 空库/已有数据迁移往返与 SQLite 完整性 | `backend/migrations/versions/9f3a1c7e2b40*` | `test_stage4_migration.py`、`PRAGMA quick_check=ok` | PASS |
+| S4-19 | 文件生命周期浏览器 E2E | `frontend/e2e/stage4-files.spec.ts` | Playwright `1 passed`（真实后端） | PASS |
+
+阶段 4 不包含知识库 CRUD、FTS5、Embedding、向量索引或 RAG；“批量加入知识库”按 `16_Codex开发任务书.md` 的阶段 5 边界保留，不计入阶段 4 未通过项。
 
 ## 第五批基线自动化证据
 
@@ -126,6 +155,51 @@ repo> git diff --check
 通过
 ```
 
+## 第七批最终验证证据
+
+```text
+backend> uv run pytest
+30 passed（30 warnings，均为依赖弃用提示）
+
+backend> uv run pytest tests/test_stage4_files.py tests/test_stage4_migration.py tests/test_stage6_parser_worker.py --disable-warnings -ra
+21 passed, 24 warnings
+
+backend> uv run ruff check src tests
+All checks passed!
+
+backend> uv run pyright
+0 errors, 0 warnings, 0 informations
+
+backend> uv run python -m compileall -q src
+通过
+
+frontend> npm run lint
+通过（ESLint + oxlint）
+
+frontend> npm run typecheck
+通过（tsc -b）
+
+frontend> npm run test
+4 test files, 8 tests passed
+
+frontend> npm run build
+Vite production build succeeded
+
+repo> .\scripts\generate-api.ps1
+OpenAPI 3.1.0 exported；Generated 25 schemas and 38 operations
+
+backend> 空库/已有数据 Alembic upgrade、downgrade、再 upgrade + PRAGMA quick_check
+通过；最终 revision 9f3a1c7e2b40，quick_check=ok
+
+frontend> npm run test:e2e -- --grep "stage 4 file lifecycle"
+1 passed（真实 FastAPI 后端 + Vite 代理）
+
+repo> git diff --check
+通过
+```
+
+本批次新增的列表状态回归覆盖查询参数（搜索、排序）、详情返回和滚动位置；详情返回前刷新 `files` 查询，避免解析 Worker 更新 `row_version` 后使用旧缓存触发误报 412。OpenAPI 导出后重新生成前端类型，工作区未产生契约漂移。
+
 Windows 当前运行平台为 Windows。Job Object 专项冒烟已实际创建 Job、设置 512 MiB 进程限制、分配受控子进程、终止并关闭 Handle；未通过真实大规模内存耗尽验证。Worker 专项测试覆盖请求提前返回、原子领取、租约恢复、健康检查不阻塞、有限重试、不可重试错误、删除/版本幂等和 Job Object 失败映射。
 
 ## 安全测试覆盖
@@ -143,15 +217,19 @@ Windows 当前运行平台为 Windows。Job Object 专项冒烟已实际创建 J
 - 空库和带现有 Folder/Tag/FileRecord 数据的上一 revision 升级、降级、再升级和 quick check。
 - Worker 退出/恢复、活跃任务去重、旧任务结果不回写、解析错误脱敏、非 Windows 兼容能力和 Windows Job Object 资源释放。
 
-## 已知缺口与阻塞
+## 发布候选阶段保留项
 
-1. 文件列表状态（筛选、排序、滚动位置）在离开详情后尚未持久恢复。
-2. “批量加入知识库”依赖阶段 5 的知识库管理闭环，本批次没有提前实现知识库、FTS5、Embedding、向量或 RAG。
-3. 还未执行全部 `AC-FILE-*` 的正式发布级恶意文档集、资源耗尽和干净 Windows 安装包验收；留给第七批最终验收。
+以下 `3` 项不是阶段 4 当前实现阻塞，而是依据需求基线应在发布候选流程执行的门禁：
 
-## 下一批次
+1. **正式恶意文档集**：阶段 4 已通过伪装扩展、损坏 Office、外链、路径边界等受控场景；正式恶意样本集尚未导入，依据 `12_非功能与安全要求.md` 的 `NFR-ACC-008` 和威胁模型，在发布候选阶段执行。
+2. **资源耗尽**：已通过超时、输出/压缩包上限、Job Object 创建/配置/进程内存上限/关闭清理和 `PARSER_RESOURCE_LIMIT` 映射验证；未进行可能拖垮开发机的真实大规模内存耗尽，依据 `15_技术架构与开发约束.md` 的发布流程在受控 Windows 发布环境执行。
+3. **干净 Windows 安装包**：阶段 1 的 Spike 和开发态服务已验证；PyInstaller one-folder、Inno Setup、干净 Windows 11 安装/升级/卸载及 SHA-256 尚未执行，依据 `15_技术架构与开发约束.md` 第 24/25 节和 `12_非功能与安全要求.md` 的 `NFR-ACC-001`，归入发布候选门禁。
 
-第七批：阶段 4 最终验收与状态定版
+这些保留项不改变阶段 4 `PASS`，但在完整 V1 发布前必须关闭；`NFR-ACC-012` 仍需以发布候选证据为准。
+
+## 下一阶段
+
+阶段 4 已 `PASS`，可以新建对话进入阶段 5；本批次不启动阶段 5。
 
 ## 范围声明
 
