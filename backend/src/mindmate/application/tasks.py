@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import and_, func, or_, select, update
-from sqlalchemy.orm import Session
+from sqlalchemy import and_, exists, func, or_, select, update
+from sqlalchemy.orm import Session, aliased
 from uuid6 import uuid7
 
 from mindmate.infrastructure.models import BackgroundTask, TaskAttempt, TaskEvent
@@ -63,14 +63,14 @@ def add_event(
     return event
 
 
-def _claimable_clause(now_value: datetime):
+def _claimable_clause(now_value: datetime, task_model=BackgroundTask):
     return or_(
-        BackgroundTask.status.in_(CLAIMABLE_STATES),
+        task_model.status.in_(CLAIMABLE_STATES),
         and_(
-            BackgroundTask.status == "RUNNING",
+            task_model.status == "RUNNING",
             or_(
-                BackgroundTask.lease_until.is_(None),
-                BackgroundTask.lease_until <= now_value,
+                task_model.lease_until.is_(None),
+                task_model.lease_until <= now_value,
             ),
         ),
     )
@@ -104,10 +104,96 @@ def claim_task(
     task = session.get(BackgroundTask, task_id)
     if task is None:
         return None
+    _record_claim(session, task, worker_id)
+    return task
+
+
+def claim_next_serial_task(
+    session: Session, task_type: str, worker_id: str, lease_seconds: int = 60
+) -> BackgroundTask | None:
+    """Atomically claim one task while enforcing a process-wide concurrency limit of one."""
+    current = now()
+    lease_until = current + timedelta(seconds=lease_seconds)
+    expired_ids = list(
+        session.scalars(
+            select(BackgroundTask.task_id).where(
+                BackgroundTask.task_type == task_type,
+                BackgroundTask.status == "RUNNING",
+                or_(BackgroundTask.lease_until.is_(None), BackgroundTask.lease_until <= current),
+            )
+        )
+    )
+    if expired_ids:
+        session.execute(
+            update(BackgroundTask)
+            .where(
+                BackgroundTask.task_id.in_(expired_ids),
+                BackgroundTask.status == "RUNNING",
+                or_(BackgroundTask.lease_until.is_(None), BackgroundTask.lease_until <= current),
+            )
+            .values(
+                status="INTERRUPTED",
+                lease_owner=None,
+                lease_until=None,
+                updated_at=current,
+                row_version=BackgroundTask.row_version + 1,
+            )
+            .execution_options(synchronize_session=False)
+        )
+        for task_id in expired_ids:
+            finish_attempt(session, task_id, "INTERRUPTED", "Worker lease expired.")
+    candidate = aliased(BackgroundTask)
+    active = aliased(BackgroundTask)
+    candidate_id = (
+        select(candidate.task_id)
+        .where(
+            candidate.task_type == task_type,
+            _claimable_clause(current, candidate),
+            ~exists(
+                select(1).select_from(active).where(
+                    active.task_type == task_type,
+                    active.status == "RUNNING",
+                    active.lease_until > current,
+                )
+            ),
+        )
+        .order_by(candidate.priority.desc(), candidate.created_at)
+        .limit(1)
+        .scalar_subquery()
+    )
+    result = session.execute(
+        update(BackgroundTask)
+        .where(
+            BackgroundTask.task_id == candidate_id,
+            _claimable_clause(current),
+        )
+        .values(
+            status="RUNNING",
+            lease_owner=worker_id,
+            lease_until=lease_until,
+            started_at=func.coalesce(BackgroundTask.started_at, current),
+            updated_at=current,
+            row_version=BackgroundTask.row_version + 1,
+        )
+        .returning(BackgroundTask.task_id)
+        .execution_options(synchronize_session=False)
+    )
+    task_id = result.scalar_one_or_none()
+    if task_id is None:
+        session.commit()
+        return None
+    task = session.get(BackgroundTask, task_id)
+    if task is None:
+        return None
+    _record_claim(session, task, worker_id)
+    return task
+
+
+def _record_claim(session: Session, task: BackgroundTask, worker_id: str) -> None:
     attempt_number = (
         session.scalar(
             select(TaskAttempt.attempt_number)
-            .where(TaskAttempt.task_id == task_id)
+            .where(TaskAttempt.task_id == task.task_id)
             .order_by(TaskAttempt.attempt_number.desc())
             .limit(1)
         )
@@ -115,14 +201,13 @@ def claim_task(
     ) + 1
     session.add(
         TaskAttempt(
-            task_id=task_id,
+            task_id=task.task_id,
             attempt_number=attempt_number,
             started_at=now(),
             checkpoint_version=task.checkpoint_version,
         )
     )
     add_event(session, task, "RUNNING", {"worker_id": worker_id, "attempt": attempt_number})
-    return task
 
 
 def claim_next_task(

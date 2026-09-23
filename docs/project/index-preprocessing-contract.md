@@ -73,3 +73,16 @@ Windows 11 x64 / Python 3.12.11 实际 CPU 验证使用 ONNX Runtime 1.30.0、to
 - Chunk 阶段完成只表示文件级切片已生成或已记录稳定失败原因。`IndexVersion.status` 仍为 `BUILDING`，`chunking_status` 只反映 `COMPLETED/PARTIAL/FAILED/CANCELLED`，不会设置 `active_index_version_id`，成员仍不可检索。
 - 后续 Embedding/FTS5/sqlite-vec Worker 必须再次校验成员、回收站状态、文件内容哈希、解析修订和切片配置指纹后，才能消费这些 Chunk；本批不下载模型、不写 Embedding、不激活索引。
 - 文件或递归文件夹永久删除时按明确 `file_id` 清理其 Chunk；其他 File 记录的版本不受影响。知识库删除只删该库成员关系和索引快照，不删文件级 Chunk，因为其他知识库仍可能复用。
+
+## 持久 Embedding 阶段（第十三批）
+
+- `INDEX_EMBED` 是独立 SQLite 持久 Worker，只接受仍为 `BUILDING` 且已完成预处理/切片的 `IndexVersion`，逐文件消费同版本 `PREPARED + CHUNKED` 输入。每个输入保留 `PENDING/RUNNING/EMBEDDED/SKIPPED/FAILED` 状态、稳定失败原因、向量数量和完成时间；任务 JSON 保存 IndexVersion、EmbeddingConfig fingerprint、固定 model revision、包含 tokenizer 的 artifact fingerprint、进度与逐文件结果。
+- Embedding/向量写全局并发最多 1。SQLite 部分唯一索引约束最多一个 `INDEX_EMBED/RUNNING` 任务，原子领取使用 lease；过期 lease 先转中断再接管，Worker 关闭释放自己的任务租约，`RUNNING` 文件输入在恢复时回退到 `PENDING`。
+- 默认配置必须匹配 `BAAI/bge-small-zh-v1.5` 复合 revision、`LOCAL_ONNX`、512 维、L2 normalization、余弦距离及稳定配置指纹。模型仅通过 `ModelManager.ensure_installed(allow_download=False)` 离线校验后懒加载；文件缺失/损坏或 runtime 校验失败产生持久稳定错误并可显式重试，不下载、不切换模型、不访问外部 Embedding API。
+- `EmbeddingRecord` 唯一键为 `chunk_id + embedding_config_id`，保存向量记录 ID、配置 fingerprint、向量 SHA-256、`PENDING/READY/INVALIDATED` 状态和失效时间，不存原始向量。相同文件解析修订、Chunk 配置和 Embedding 配置在多个知识库中共享一次推理与映射记录。
+- 实际向量由 `SqliteVecAdapter` 写到本地 sqlite-vec SQLite 文件；每个 `embedding_config_id + index_version_id` 单独数据库，并在旁表保存 UUID 映射、Chunk ID 和 SHA-256。Adapter 验证 512 维、有限值、单位范数、扩展版本与存储 identity，提供幂等 upsert、按 ID 读取/存在性/hash 对账、按 ID 删除和按 IndexVersion 清理。扩展加载权限仅在 `sqlite_vec.load` 调用期间开启。
+- 跨 SQLite 数据库事务采用恢复协议：数据库事务先建立/确认 EmbeddingRecord 并记录预期向量 hash；向量库按稳定 ID 幂等写入；最后在业务数据库短事务中复核当前任务租约、成员、回收站、成员加入时间、内容 hash、解析修订、Chunk 集和配置 fingerprint，再同时将记录标为 `READY`、输入标为 `EMBEDDED` 并提交任务检查点。若向量已写但最终事务未提交，重启时由 ID/hash 读取已有向量并补完成功标记；向量内容或 Chunk ID 不符时失败关闭，不报告成功。
+- 文件级失败不阻断同版本其他文件；显式 `retry_failed` 将失败输入恢复到 `PENDING`，已存在且验证一致的向量不会重复推理。任务摘要暴露 `retryable` 与稳定 `error_code`，模型缺失错误可在固定模型变为可用后重试。取消、租约失效、知识库/成员移除和输入修订变化不会将过期输入标为成功；失败、模型缺失及向量写入错误保留稳定原因供重试。
+- 永久删除知识库只删除该知识库 `IndexVersion` 的向量数据库与版本快照，不删除其他知识库可能复用的文件级 Chunk/EmbeddingRecord。文件永久删除清理目标文件在相关 IndexVersion 中的向量记录，再删除该文件 EmbeddingRecord 与 Chunk；清理失败时业务行仍保留并返回可重试错误。
+- `INDEX_EMBED` 成功只表示“Embedding 已生成并持久化”。`IndexVersion.status` 继续为 `BUILDING`，`active_index_version_id` 不变，知识库成员 `index_state` 不变且 `available_for_retrieval=false`；本批没有 FTS5、向量 Top-K、索引激活、混合检索、引用或 RAG，也没有新 API 路由和 UI 页面。
+- Windows 11 / Python 3.12 的本批证据包括真实文件 sqlite-vec 512 维持久写入、重启双向映射对账，以及使用 Git 忽略的固定 `manager-validation` 模型缓存离线执行真实 ONNX Worker。缓存既不生成也不修改、不清理、不提交；若目标环境没有匹配缓存，仅以固定离线 Fixture 测试，不能宣称该环境完成了真实模型 Worker 冒烟。

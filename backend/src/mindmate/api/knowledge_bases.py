@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from mindmate.api.files import VERSION_CONFLICT_RESPONSES, FileApiError
 from mindmate.application.chunking import CHUNK_GENERATION_TASK
 from mindmate.application.files import normalize_name, utc_now
+from mindmate.application.index_embedding import INDEX_EMBED_TASK
 from mindmate.application.index_preprocessing import INDEX_PREPROCESS_TASK
 from mindmate.application.knowledge_membership_worker import KNOWLEDGE_MEMBERSHIP_TASK
 from mindmate.application.tasks import cancel_task, create_task
@@ -28,6 +29,7 @@ from mindmate.infrastructure.models import (
     KnowledgeBaseFile,
     new_id,
 )
+from mindmate.infrastructure.vector_store import SqliteVecAdapter, VectorStoreError
 
 router = APIRouter(prefix="/api/v1")
 
@@ -507,6 +509,7 @@ def cancel_knowledge_membership_task(
         KNOWLEDGE_MEMBERSHIP_TASK,
         INDEX_PREPROCESS_TASK,
         CHUNK_GENERATION_TASK,
+        INDEX_EMBED_TASK,
     }
     if task is None or task.task_type not in cancellable_types:
         raise FileApiError("TASK_NOT_FOUND", "任务不存在。", 404)
@@ -599,6 +602,7 @@ def restore_knowledge_base(
 @router.delete("/trash/knowledge-base/{knowledge_base_id}", tags=["knowledge-bases"])
 def purge_knowledge_base(
     knowledge_base_id: str,
+    request: Request,
     expected_version: int = Query(ge=1),
     confirmed: bool = Query(default=False),
     session: Session = Depends(get_session),
@@ -613,6 +617,24 @@ def purge_knowledge_base(
             412,
             current_row_version=record.row_version,
         )
+    versions = list(
+        session.execute(
+            select(IndexVersion.index_version_id, IndexVersion.embedding_config_id).where(
+                IndexVersion.scope_type == "KNOWLEDGE_BASE",
+                IndexVersion.scope_id == knowledge_base_id,
+            )
+        ).all()
+    )
+    store = SqliteVecAdapter(request.app.state.settings.vectors_dir)
+    try:
+        for version_id, config_id in versions:
+            store.delete_version(config_id, version_id)
+    except VectorStoreError:
+        raise FileApiError(
+            "VECTOR_CLEANUP_FAILED",
+            "知识库向量产物清理未完成，知识库仍保留在回收站；请检查本地数据目录后重试。",
+            503,
+        ) from None
     session.execute(
         delete(IndexVersionInput).where(
             IndexVersionInput.index_version_id.in_(

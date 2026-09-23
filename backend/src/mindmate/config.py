@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     index_worker_lease_seconds: int = 60
     index_chunk_worker_poll_seconds: float = 0.1
     index_chunk_worker_lease_seconds: int = 60
+    index_embedding_worker_poll_seconds: float = 0.1
+    index_embedding_worker_lease_seconds: int = 60
     alembic_ini: Path = Path(__file__).resolve().parents[2] / "alembic.ini"
 
     @property
@@ -48,6 +50,10 @@ class Settings(BaseSettings):
     @property
     def model_dir(self) -> Path:
         return self.resolved_data_dir / "models"
+
+    @property
+    def vectors_dir(self) -> Path:
+        return self.resolved_data_dir / "vectors"
 
     def ensure_data_dirs(self) -> None:
         for name in (

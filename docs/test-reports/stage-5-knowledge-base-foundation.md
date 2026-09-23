@@ -1,13 +1,14 @@
 # 阶段 5：知识库基础与成员准入测试报告
 
 > 阶段：`5`
-> 批次：`第八批 + 第九批 + 第十批 + 第十一批 + 第十二批`
+> 批次：`第八批 + 第九批 + 第十批 + 第十一批 + 第十二批 + 第十三批`
 > 验证日期：`2026-09-23`
 > 第八批结论：`PASS`
 > 第九批结论：`PASS`
 > 第十批结论：`PASS`
 > 第十一批结论：`PASS`
 > 第十二批结论：`PASS`
+> 第十三批结论：`PASS`
 > 阶段 5 状态：`PARTIAL`
 > 分支：`feat/v1-bootstrap`
 > 起始提交：`75a0653877b7f627bc254a859232689c19872777`
@@ -20,9 +21,9 @@
 
 ## 结论
 
-第八批“空知识库创建、编辑、列表、详情、回收站与恢复”闭环通过；第九批“已导入文件批量加入/移出知识库、持久成员准入任务和前端真实状态”闭环通过；第十批“索引配置、迁移与可恢复输入预处理”闭环通过；第十一批“结构优先版本化 Chunk 与可恢复切片”闭环通过；第十二批“可信固定 ONNX 产物获取、校验与独立 CPU Embedding Adapter”通过。空库保持 `EMPTY`；存在成员但尚未完成索引时为 `PREPARING`，成员保持 `index_state=PENDING`，可用文件数为 0。
+第八批“空知识库创建、编辑、列表、详情、回收站与恢复”闭环通过；第九批“已导入文件批量加入/移出知识库、持久成员准入任务和前端真实状态”闭环通过；第十批“索引配置、迁移与可恢复输入预处理”闭环通过；第十一批“结构优先版本化 Chunk 与可恢复切片”闭环通过；第十二批“可信固定 ONNX 产物获取、校验与独立 CPU Embedding Adapter”通过；第十三批“持久 EmbeddingRecord、单并发可恢复 Worker 与真实 sqlite-vec 向量写入”通过。空库保持 `EMPTY`；已生成 Embedding 的版本仍为 `BUILDING`，没有激活，不可检索。
 
-第十批 `INDEX_PREPROCESS` 的 `COMPLETED` 只证明输入快照、配置指纹与逐项预处理结果已持久化。第十一批 `INDEX_CHUNK` 的 `COMPLETED` 只表示切片阶段结束，不能表示索引就绪。第十二批完成了独立推理 Adapter，但没有持久 Embedding 任务或 `EmbeddingRecord`。`IndexVersion.status` 保持 `BUILDING`，`active_index_version_id` 保持空，成员仍不可检索。阶段 5 仍为 `PARTIAL`：持久 Embedding、FTS5、sqlite-vec、原子索引激活、混合检索、引用和 RAG 均未实现。
+第十批 `INDEX_PREPROCESS` 的 `COMPLETED` 只证明输入快照、配置指纹与逐项预处理结果已持久化。第十一批 `INDEX_CHUNK` 的 `COMPLETED` 只表示切片阶段结束。第十三批 `INDEX_EMBED` 的 `COMPLETED` 只表示向量与 `EmbeddingRecord` 已生成并持久化，不表示索引就绪。`IndexVersion.status` 保持 `BUILDING`，`active_index_version_id` 不变，成员仍不可检索。阶段 5 仍为 `PARTIAL`：FTS5、向量 Top-K 查询、原子索引激活、混合检索、引用和 RAG 尚未实现。
 
 ## 实现范围
 
@@ -209,10 +210,60 @@ eeb4b3cb2117502891e3af08e009d24aa733f3a4d65c7e4080827d407b3f0ac5（官方权重�
 
 本批没有生成或提交模型文件、模型缓存、凭据或真实用户资料；真实模型验证资产位于 Git 忽略的本地目录。
 
+## 第十三批验收追踪
+
+| ID | 验收项 | 证据 | 结论 |
+| --- | --- | --- | --- |
+| S5-B13-01 | EmbeddingRecord 与逐输入状态迁移，配置指纹和固定 revision/tokenizer 约束 | `test_stage5_embedding_worker.py` + Alembic `a81f3c6d2e90` | PASS |
+| S5-B13-02 | 同文件/配置跨知识库复用推理，同时按 IndexVersion 隔离持久向量 | 多库集成测试、EmbeddingRecord 唯一键、sqlite-vec identity | PASS |
+| S5-B13-03 | sqlite-vec 文件库真实 512 维写入、hash/ID 存在性对账、幂等 upsert 和删除 | Windows 11 文件数据库测试 + Adapter 集成测试 | PASS |
+| S5-B13-04 | 单并发领取、租约过期接管和重复任务无重复成功向量 | SQLite 部分唯一索引、任务租约测试 | PASS |
+| S5-B13-05 | 写向量后进程中断，重启按已有向量映射恢复而不重复推理 | `test_vector_written_before_process_interruption_is_reconciled_without_reinference` | PASS |
+| S5-B13-06 | 模型离线缺失带稳定可重试摘要、逐文件失败、取消/重启和成员移除、文件回收站、解析修订/配置变化竞态 | 固定离线 Fixture、Worker/任务回归 | PASS |
+| S5-B13-07 | 删除知识库仅清理其版本向量，保留另一知识库复用的 Chunk/EmbeddingRecord；文件/版本永久删除竞态不遗留向量 | 回收站真实 API、注入版本删除 + 向量库/数据库断言 | PASS |
+| S5-B13-08 | 实际固定本地 ONNX 模型经 Worker 生成归一化 512 维持久向量 | Windows 本地 `manager-validation` cache，offline only，`test_worker_uses_verified_local_onnx_model_without_network` | PASS |
+| S5-B13-09 | Embedding 完成不激活索引、不变更活动版本或可检索状态 | IndexVersion、KnowledgeBase、任务 summary 断言 | PASS |
+
+### 第十三批实际验证
+
+~~~text
+backend> uv run --locked pytest
+97 passed
+
+backend> uv run --locked ruff check src tests spikes
+All checks passed
+
+backend> uv run --locked pyright
+0 errors, 0 warnings, 0 informations
+
+backend> uv run --locked python -m compileall -q src tests spikes
+通过
+
+backend> uv lock --check --offline
+Resolved 75 packages; lock is current
+
+backend> Alembic 空库/既有数据 upgrade -> downgrade -> upgrade head
+revision a81f3c6d2e90；PRAGMA quick_check=ok
+
+backend> sqlite-vec Windows 文件 SQLite 探测
+写入/读取 float[512]，shape=(512,)，向量记录与 SHA-256 对账通过
+
+backend> 已验证固定 manifest 的本地 ONNX Worker 集成
+Git 忽略的 manager-validation cache 状态 READY；无网络、无下载；Worker 生成 512 维有限单位向量
+
+frontend> Playwright stage4-files + stage5-knowledge-bases
+2 passed（隔离 SQLite + 真实本地 FastAPI/Vite）
+
+repo> git diff --check
+通过
+~~~
+
+本批未改前端，前端 Vitest/lint/typecheck/build 沿用第十二批历史证据且未在本批重跑；本批浏览器关键回归已运行。真实模型与 ONNX 文件仅从现有忽略缓存读取，不下载、不移动、不清理、不提交；未调用 DeepSeek。
+
 ## 未实现与下一批前置
 
-- 已验证并实现本地 ONNX Adapter，但尚未接入持久 Embedding Worker 或创建 EmbeddingRecord；FTS5、sqlite-vec、RRF、测试检索和 RAG 未实现。
+- Embedding 已生成并持久化，但 FTS5、向量 Top-K、RRF、增量/原子索引激活、测试检索、引用和 RAG 未实现。
 - 未建立关键词/向量索引、未激活索引或开放检索。
 - 未宣称阶段 5 `PASS`，也未回填阶段 4 的发布候选遗留项。
 
-下一批唯一目标：基于已持久化的文件级 Chunk，把本批已验证 ONNX Adapter 接入持久 Embedding 任务与 EmbeddingRecord，实现生成、持久化和恢复；不同时实现 FTS5、sqlite-vec、索引激活或检索。
+下一批唯一目标：为同一 `IndexVersion` 增加持久 FTS5 索引生成与逐输入检查点；不做 Top-K 查询、混合检索、索引激活、引用或 RAG。

@@ -13,7 +13,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, exists, func, or_, select, update
+from sqlalchemy import and_, delete, exists, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from mindmate.api.problem import ProblemDetail
@@ -47,6 +47,7 @@ from mindmate.infrastructure.models import (
     BackgroundTask,
     Chunk,
     ContentObject,
+    EmbeddingRecord,
     FileRecord,
     FileTag,
     Folder,
@@ -57,6 +58,7 @@ from mindmate.infrastructure.models import (
     Tag,
     new_id,
 )
+from mindmate.infrastructure.vector_store import SqliteVecAdapter, VectorStoreError
 
 router = APIRouter(prefix="/api/v1")
 
@@ -101,6 +103,64 @@ class FileApiError(Exception):
         self.detail = detail
         self.status = status
         self.current_row_version = current_row_version
+
+
+def _delete_embedding_artifacts_for_files(
+    session: Session, settings: Settings, file_ids: list[str]
+) -> None:
+    if not file_ids:
+        return
+    vectors = list(
+        session.execute(
+            select(
+                IndexVersion.index_version_id,
+                IndexVersion.embedding_config_id,
+                EmbeddingRecord.vector_store_record_id,
+            )
+            .join(
+                IndexVersionInput,
+                IndexVersionInput.index_version_id == IndexVersion.index_version_id,
+            )
+            .join(
+                Chunk,
+                and_(
+                    Chunk.file_id == IndexVersionInput.file_id,
+                    Chunk.parse_revision_id == IndexVersionInput.parse_revision_id,
+                    Chunk.chunking_config_id == IndexVersion.chunking_config_id,
+                ),
+            )
+            .join(
+                EmbeddingRecord,
+                and_(
+                    EmbeddingRecord.chunk_id == Chunk.chunk_id,
+                    EmbeddingRecord.embedding_config_id == IndexVersion.embedding_config_id,
+                ),
+            )
+            .where(IndexVersionInput.file_id.in_(file_ids))
+            .distinct()
+        ).all()
+    )
+    store = SqliteVecAdapter(settings.vectors_dir)
+    try:
+        for version_id, config_id, record_id in vectors:
+            store.delete(
+                embedding_config_id=config_id,
+                index_version_id=version_id,
+                vector_store_record_id=record_id,
+            )
+    except VectorStoreError:
+        raise FileApiError(
+            "VECTOR_CLEANUP_FAILED",
+            "本地向量清理未完成，文件仍保留在回收站；请检查本地数据目录后重试。",
+            503,
+        ) from None
+    session.execute(
+        delete(EmbeddingRecord).where(
+            EmbeddingRecord.chunk_id.in_(
+                select(Chunk.chunk_id).where(Chunk.file_id.in_(file_ids))
+            )
+        )
+    )
 
 
 class TagResponse(BaseModel):
@@ -1928,6 +1988,7 @@ def purge_trash(
             raise FileApiError("FILE_NOT_IN_TRASH", "只有回收站中的文件才能永久删除。", 409)
         _assert_row_version(record.row_version, expected_version)
         content = session.get(ContentObject, record.content_object_id)
+        _delete_embedding_artifacts_for_files(session, settings, [object_id])
         _delete_unbuilt_index_snapshots_for_files(session, [object_id])
         session.execute(delete(Chunk).where(Chunk.file_id == object_id))
         session.execute(delete(FileTag).where(FileTag.file_id == object_id))
@@ -1963,6 +2024,9 @@ def purge_trash(
         )
         folder_ids = [item.folder_id for item in folders]
         records = list(session.scalars(select(FileRecord).where(FileRecord.folder_id.in_(folder_ids))))
+        _delete_embedding_artifacts_for_files(
+            session, settings, [record.file_id for record in records]
+        )
         _delete_unbuilt_index_snapshots_for_files(
             session, [record.file_id for record in records]
         )

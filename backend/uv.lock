@@ -443,6 +443,7 @@ dependencies = [
     { name = "python-multipart" },
     { name = "python-pptx" },
     { name = "sqlalchemy" },
+    { name = "sqlite-vec" },
     { name = "tokenizers" },
     { name = "uuid6" },
     { name = "uvicorn", extra = ["standard"] },
@@ -456,7 +457,6 @@ dev = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "ruff" },
-    { name = "sqlite-vec" },
 ]
 
 [package.metadata]
@@ -473,6 +473,7 @@ requires-dist = [
     { name = "python-multipart", specifier = ">=0.0.20,<1" },
     { name = "python-pptx", specifier = ">=1.0,<2" },
     { name = "sqlalchemy", specifier = ">=2.0,<3" },
+    { name = "sqlite-vec", specifier = ">=0.1.6,<1" },
     { name = "tokenizers", specifier = ">=0.21,<1" },
     { name = "uuid6", specifier = ">=2024.7,<2026" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34,<1" },
@@ -486,7 +487,6 @@ dev = [
     { name = "pytest", specifier = ">=8.3,<9" },
     { name = "pytest-asyncio", specifier = ">=0.25,<1" },
     { name = "ruff", specifier = ">=0.9,<1" },
-    { name = "sqlite-vec", specifier = ">=0.1.6,<1" },
 ]
 
 [[package]]

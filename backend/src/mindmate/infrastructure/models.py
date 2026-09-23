@@ -201,6 +201,9 @@ class IndexVersion(Base):
     chunking_status: Mapped[str] = mapped_column(
         String(30), default="NOT_STARTED", server_default=text("'NOT_STARTED'"), nullable=False
     )
+    embedding_status: Mapped[str] = mapped_column(
+        String(30), default="NOT_STARTED", server_default=text("'NOT_STARTED'"), nullable=False
+    )
     input_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     prepared_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     skipped_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
@@ -243,6 +246,14 @@ class IndexVersionInput(Base):
         Integer, default=0, server_default=text("0"), nullable=False
     )
     chunked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    embedding_status: Mapped[str] = mapped_column(
+        String(30), default="PENDING", server_default=text("'PENDING'"), nullable=False
+    )
+    embedding_reason_code: Mapped[str | None] = mapped_column(String(80))
+    embedding_count: Mapped[int] = mapped_column(
+        Integer, default=0, server_default=text("0"), nullable=False
+    )
+    embedded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Chunk(Base):
@@ -288,6 +299,25 @@ class Chunk(Base):
     # No tokenizer is loaded in this batch. Keep the compatibility field nullable
     # instead of pretending Unicode character counts are model tokens.
     token_count: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    invalidated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class EmbeddingRecord(Base):
+    __tablename__ = "embedding_records"
+    __table_args__ = (
+        UniqueConstraint("chunk_id", "embedding_config_id", name="uq_embedding_record_chunk_config"),
+        Index("ix_embedding_records_chunk_config_status", "chunk_id", "embedding_config_id", "status"),
+    )
+    embedding_record_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    chunk_id: Mapped[str] = mapped_column(ForeignKey("chunks.chunk_id"), nullable=False)
+    embedding_config_id: Mapped[str] = mapped_column(
+        ForeignKey("embedding_configs.embedding_config_id"), nullable=False
+    )
+    vector_store_record_id: Mapped[str] = mapped_column(String(36), unique=True, nullable=False)
+    config_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    vector_hash: Mapped[str | None] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(30), default="PENDING", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     invalidated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
