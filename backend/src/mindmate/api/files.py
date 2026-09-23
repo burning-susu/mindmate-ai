@@ -45,6 +45,7 @@ from mindmate.application.tasks import add_event, cancel_task, create_task
 from mindmate.config import Settings
 from mindmate.infrastructure.models import (
     BackgroundTask,
+    Chunk,
     ContentObject,
     FileRecord,
     FileTag,
@@ -192,6 +193,23 @@ class ImportTaskResponse(BaseModel):
     folder_id: str | None = None
     tag_ids: list[str]
     knowledge_base_id: str | None = None
+    error: str | None = None
+
+
+class BackgroundTaskResponse(BaseModel):
+    import_id: str
+    task_id: str
+    task_type: str
+    status: str
+    phase: str | None = None
+    progress: int | None = None
+    items: list[dict[str, Any]]
+    folder_id: str | None = None
+    tag_ids: list[str]
+    knowledge_base_id: str | None = None
+    index_version_id: str | None = None
+    results: list[dict[str, Any]]
+    summary: dict[str, Any] | None = None
     error: str | None = None
 
 
@@ -474,6 +492,7 @@ def _task_payload(task: BackgroundTask) -> dict[str, Any]:
     return {
         "import_id": task.task_id,
         "task_id": task.task_id,
+        "task_type": task.task_type,
         "status": task.status,
         "phase": task.phase,
         "progress": task.progress,
@@ -482,6 +501,9 @@ def _task_payload(task: BackgroundTask) -> dict[str, Any]:
         "tag_ids": context.get("tag_ids", []),
         "knowledge_base_id": context.get("knowledge_base_id")
         or (checkpoint.get("knowledge_base_id") if isinstance(checkpoint, dict) else None),
+        "index_version_id": checkpoint.get("index_version_id")
+        if isinstance(checkpoint, dict)
+        else None,
         "results": checkpoint.get("results", []) if isinstance(checkpoint, dict) else [],
         "summary": checkpoint.get("summary") if isinstance(checkpoint, dict) else None,
         "error": task.error_summary,
@@ -845,7 +867,9 @@ def get_file_import(import_id: str, session: Session = Depends(get_session)) -> 
     return _task_payload(task)
 
 
-@router.get("/tasks/{task_id}", tags=["tasks"])
+@router.get(
+    "/tasks/{task_id}", response_model=BackgroundTaskResponse, tags=["tasks"]
+)
 def get_background_task(task_id: str, session: Session = Depends(get_session)) -> dict[str, Any]:
     task = session.get(BackgroundTask, task_id)
     if task is None:
@@ -1905,6 +1929,7 @@ def purge_trash(
         _assert_row_version(record.row_version, expected_version)
         content = session.get(ContentObject, record.content_object_id)
         _delete_unbuilt_index_snapshots_for_files(session, [object_id])
+        session.execute(delete(Chunk).where(Chunk.file_id == object_id))
         session.execute(delete(FileTag).where(FileTag.file_id == object_id))
         session.execute(delete(KnowledgeBaseFile).where(KnowledgeBaseFile.file_id == object_id))
         session.delete(record)
@@ -1946,6 +1971,7 @@ def purge_trash(
             content = session.get(ContentObject, record.content_object_id)
             if content is not None:
                 contents[content.content_object_id] = content
+            session.execute(delete(Chunk).where(Chunk.file_id == record.file_id))
             session.execute(delete(FileTag).where(FileTag.file_id == record.file_id))
             session.execute(delete(KnowledgeBaseFile).where(KnowledgeBaseFile.file_id == record.file_id))
             delete_parsed_text(settings, record.file_id)

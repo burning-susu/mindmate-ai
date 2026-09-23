@@ -14,7 +14,9 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 from mindmate.api.files import VERSION_CONFLICT_RESPONSES, FileApiError
+from mindmate.application.chunking import CHUNK_GENERATION_TASK
 from mindmate.application.files import normalize_name, utc_now
+from mindmate.application.index_preprocessing import INDEX_PREPROCESS_TASK
 from mindmate.application.knowledge_membership_worker import KNOWLEDGE_MEMBERSHIP_TASK
 from mindmate.application.tasks import cancel_task, create_task
 from mindmate.infrastructure.models import (
@@ -148,10 +150,12 @@ class KnowledgeBaseMemberListResponse(BaseModel):
 
 class KnowledgeMembershipTaskResponse(BaseModel):
     task_id: str
+    task_type: str
     status: str
     phase: str | None = None
     progress: int | None = None
-    knowledge_base_id: str
+    knowledge_base_id: str | None = None
+    index_version_id: str | None = None
     items: list[dict[str, Any]]
     results: list[dict[str, Any]]
     summary: dict[str, Any] | None = None
@@ -268,10 +272,12 @@ def _membership_task_payload(task: BackgroundTask) -> dict[str, Any]:
     checkpoint = task.checkpoint_json if isinstance(task.checkpoint_json, dict) else {}
     return {
         "task_id": task.task_id,
+        "task_type": task.task_type,
         "status": task.status,
         "phase": task.phase,
         "progress": task.progress,
         "knowledge_base_id": str(checkpoint.get("knowledge_base_id", "")),
+        "index_version_id": checkpoint.get("index_version_id"),
         "items": checkpoint.get("items", []),
         "results": checkpoint.get("results", []),
         "summary": checkpoint.get("summary"),
@@ -497,8 +503,13 @@ def cancel_knowledge_membership_task(
     task_id: str, session: Session = Depends(get_session)
 ) -> dict[str, Any]:
     task = session.get(BackgroundTask, task_id)
-    if task is None or task.task_type != KNOWLEDGE_MEMBERSHIP_TASK:
-        raise FileApiError("TASK_NOT_FOUND", "知识库成员任务不存在。", 404)
+    cancellable_types = {
+        KNOWLEDGE_MEMBERSHIP_TASK,
+        INDEX_PREPROCESS_TASK,
+        CHUNK_GENERATION_TASK,
+    }
+    if task is None or task.task_type not in cancellable_types:
+        raise FileApiError("TASK_NOT_FOUND", "任务不存在。", 404)
     cancel_task(session, task)
     session.commit()
     return _membership_task_payload(task)

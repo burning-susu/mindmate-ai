@@ -24,3 +24,16 @@
 - 本批 `IndexVersion.status` 始终停留在 `BUILDING`，并用 `preprocessing_status` 区分 `COMPLETED/PARTIAL/FAILED/CANCELLED`。
 - 后续构建 Worker 只能消费同一 `IndexVersion` 中仍为 `PREPARED` 且再次通过版本校验的输入。只有 Chunk、FTS、Embedding 与向量产物全部验证通过后，后续批次才可在单一事务中设置 `READY` 和 `active_index_version_id`。
 - 本批没有公开 `/rebuild` 或 `index-status` API；前端继续显示“索引待建立”，不可开放对话或学习入口。
+
+## Chunk 消费阶段（第十一批）
+
+- `INDEX_CHUNK` 是独立于 `INDEX_PREPROCESS` 的持久任务。它只能消费同一 `IndexVersion` 中状态为 `PREPARED` 的输入；`SKIPPED/FAILED` 输入不会被误切片。
+- `/api/v1/tasks/{task_id}/cancel` 接受 `INDEX_CHUNK` 和 `INDEX_PREPROCESS` 任务；取消请求设置持久任务终态，Worker 在切片块边界及发布前检查该状态。
+- Worker 每次只处理一个文件；解析结果沿用解析层的 20 MiB 序列化输出上限，长文本切片在事务外计算，最终每文件一个短事务写入，不跨文件累积待写 Chunk。
+- Chunk 是文件级派生数据，唯一范围为 `file_id + parse_revision_id + chunking_config_id + sequence_number`，不绑定某个知识库。相同文件版本和配置被多个知识库引用时复用同一组 Chunk。
+- `IndexVersionInput.chunk_status` 保存逐文件 `PENDING/RUNNING/CHUNKED/SKIPPED/FAILED` 检查点；一份文件的 Chunk 集、检查点和任务进度在同一短事务中发布。租约过期、进程关闭或取消后，未发布的 `RUNNING` 输入会回到 `PENDING`，不会留下半套结果。
+- 切片只保存解析产物真实提供的定位字段：PDF 的页码、PPTX 的幻灯片号、文本可确定的行号以及解析器提供的标题路径；没有真实分词器时 `token_count=NULL`，有效长度通过 `length_unit=UNICODE_CHARACTER` 与 `length_value` 表达。
+- DOCX v2 解析产物显式标记可从样式识别的标题、列表、普通段落和代码样式；表格仍以解析器提供的表号/行号保留为结构块。没有段落样式元数据的既有解析结果不会被推测补标签。
+- Chunk 阶段完成只表示文件级切片已生成或已记录稳定失败原因。`IndexVersion.status` 仍为 `BUILDING`，`chunking_status` 只反映 `COMPLETED/PARTIAL/FAILED/CANCELLED`，不会设置 `active_index_version_id`，成员仍不可检索。
+- 后续 Embedding/FTS5/sqlite-vec Worker 必须再次校验成员、回收站状态、文件内容哈希、解析修订和切片配置指纹后，才能消费这些 Chunk；本批不下载模型、不写 Embedding、不激活索引。
+- 文件或递归文件夹永久删除时按明确 `file_id` 清理其 Chunk；其他 File 记录的版本不受影响。知识库删除只删该库成员关系和索引快照，不删文件级 Chunk，因为其他知识库仍可能复用。

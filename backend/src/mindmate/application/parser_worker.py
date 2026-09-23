@@ -63,12 +63,20 @@ def _parse_docx(path: Path) -> dict[str, Any]:
             level = int(level_text) if level_text.isdigit() else 1
             heading_path = heading_path[: max(0, level - 1)]
             heading_path.append(text)
+            block_type = "TITLE"
+        elif style_name.casefold().startswith("list"):
+            block_type = "LIST"
+        elif "code" in style_name.casefold():
+            block_type = "CODE"
+        else:
+            block_type = "PARAGRAPH"
         _append(
             parts,
             locations,
             text,
             paragraph=paragraph_number,
             heading_path=list(heading_path),
+            block_type=block_type,
         )
     for table_number, table in enumerate(document.tables, start=1):
         for row_number, row in enumerate(table.rows, start=1):

@@ -198,6 +198,9 @@ class IndexVersion(Base):
     vector_engine_version: Mapped[str] = mapped_column(String(100), nullable=False)
     status: Mapped[str] = mapped_column(String(30), nullable=False)
     preprocessing_status: Mapped[str] = mapped_column(String(30), nullable=False)
+    chunking_status: Mapped[str] = mapped_column(
+        String(30), default="NOT_STARTED", server_default=text("'NOT_STARTED'"), nullable=False
+    )
     input_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     prepared_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     skipped_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
@@ -232,6 +235,61 @@ class IndexVersionInput(Base):
     status: Mapped[str] = mapped_column(String(30), nullable=False)
     reason_code: Mapped[str | None] = mapped_column(String(80))
     prepared_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    chunk_status: Mapped[str] = mapped_column(
+        String(30), default="PENDING", server_default=text("'PENDING'"), nullable=False
+    )
+    chunk_reason_code: Mapped[str | None] = mapped_column(String(80))
+    chunk_count: Mapped[int] = mapped_column(
+        Integer, default=0, server_default=text("0"), nullable=False
+    )
+    chunked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Chunk(Base):
+    """A reusable file-level chunk for one parse and chunking configuration.
+
+    Chunks intentionally do not reference an IndexVersion. Multiple knowledge bases
+    can reuse the same file-level result, while each index version keeps its own
+    immutable input snapshot and later embedding/index artifacts.
+    """
+
+    __tablename__ = "chunks"
+    __table_args__ = (
+        UniqueConstraint(
+            "file_id",
+            "parse_revision_id",
+            "chunking_config_id",
+            "sequence_number",
+            name="uq_chunk_file_parse_config_sequence",
+        ),
+        Index("ix_chunks_file_parse_config", "file_id", "parse_revision_id", "chunking_config_id"),
+        Index("ix_chunks_content_hash", "content_hash"),
+    )
+    chunk_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    file_id: Mapped[str] = mapped_column(ForeignKey("files.file_id"), nullable=False)
+    parse_revision_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    chunking_config_id: Mapped[str] = mapped_column(
+        ForeignKey("chunking_configs.chunking_config_id"), nullable=False
+    )
+    sequence_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    heading_path: Mapped[list[str] | None] = mapped_column(JSON)
+    page_start: Mapped[int | None] = mapped_column(Integer)
+    page_end: Mapped[int | None] = mapped_column(Integer)
+    slide_number: Mapped[int | None] = mapped_column(Integer)
+    line_start: Mapped[int | None] = mapped_column(Integer)
+    line_end: Mapped[int | None] = mapped_column(Integer)
+    source_kind: Mapped[str | None] = mapped_column(String(30))
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    length_unit: Mapped[str] = mapped_column(
+        String(30), default="UNICODE_CHARACTER", server_default=text("'UNICODE_CHARACTER'"), nullable=False
+    )
+    length_value: Mapped[int] = mapped_column(Integer, nullable=False)
+    # No tokenizer is loaded in this batch. Keep the compatibility field nullable
+    # instead of pretending Unicode character counts are model tokens.
+    token_count: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    invalidated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class BackgroundTask(Base):

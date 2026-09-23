@@ -57,10 +57,14 @@
 - 任务：独立成员准入 Worker 复用 SQLite `BackgroundTask`、原子领取、租约、检查点、取消和关闭恢复；解析 Worker 与成员 Worker 按任务类型隔离。父任务完成只表示成员关系已持久化，不表示索引完成。
 - 第十批数据：Alembic revision `d91f4a6b2c30` 增加版本化 ChunkingConfig、EmbeddingConfig、IndexVersion 和 IndexVersionInput；切片默认参数明确采用约 500/80 Unicode 字符，配置和解析集合均保存稳定 SHA-256 指纹。
 - 第十批任务：新增独立 `INDEX_PREPROCESS` Worker，在请求外冻结一致输入快照并逐文件记录准备、跳过和失败；支持幂等、租约接管、检查点续跑、取消及成员/解析修订变化复核。预处理完成后仍为 `BUILDING`，不激活索引。
+- 第十一批数据：Alembic revision `f2c7a1d8e904` 增加文件级版本化 `Chunk`，以文件、解析修订和切片配置形成唯一版本；保存标题路径、可用页/幻灯片/行定位、正文哈希和 Unicode 字符长度，真实 tokenizer 计数保持 NULL。Chunk 不与知识库绑定，满足版本条件时由多个知识库复用。
+- 第十一批切片：新增结构优先字符切片器，目标约 500 字符、重叠约 80 字符；保护标题、段落、代码/表格、页和幻灯片边界，长结构块在自然边界拆分；DOCX v2 解析元数据标记真实可读出的标题、列表、段落、代码样式及表格行。
+- 第十一批任务：新增独立 `INDEX_CHUNK` 持久 Worker，消费同一 `IndexVersion` 中 `PREPARED` 输入；逐文件 Chunk 集与检查点事务原子发布，支持取消检查、租约续期/过期接管、应用关闭续跑、显式失败重试及文件永久删除竞态。任务完成只代表切片阶段结束，索引保持 `BUILDING` 且不激活。
+- 生命周期与契约：文件或递归文件夹永久删除时按准确 `file_id` 清理 Chunk；保留其他文件/知识库仍可复用的 Chunk。任务详情 OpenAPI 增加 `task_type`、`index_version_id`，生成契约为 34 schemas / 50 operations。
 - 前端：知识库详情使用真实文件选择、成员列表、任务轮询、逐项结果和移出；解析中/失败、待索引与不可检索状态明确；刷新后恢复数据库状态。
-- 验收证据：后端 `50 passed`；Ruff、Pyright、compileall；前端 lint/typecheck、Vitest `13 passed`、build；阶段 5 Playwright `1 passed`，阶段 4 回归 `1 passed`；OpenAPI 3.1 `33 schemas / 50 operations`；空库及第九批数据迁移、降级/再升级和 `quick_check` 通过。详见 `docs/test-reports/stage-5-knowledge-base-foundation.md`。
-- 未完成：正式 Chunk、模型下载、ONNX Embedding、FTS5、sqlite-vec、增量/原子索引激活、混合检索、引用和 RAG。因此阶段 5 不标记为 `PASS`。
-- 下一批次：只实现基于已准备快照的版本化 Chunk 生成与可恢复持久化，不提前进入 Embedding、FTS、向量或 RAG。
+- 验收证据：第十一批结论 `PASS`；后端 `60 passed`、Ruff、Pyright、compileall；前端 lint/typecheck、Vitest `13 passed`、production build；真实本地后端阶段 5 Playwright `1 passed`、阶段 4 回归 `1 passed`；OpenAPI 3.1 `34 schemas / 50 operations`；空库、已有数据迁移、降级/再升级与 SQLite `quick_check=ok`。详见 `docs/test-reports/stage-5-knowledge-base-foundation.md`。
+- 未完成：模型下载、ONNX Embedding、FTS5、sqlite-vec、增量/原子索引激活、混合检索、引用和 RAG。因此阶段 5 不标记为 `PASS`。
+- 下一批次：以本批稳定 Chunk 为输入，单独实现本地 ONNX Embedding 生成、持久化与恢复；不提前进入 FTS、向量索引、激活或检索。
 
 ## 进度口径
 

@@ -292,6 +292,8 @@ class ParsingWorker:
                     parser=(
                         "local-text-v1"
                         if document_type in {"TXT", "MARKDOWN"}
+                        else f"isolated-{document_type.casefold()}-v2"
+                        if document_type == "DOCX"
                         else f"isolated-{document_type.casefold()}-v1"
                     ),
                     locations=cast(list[dict[str, object]], parsed["locations"]),

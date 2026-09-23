@@ -1,24 +1,26 @@
 # 阶段 5：知识库基础与成员准入测试报告
 
 > 阶段：`5`
-> 批次：`第八批 + 第九批 + 第十批`
+> 批次：`第八批 + 第九批 + 第十批 + 第十一批`
 > 验证日期：`2026-09-23`
 > 第八批结论：`PASS`
 > 第九批结论：`PASS`
 > 第十批结论：`PASS`
+> 第十一批结论：`PASS`
 > 阶段 5 状态：`PARTIAL`
 > 分支：`feat/v1-bootstrap`
 > 起始提交：`75a0653877b7f627bc254a859232689c19872777`
 > 第九批起始提交：`6fd248978b84bcf96702eda081ed05469dab4bf2`
 > 第十批起始提交：`3025a5abc2a89cca97edd9cadfbeb87bccdc985f`
+> 第十一批起始提交：`59101d692db842a68496ff88219e40c7f0307afe`
 > Provider：`MOCK_ONLY`
 > 真实外部请求：`DISABLED`
 
 ## 结论
 
-第八批“空知识库创建、编辑、列表、详情、回收站与恢复”闭环通过；第九批“已导入文件批量加入/移出知识库、持久成员准入任务和前端真实状态”闭环通过；第十批“索引配置、迁移与可恢复输入预处理”闭环通过。空库保持 `EMPTY`；存在成员但未建立索引时为 `PREPARING`，成员保持 `index_state=PENDING`，可用文件数为 0。
+第八批“空知识库创建、编辑、列表、详情、回收站与恢复”闭环通过；第九批“已导入文件批量加入/移出知识库、持久成员准入任务和前端真实状态”闭环通过；第十批“索引配置、迁移与可恢复输入预处理”闭环通过；第十一批“结构优先版本化 Chunk 与可恢复切片”闭环通过。空库保持 `EMPTY`；存在成员但尚未完成索引时为 `PREPARING`，成员保持 `index_state=PENDING`，可用文件数为 0。
 
-第十批 `INDEX_PREPROCESS` 的 `COMPLETED` 只证明输入快照、配置指纹与逐项检查点已持久化，不表示索引就绪。`IndexVersion` 保持 `BUILDING`，`active_index_version_id` 保持空。阶段 5 仍为 `PARTIAL`：正式 Chunk、Embedding、FTS5、sqlite-vec、原子索引激活、混合检索、引用和 RAG 均未实现。
+第十批 `INDEX_PREPROCESS` 的 `COMPLETED` 只证明输入快照、配置指纹与逐项预处理结果已持久化。第十一批 `INDEX_CHUNK` 的 `COMPLETED` 只表示切片阶段结束，不能表示索引就绪。`IndexVersion.status` 保持 `BUILDING`，`active_index_version_id` 保持空，成员仍不可检索。阶段 5 仍为 `PARTIAL`：Embedding、FTS5、sqlite-vec、原子索引激活、混合检索、引用和 RAG 均未实现。
 
 ## 实现范围
 
@@ -45,6 +47,12 @@
 - 独立 `INDEX_PREPROCESS` Worker 冻结活动成员、内容哈希、解析修订、成员加入时间、配置指纹与集合指纹；逐项结果为 `PREPARED/SKIPPED/FAILED`，支持租约过期接管、检查点续跑、取消和幂等。
 - 成员移出/重加、文件回收站、内容哈希或解析修订变化会产生稳定原因码；完成前二次校验，旧任务不会激活关系或发布过期可构建输入。
 - 本批未开放 `/rebuild` 或 `index-status`，没有 API schema 变化；知识库永久删除会先清理对应预处理快照，但不删除原始文件。
+- 第十一批 Alembic revision `f2c7a1d8e904` 新增文件级 `chunks` 与 `IndexVersionInput` 切片检查点字段；Chunk 唯一版本由 `file_id + parse_revision_id + chunking_config_id + sequence_number` 确定，不绑定知识库，多库按文件版本与配置复用。
+- 结构优先切片按 Unicode 字符计数，默认目标约 500、重叠约 80；标题路径、页、幻灯片、行和 DOCX 结构类型仅来自解析产物或可由原始 TXT/Markdown 正文精确确定的信息。`token_count` 保持 `NULL`，不把字符数伪装为 tokenizer token。
+- 新增独立 `INDEX_CHUNK` Worker；Chunk 全集、单文件检查点和任务进度在同一事务提交。任务支持租约过期接管、进程关闭续跑、取消、幂等复用和显式失败重试；成员移出/重加、文件回收站、永久删除、哈希/解析修订或配置变化不会发布陈旧输入。
+- 文件或递归文件夹永久删除时只清理对应逻辑文件的 Chunk。文件在切片计算期间永久删除会让任务以稳定错误终止并释放租约；不会删除其他文件或其他知识库仍可复用的 Chunk。
+- `GET /api/v1/tasks/{task_id}` 增加正式响应契约字段 `task_type`、`index_version_id`；OpenAPI 3.1 和前端生成类型同步为 `34 schemas / 50 operations`。
+- `/api/v1/tasks/{task_id}/cancel` 扩展支持 `INDEX_CHUNK` 与 `INDEX_PREPROCESS`；取消在处理中可被 Worker 观察，响应保留任务类型和索引版本。
 
 ## 验收追踪
 
@@ -72,12 +80,23 @@
 | S5-B10-04 | 移出、解析修订变化与回收站不发布过期结果 | 快照竞态与完成前复核测试 | PASS |
 | S5-B10-05 | 幂等、租约过期接管、检查点续跑、取消与类型隔离 | Worker/任务专项测试 | PASS |
 | S5-B10-06 | 预处理不激活索引、不改变可检索状态 | IndexVersion、知识库和成员断言 | PASS |
+| S5-B11-01 | 结构优先、500/80 Unicode 字符目标、长内容上限、空内容与定位边界 | `test_stage5_chunking.py` 切片规则测试 | PASS |
+| S5-B11-02 | 标题、页、幻灯片、行、列表、表格和代码块使用真实结构；不伪造 token 计数 | 固定本地解析结构、字符长度及来源位置断言 | PASS |
+| S5-B11-03 | 同文件跨知识库复用；解析修订或切片配置变化后新旧 Chunk 共存 | Worker 集成测试与数据库唯一约束 | PASS |
+| S5-B11-04 | 完整 Chunk 集和输入检查点原子提交；重复执行不重复写入 | Worker 重跑、内容哈希和计数断言 | PASS |
+| S5-B11-05 | API 取消、租约过期、应用关闭检查点、显式失败重试和混合输入状态 | API/Worker/任务检查点集成测试 | PASS |
+| S5-B11-06 | 成员变化、回收站、永久删除、哈希/解析修订和配置变化不会发布陈旧 Chunk | 发布前快照复核及永久删除竞态测试 | PASS |
+| S5-B11-07 | 永久删除只清理当前逻辑文件 Chunk，不影响其他文件版本 | 文件回收站与 Chunk 集成测试 | PASS |
+| S5-B11-08 | 切片结束不激活 IndexVersion，不改变 `active_index_version_id` 或可检索状态 | 数据库、任务摘要与 API 状态断言 | PASS |
 
 ## 自动化证据
 
 ```text
 backend> uv run pytest
-50 passed
+60 passed
+
+backend> uv run pytest tests/test_stage5_chunking.py
+10 passed
 
 backend> uv run pytest tests/test_stage5_knowledge_bases.py
 11 passed
@@ -106,18 +125,14 @@ frontend> npm run test
 frontend> npm run build
 Vite production build succeeded
 
-frontend> MINDMATE_API_PORT=8012 MINDMATE_WEB_PORT=5174 npx playwright test e2e/stage5-knowledge-bases.spec.ts --reporter=line
-1 passed（隔离数据目录、真实 FastAPI + Vite 代理）
-
-frontend> npx playwright test e2e/stage4-files.spec.ts --reporter=line
-1 passed（阶段 4 核心回归）
+frontend> MINDMATE_API_PORT=8014 MINDMATE_WEB_PORT=5175 npx playwright test e2e/stage4-files.spec.ts e2e/stage5-knowledge-bases.spec.ts --reporter=line
+2 passed（阶段 4 文件生命周期与阶段 5 知识库成员回归）
 
 repo> .\scripts\generate-api.ps1
-OpenAPI 3.1.0；Generated 33 schemas and 50 operations
+OpenAPI 3.1.0；Generated 34 schemas and 50 operations
 
-backend> 空库/已有数据 upgrade -> downgrade 9f3a1c7e2b40 -> upgrade head
-backend> 第九批数据库 c7d5e8a1f204 -> upgrade head
-最终 revision d91f4a6b2c30；已有文件、知识库、成员和任务保留；PRAGMA quick_check=ok
+backend> 空库及既有文件/知识库/成员/任务 upgrade -> downgrade -> upgrade head
+最终 revision f2c7a1d8e904；PRAGMA quick_check=ok
 
 repo> git diff --check
 通过
@@ -127,8 +142,8 @@ repo> git diff --check
 
 ## 未实现与下一批前置
 
-- 已实现索引输入预处理 Worker，但未生成正式 Chunk、Embedding、FTS 或向量产物；任务完成不代表索引完成。
-- 未实现正式 Chunk、ONNX Embedding、FTS5、sqlite-vec、RRF、测试检索和 RAG。
+- 已实现正式版本化 Chunk 与持久切片 Worker，但未实现 ONNX Embedding、FTS5、sqlite-vec、RRF、测试检索和 RAG。
+- 未下载 ONNX 模型、未创建 EmbeddingRecord、未建立关键词/向量索引、未激活索引或开放检索。
 - 未宣称阶段 5 `PASS`，也未回填阶段 4 的发布候选遗留项。
 
-下一批只建议一个最小闭环：消费本批 `PREPARED` 快照，生成并持久化版本化 Chunk，支持取消、恢复和失效校验；不同时实现 Embedding、FTS、向量或检索。
+下一批只建议一个最小闭环：基于已持久化的文件级 Chunk，实现本地 ONNX Embedding 生成、持久化和可恢复任务；不同时实现 FTS、向量索引、激活或检索。

@@ -9,7 +9,7 @@ from sqlalchemy import create_engine, inspect, text
 from mindmate.config import Settings
 
 PREVIOUS_REVISION = "bc554b1b4366"
-CURRENT_REVISION = "d91f4a6b2c30"
+CURRENT_REVISION = "f2c7a1d8e904"
 
 
 def migration_config(data_dir: Path) -> tuple[Config, Settings]:
@@ -48,7 +48,15 @@ def test_empty_database_upgrade_downgrade_and_reupgrade(tmp_path: Path) -> None:
         "embedding_configs",
         "index_versions",
         "index_version_inputs",
+        "chunks",
     }.issubset(set(inspect(engine).get_table_names()))
+    assert "chunking_status" in column_names(engine, "index_versions")
+    assert {
+        "chunk_status",
+        "chunk_reason_code",
+        "chunk_count",
+        "chunked_at",
+    }.issubset(column_names(engine, "index_version_inputs"))
     engine.dispose()
 
     command.downgrade(config, PREVIOUS_REVISION)

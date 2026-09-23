@@ -890,9 +890,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Get Background Task Api V1 Tasks  Task Id  Get"
+                  "$ref": "#/components/schemas/BackgroundTaskResponse"
                 }
               }
             }
@@ -2389,6 +2387,138 @@
   },
   "components": {
     "schemas": {
+      "BackgroundTaskResponse": {
+        "properties": {
+          "import_id": {
+            "type": "string",
+            "title": "Import Id"
+          },
+          "task_id": {
+            "type": "string",
+            "title": "Task Id"
+          },
+          "task_type": {
+            "type": "string",
+            "title": "Task Type"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "phase": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phase"
+          },
+          "progress": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Progress"
+          },
+          "items": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "folder_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Folder Id"
+          },
+          "tag_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tag Ids"
+          },
+          "knowledge_base_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Knowledge Base Id"
+          },
+          "index_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Index Version Id"
+          },
+          "results": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Results"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "import_id",
+          "task_id",
+          "task_type",
+          "status",
+          "items",
+          "tag_ids",
+          "results"
+        ],
+        "title": "BackgroundTaskResponse"
+      },
       "Body_create_file_import_api_v1_file_imports_post": {
         "properties": {
           "files": {
@@ -3501,6 +3631,10 @@
             "type": "string",
             "title": "Task Id"
           },
+          "task_type": {
+            "type": "string",
+            "title": "Task Type"
+          },
           "status": {
             "type": "string",
             "title": "Status"
@@ -3528,8 +3662,26 @@
             "title": "Progress"
           },
           "knowledge_base_id": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Knowledge Base Id"
+          },
+          "index_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Index Version Id"
           },
           "items": {
             "items": {
@@ -3574,8 +3726,8 @@
         "type": "object",
         "required": [
           "task_id",
+          "task_type",
           "status",
-          "knowledge_base_id",
           "items",
           "results"
         ],

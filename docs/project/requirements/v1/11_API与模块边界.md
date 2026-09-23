@@ -1119,7 +1119,9 @@ GET /api/v1/search
 | DELETE | /api/v1/tasks/{id} | 清除终态记录 |
 | POST | /api/v1/tasks/clear-completed | 清理可清理记录 |
 
-任务动作必须由 Tasks 状态机判断，前端传入目标状态无效。
+任务动作必须由 Tasks 状态机判断，前端传入目标状态无效。阶段 5 的 `INDEX_PREPROCESS` 与 `INDEX_CHUNK` 可通过同一取消端点提交取消；只有注册支持取消的任务类型接受该动作。
+
+`GET /api/v1/tasks/{id}` 的详情至少返回 `task_type`、状态、阶段、进度、逐项结果、汇总及对应资源 ID。知识库切片任务使用 `INDEX_CHUNK`，其完成摘要只表示文件级 Chunk 已生成/处理，不能被解释为索引 READY 或可检索。
 
 ## 31. Trash API
 

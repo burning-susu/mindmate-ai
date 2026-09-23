@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     knowledge_worker_lease_seconds: int = 60
     index_worker_poll_seconds: float = 0.1
     index_worker_lease_seconds: int = 60
+    index_chunk_worker_poll_seconds: float = 0.1
+    index_chunk_worker_lease_seconds: int = 60
     alembic_ini: Path = Path(__file__).resolve().parents[2] / "alembic.ini"
 
     @property
