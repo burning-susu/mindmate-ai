@@ -18,6 +18,7 @@ from uuid6 import uuid7
 from mindmate import __version__
 from mindmate.api.files import FileApiError
 from mindmate.api.files import router as files_router
+from mindmate.api.knowledge_bases import router as knowledge_bases_router
 from mindmate.api.problem import ProblemDetail
 from mindmate.application.parse_worker_service import ParsingWorker
 from mindmate.config import Settings, get_settings
@@ -304,6 +305,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def openapi_json() -> dict[str, Any]:
         return app.openapi()
 
+    app.include_router(knowledge_bases_router)
     app.include_router(files_router)
 
     return app

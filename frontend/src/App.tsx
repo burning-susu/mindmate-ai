@@ -1,11 +1,14 @@
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
-import { Activity, BookOpen, Boxes, FileText, Home, Menu, MessageSquare, Settings2 } from 'lucide-react'
+import { Activity, BookOpen, Boxes, FileText, Home, Menu, MessageSquare, Settings2, Trash2 } from 'lucide-react'
 import { NavLink, Route, Routes } from 'react-router-dom'
 import { create } from 'zustand'
 
 import { apiRequest } from './api/client'
 import FileDetailPage from './pages/FileDetailPage'
 import FilesPage from './pages/FilesPage'
+import KnowledgeBaseDetailPage from './pages/KnowledgeBaseDetailPage'
+import KnowledgeBaseNewPage from './pages/KnowledgeBaseNewPage'
+import KnowledgeBasesPage from './pages/KnowledgeBasesPage'
 import TrashPage from './pages/TrashPage'
 import './App.css'
 
@@ -78,6 +81,10 @@ function AppShell() {
           ))}
         </nav>
         <div className="sidebar-footer">
+          <NavLink to="/trash" className="nav-item">
+            <Trash2 size={18} aria-hidden="true" />
+            {sidebarOpen && <span>回收站</span>}
+          </NavLink>
           <NavLink to="/settings" className="nav-item">
             <Settings2 size={18} aria-hidden="true" />
             {sidebarOpen && <span>设置</span>}
@@ -100,7 +107,9 @@ function AppShell() {
             <Route path="/" element={<Placeholder title="欢迎回到 MindMate" description="阶段 0 工程基线已建立，下一步进入本地应用壳和安全运行验证。" />} />
             <Route path="/learning" element={<Placeholder title="学习" description="学习首页和陪练闭环将在后续开发阶段接入。" />} />
             <Route path="/chat" element={<Placeholder title="AI 对话" description="Mock Provider 和 SSE 流式链路将在后续阶段接入。" />} />
-            <Route path="/knowledge-bases" element={<Placeholder title="知识库" description="知识库、索引和引用功能将在后续阶段接入。" />} />
+            <Route path="/knowledge-bases" element={<KnowledgeBasesPage />} />
+            <Route path="/knowledge-bases/new" element={<KnowledgeBaseNewPage />} />
+            <Route path="/knowledge-bases/:knowledgeBaseId" element={<KnowledgeBaseDetailPage />} />
             <Route path="/files" element={<FilesPage />} />
             <Route path="/files/:fileId" element={<FileDetailPage />} />
             <Route path="/trash" element={<TrashPage />} />

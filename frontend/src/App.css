@@ -145,6 +145,25 @@
 .trash-row > div:first-child { display: grid; gap: 5px; min-width: 0; }
 .trash-row strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .trash-row span { color: var(--muted); font-size: 12px; }
+.knowledge-page { min-width: 0; }
+.knowledge-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.knowledge-card { display: flex; gap: 14px; min-width: 0; padding: 18px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: inherit; text-decoration: none; transition: border-color 160ms ease, box-shadow 160ms ease; }
+.knowledge-card:hover { border-color: #79aeb7; box-shadow: 0 6px 18px rgb(35 70 78 / 8%); }
+.knowledge-mark { display: grid; place-items: center; flex: 0 0 42px; width: 42px; height: 42px; border-radius: 7px; color: #fff; }
+.knowledge-mark--large { flex-basis: 52px; width: 52px; height: 52px; }
+.knowledge-card__body { display: grid; gap: 9px; min-width: 0; flex: 1; }
+.knowledge-card__title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.knowledge-card__title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.knowledge-card p { min-height: 36px; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.knowledge-card__meta { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 11px; }
+.knowledge-card__meta svg { margin-left: auto; }
+.duplicate-badge { padding: 2px 6px; border-radius: 4px; background: #fff3d9; color: #8a5b00; font-size: 10px; }
+.knowledge-form { max-width: 720px; }
+.knowledge-form > label { display: grid; gap: 7px; margin-bottom: 16px; color: var(--muted); font-size: 12px; }
+.knowledge-form input:not([type='color']), .knowledge-form textarea { width: 100%; padding: 9px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; resize: vertical; }
+.knowledge-form input[type='color'] { width: 52px; height: 34px; padding: 2px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
+.knowledge-form__mark { display: grid; place-items: center; width: 52px; height: 52px; margin-bottom: 18px; border-radius: 7px; color: #fff; }
+.knowledge-title { display: flex; align-items: center; gap: 14px; }
 
 @media (max-width: 840px) {
   .page-heading, .detail-heading { align-items: stretch; flex-direction: column; }

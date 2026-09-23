@@ -107,6 +107,8 @@ class KnowledgeBase(Base):
     knowledge_base_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
+    icon: Mapped[str | None] = mapped_column(String(50))
+    color: Mapped[str | None] = mapped_column(String(20))
     status: Mapped[str] = mapped_column(String(30), default="EMPTY", nullable=False)
     active_index_version_id: Mapped[str | None] = mapped_column(String(36))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

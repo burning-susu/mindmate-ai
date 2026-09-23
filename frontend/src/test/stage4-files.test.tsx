@@ -27,7 +27,9 @@ describe('stage 4 file workspace', () => {
     expect(screen.getByRole('combobox', { name: '按类型筛选' })).toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: '按状态筛选' })).toBeInTheDocument()
     expect(await screen.findByText('还没有文件')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '回收站' })).toHaveAttribute('href', '/trash')
+    expect(screen.getAllByRole('link', { name: '回收站' })).toEqual(
+      expect.arrayContaining([expect.objectContaining({ pathname: '/trash' })]),
+    )
   })
 
   it('sends the folder version and shows a conflict reload action', async () => {

@@ -9,7 +9,7 @@ from sqlalchemy import create_engine, inspect, text
 from mindmate.config import Settings
 
 PREVIOUS_REVISION = "bc554b1b4366"
-CURRENT_REVISION = "9f3a1c7e2b40"
+CURRENT_REVISION = "c7d5e8a1f204"
 
 
 def migration_config(data_dir: Path) -> tuple[Config, Settings]:
@@ -42,6 +42,7 @@ def test_empty_database_upgrade_downgrade_and_reupgrade(tmp_path: Path) -> None:
         "parse_error_id",
         "parse_retry_count",
     }.issubset(column_names(engine, "files"))
+    assert {"icon", "color"}.issubset(column_names(engine, "knowledge_bases"))
     engine.dispose()
 
     command.downgrade(config, PREVIOUS_REVISION)
@@ -49,6 +50,7 @@ def test_empty_database_upgrade_downgrade_and_reupgrade(tmp_path: Path) -> None:
     assert "row_version" not in column_names(engine, "folders")
     assert "row_version" not in column_names(engine, "tags")
     assert "parse_retry_count" not in column_names(engine, "files")
+    assert "icon" not in column_names(engine, "knowledge_bases")
     engine.dispose()
 
     command.upgrade(config, "head")
@@ -86,6 +88,20 @@ def test_existing_stage3_data_is_preserved_and_backfilled(tmp_path: Path) -> Non
                     folder_id, parent_folder_id, name, normalized_name, sort_order,
                     created_at, updated_at
                 ) VALUES ('folder-1', NULL, '资料', '资料', 0, :timestamp, :timestamp)
+                """
+            ),
+            {"timestamp": timestamp},
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO knowledge_bases (
+                    knowledge_base_id, name, description, status, active_index_version_id,
+                    created_at, updated_at, row_version
+                ) VALUES (
+                    'kb-1', '已有知识库', '迁移前数据', 'EMPTY', NULL,
+                    :timestamp, :timestamp, 2
+                )
                 """
             ),
             {"timestamp": timestamp},
@@ -137,6 +153,13 @@ def test_existing_stage3_data_is_preserved_and_backfilled(tmp_path: Path) -> Non
         assert tuple(folder) == ("资料", 1)
         assert tuple(tag) == ("重点", 1)
         assert tuple(file_record) == ("sample.txt", 3, None, None, 0)
+        knowledge_base = connection.execute(
+            text(
+                "SELECT name, description, icon, color, row_version "
+                "FROM knowledge_bases WHERE knowledge_base_id = 'kb-1'"
+            )
+        ).one()
+        assert tuple(knowledge_base) == ("已有知识库", "迁移前数据", None, None, 2)
         assert connection.scalar(text("PRAGMA quick_check")) == "ok"
     engine.dispose()
 
@@ -149,5 +172,8 @@ def test_existing_stage3_data_is_preserved_and_backfilled(tmp_path: Path) -> Non
         ) == 1
         assert connection.scalar(text("SELECT row_version FROM folders")) == 1
         assert connection.scalar(text("SELECT parse_retry_count FROM files")) == 0
+        assert connection.scalar(
+            text("SELECT COUNT(*) FROM knowledge_bases WHERE knowledge_base_id = 'kb-1'")
+        ) == 1
         assert connection.scalar(text("PRAGMA quick_check")) == "ok"
     engine.dispose()

@@ -108,6 +108,39 @@ export interface components {
     "knowledge_base_id"?: string | null;
     "error"?: string | null
   };
+  "KnowledgeBaseCreate": {
+    "name": string;
+    "description"?: string | null;
+    "icon"?: string | null;
+    "color"?: string | null
+  };
+  "KnowledgeBaseListResponse": {
+    "items": Array<components["KnowledgeBaseResponse"]>;
+    "next_cursor"?: string | null
+  };
+  "KnowledgeBasePatch": {
+    "name"?: string | null;
+    "description"?: string | null;
+    "icon"?: string | null;
+    "color"?: string | null;
+    "row_version": number
+  };
+  "KnowledgeBaseResponse": {
+    "knowledge_base_id": string;
+    "name": string;
+    "description"?: string | null;
+    "icon"?: string | null;
+    "color"?: string | null;
+    "status": string;
+    "file_count": number;
+    "available_file_count": number;
+    "duplicate_name"?: boolean;
+    "created_at": string;
+    "updated_at": string;
+    "deleted_at"?: string | null;
+    "purge_after"?: string | null;
+    "row_version": number
+  };
   "ProblemDetail": {
     "type": string;
     "title": string;
@@ -196,6 +229,30 @@ export interface operations {
   };
   "GET /api/v1/system/storage": {
     operationId: "storage_api_v1_system_storage_get"
+  };
+  "GET /api/v1/knowledge-bases": {
+    operationId: "list_knowledge_bases_api_v1_knowledge_bases_get"
+  };
+  "POST /api/v1/knowledge-bases": {
+    operationId: "create_knowledge_base_api_v1_knowledge_bases_post"
+  };
+  "GET /api/v1/knowledge-bases/{knowledge_base_id}": {
+    operationId: "get_knowledge_base_api_v1_knowledge_bases__knowledge_base_id__get"
+  };
+  "PATCH /api/v1/knowledge-bases/{knowledge_base_id}": {
+    operationId: "patch_knowledge_base_api_v1_knowledge_bases__knowledge_base_id__patch"
+  };
+  "DELETE /api/v1/knowledge-bases/{knowledge_base_id}": {
+    operationId: "trash_knowledge_base_api_v1_knowledge_bases__knowledge_base_id__delete"
+  };
+  "GET /api/v1/trash/knowledge-bases": {
+    operationId: "list_trashed_knowledge_bases_api_v1_trash_knowledge_bases_get"
+  };
+  "POST /api/v1/trash/knowledge-base/{knowledge_base_id}/restore": {
+    operationId: "restore_knowledge_base_api_v1_trash_knowledge_base__knowledge_base_id__restore_post"
+  };
+  "DELETE /api/v1/trash/knowledge-base/{knowledge_base_id}": {
+    operationId: "purge_knowledge_base_api_v1_trash_knowledge_base__knowledge_base_id__delete"
   };
   "POST /api/v1/file-imports": {
     operationId: "create_file_import_api_v1_file_imports_post"
