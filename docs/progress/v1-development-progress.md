@@ -46,6 +46,17 @@
 - 下一批次：阶段 5：知识库、Embedding 与 RAG；本批次不启动。
 - 后续边界：FTS5、知识库索引、Embedding、向量与 RAG 仍属于阶段 5–6，本批次未提前实现。
 
+## 阶段 5
+
+- 状态：`PARTIAL`
+- 第八批起点：`75a0653877b7f627bc254a859232689c19872777`
+- 已完成：空知识库创建、正常列表、详情、名称/描述/颜色/图标编辑、同名提示、30 天回收站、恢复和永久删除；知识库删除不删除原始文件。
+- 数据与并发：Alembic revision `c7d5e8a1f204` 增加 `icon`/`color`；编辑、删除和恢复使用原子 `row_version` 条件更新，冲突返回 412。
+- 前端：`/knowledge-bases`、`/knowledge-bases/new`、`/knowledge-bases/:id` 与 `/trash` 使用真实 API；添加文件/索引明确标记为下一批开放。
+- 验收证据：后端 `38 passed`；Ruff、Pyright、compileall；前端 lint/typecheck、Vitest `12 passed`、build；阶段 5 Playwright `1 passed`，阶段 4 回归 `1 passed`；OpenAPI 3.1 `29 schemas / 46 operations`；迁移往返与 `quick_check=ok`。详见 `docs/test-reports/stage-5-knowledge-base-foundation.md`。
+- 未完成：成员关系、批量添加、持久索引任务、Chunk、Embedding、FTS5、sqlite-vec、混合检索、引用和 RAG。因此阶段 5 不标记为 `PASS`。
+- 下一批次：只进入“成员关系、批量添加与持久索引任务的入口”最小闭环，实施前复核本批代码与冻结需求。
+
 ## 进度口径
 
 文件产出不等于测试通过；测试通过不等于 Spike 通过；Spike 通过不等于业务验收或发布完成。

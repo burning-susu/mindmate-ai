@@ -5,8 +5,8 @@
 - 当前开发分支：`feat/v1-bootstrap`
 - 当前远程提交：以 `git ls-remote --heads origin feat/v1-bootstrap` 为准；本文件随本批次收口提交推送
 - 最后更新时间：`2026-09-23`
-- 当前开发阶段：阶段 4 已完成，等待阶段 5 启动
-- 当前批次状态：第七批最终验收结论 `PASS`；阶段 4 最终状态 `PASS`
+- 当前开发阶段：阶段 5 开发中，状态 `PARTIAL`
+- 当前批次状态：第八批“空知识库基础闭环”结论 `PASS`；阶段 5 状态 `PARTIAL`
 
 ## 已完成阶段
 
@@ -15,6 +15,7 @@
 - 阶段 2：安全本地应用壳，`0b19795`
 - 阶段 3：数据、任务和备份基础，`02a32b8`
 - 阶段 4：初始实现 `bc30e1f`，证据修订 `9e0174a`，收口修复 `3b29d22`，第四批交接 `0448d5b`；第五批完成数据模型、迁移、乐观锁、解析失败持久化与契约同步；第六批完成持久解析 Worker、原子领取/租约、重试恢复和 Windows Job Object；第七批补齐列表状态恢复并完成最终验收，状态 `PASS`
+- 阶段 5：第八批完成空知识库创建、列表、详情、编辑、30 天回收站、恢复和永久删除的前后端持久化闭环；阶段整体仍为 `PARTIAL`
 
 ## 当前已实现能力
 
@@ -23,24 +24,26 @@
 - 前端：真实 API 文件工作台、嵌套目录、筛选排序、导入与重复决策、详情编辑/预览、文件和文件夹回收站操作；列表查询参数、详情返回后的筛选/排序/滚动恢复；返回前刷新列表避免旧 `row_version` 竞态；版本冲突提示并引导重新加载，不自动覆盖。
 - 数据库：SQLite/Alembic 核心实体、持久任务、内容对象引用计数和软删除字段；revision `9f3a1c7e2b40` 增加 Folder/Tag `row_version` 及 FileRecord 解析失败阶段、错误 ID、重试次数。
 - 测试与工程：后端 30 tests、前端 8 tests、Playwright 阶段 4 生命周期、Ruff、Pyright、ESLint/oxlint、TypeScript、Vite build、OpenAPI 生成和空库/已有数据迁移往返。
+- 知识库基础：空库创建保持 `EMPTY`；名称/描述/颜色/图标编辑；同名提示；原子 `row_version` 冲突控制；知识库回收站、恢复和永久删除不影响原始文件；真实 API 页面与浏览器闭环。
 
 ## 当前已知缺口
 
 - 阶段 4 无未解决功能、安全、数据一致性或迁移阻塞项；需求追踪详见 `docs/test-reports/stage-4-file-management.md`。
 - 发布候选保留：正式恶意文档集、真实资源耗尽边界、干净 Windows 安装/升级/卸载包，依据发布流程执行，不回填为阶段 4 已完成证据。
 - 后续依赖：批量加入知识库、FTS5、索引、Embedding、向量和 RAG 不在本批次实现。
+- 阶段 5 缺口：成员关系管理、批量添加、持久索引任务、Chunk、Embedding、FTS5、sqlite-vec、混合检索、引用和 RAG 尚未实现。
 
 ## 测试状态
 
-- 后端测试：`30 passed`（含第六批 Worker/资源安全专项）
+- 后端测试：`38 passed`（含知识库基础、迁移、Worker/资源安全专项）
 - 阶段 4 后端定向测试：`21 passed`
 - 后端静态检查：Ruff 通过；Pyright `0 errors`
-- 前端测试：`8 passed`
+- 前端测试：`12 passed`
 - 前端类型检查：通过
 - 前端构建：通过
-- 浏览器 E2E：`1 passed`
-- OpenAPI 同步：OpenAPI 3.1，`25 schemas / 38 operations`
-- 数据库迁移：revision `9f3a1c7e2b40`；空库和已有数据升级、降级、再升级通过，`quick_check=ok`
+- 浏览器 E2E：阶段 5 知识库 `1 passed`；阶段 4 文件回归 `1 passed`
+- OpenAPI 同步：OpenAPI 3.1，`29 schemas / 46 operations`
+- 数据库迁移：revision `c7d5e8a1f204`；空库和已有数据升级、降级、再升级通过，`quick_check=ok`
 
 ## 本批次交接
 
@@ -52,9 +55,9 @@
 
 ## 下一开发批次
 
-- 可新建对话进入 `阶段 5：知识库、Embedding 与 RAG`；本批次不启动阶段 5。
+- 阶段 5 下一个最小闭环：成员关系、批量添加与持久索引任务的入口；本对话不继续实施。
 
 ## 交接说明
 
-- 新对话必须读取：`AGENTS.md`、`docs/project/requirements/v1/18_最终决策表.md`、`16_Codex开发任务书.md`、`04_文件管理详细需求.md`、本文件、`v1-development-progress.md` 和阶段 4 测试报告。
+- 新对话必须读取：`AGENTS.md`、`docs/project/requirements/v1/18_最终决策表.md`、`16_Codex开发任务书.md`、`05_知识库与RAG详细需求.md`、本文件、`v1-development-progress.md` 和阶段 5 测试报告。
 - 从远程 `origin/feat/v1-bootstrap` 最新提交继续；先核对 `git status --short` 和本地/远程 SHA，不依赖旧对话。
