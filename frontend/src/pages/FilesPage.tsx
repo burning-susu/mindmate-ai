@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { FileUp, Folder, FolderMinus, FolderPlus, MoreHorizontal, Plus, Search, Tag as TagIcon, Trash2, X } from 'lucide-react'
-import { useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 
 import { apiRequest, apiUpload } from '../api/client'
 import {
@@ -65,13 +65,16 @@ function FolderTree({ folders, parentId, selectedId, onSelect, onDelete, depth =
 
 export default function FilesPage() {
   const queryClient = useQueryClient()
+  const location = useLocation()
+  const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const inputRef = useRef<HTMLInputElement>(null)
-  const [query, setQuery] = useState('')
-  const [folderId, setFolderId] = useState<string | undefined>()
-  const [tagId, setTagId] = useState<string | undefined>()
-  const [documentType, setDocumentType] = useState<string | undefined>()
-  const [status, setStatus] = useState<string | undefined>()
-  const [sort, setSort] = useState('updated_at')
+  const query = searchParams.get('q') ?? ''
+  const folderId = searchParams.get('folder_id') ?? undefined
+  const tagId = searchParams.get('tag_id') ?? undefined
+  const documentType = searchParams.get('document_type') ?? undefined
+  const status = searchParams.get('status') ?? undefined
+  const sort = searchParams.get('sort') ?? 'updated_at'
   const [batchFolderId, setBatchFolderId] = useState('')
   const [batchTagId, setBatchTagId] = useState('')
   const [selected, setSelected] = useState<string[]>([])
@@ -137,7 +140,7 @@ export default function FilesPage() {
   const deleteFolderMutation = useMutation({
     mutationFn: ({ folder, strategy }: { folder: FolderItem; strategy: 'MOVE_CHILDREN' | 'TRASH_RECURSIVE' }) => deleteFolderRequest(folder, strategy),
     onSuccess: () => {
-      setFolderId(undefined)
+      updateFilter('folder_id')
       void queryClient.invalidateQueries({ queryKey: ['folders'] })
       void queryClient.invalidateQueries({ queryKey: ['files'] })
     },
@@ -182,6 +185,32 @@ export default function FilesPage() {
   const pendingDuplicates = useMemo(() => activeImportResult?.items.filter((item) => item.duplicate_status === 'PENDING_DECISION') ?? [], [activeImportResult])
   const selectedFiles = files.filter((file) => selected.includes(file.file_id))
 
+  useEffect(() => {
+    const routeState = location.state as { restoreFileListScroll?: number } | null
+    if (!filesQuery.isSuccess || routeState?.restoreFileListScroll === undefined) return
+    const frame = window.requestAnimationFrame(() => {
+      window.scrollTo({ top: routeState.restoreFileListScroll, behavior: 'auto' })
+      navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [filesQuery.isSuccess, location.pathname, location.search, location.state, navigate])
+
+  function updateFilter(name: string, value?: string) {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      if (value) next.set(name, value)
+      else next.delete(name)
+      return next
+    }, { replace: true })
+  }
+
+  function openFile(event: React.MouseEvent<HTMLAnchorElement>, fileId: string) {
+    event.preventDefault()
+    navigate(`/files/${fileId}`, {
+      state: { fileListSearch: location.search, fileListScroll: window.scrollY },
+    })
+  }
+
   function chooseFiles(fileList: FileList | File[]) {
     const incoming = Array.from(fileList)
     if (incoming.length) uploadMutation.mutate(incoming)
@@ -218,8 +247,8 @@ export default function FilesPage() {
       <div className="files-layout">
         <aside className="folder-panel" aria-label="文件夹">
           <div className="panel-heading"><span>目录</span><FolderPlus size={16} aria-hidden="true" /></div>
-          <button className={`folder-row ${!folderId ? 'folder-row--active' : ''}`} type="button" onClick={() => setFolderId(undefined)}><Folder size={16} aria-hidden="true" /><span>全部文件</span><small>{files.length}</small></button>
-          <FolderTree folders={folders} selectedId={folderId} onSelect={setFolderId} onDelete={deleteFolder} />
+          <button className={`folder-row ${!folderId ? 'folder-row--active' : ''}`} type="button" onClick={() => updateFilter('folder_id')}><Folder size={16} aria-hidden="true" /><span>全部文件</span><small>{files.length}</small></button>
+          <FolderTree folders={folders} selectedId={folderId} onSelect={(id) => updateFilter('folder_id', id)} onDelete={deleteFolder} />
           <form className="new-folder-form" onSubmit={(event) => { event.preventDefault(); if (newFolderName.trim()) folderMutation.mutate(newFolderName.trim()) }}>
             <input value={newFolderName} onChange={(event) => setNewFolderName(event.target.value)} aria-label="新文件夹名称" placeholder="新建文件夹" maxLength={100} />
             <button type="submit" aria-label="创建文件夹" title="创建文件夹"><Plus size={15} aria-hidden="true" /></button>
@@ -232,12 +261,12 @@ export default function FilesPage() {
 
         <div className="files-main">
           <div className="files-toolbar">
-            <label className="search-field"><Search size={16} aria-hidden="true" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索名称、标签或正文" aria-label="搜索文件" /></label>
-            <select value={folderId ?? ''} onChange={(event) => setFolderId(event.target.value || undefined)} aria-label="按文件夹筛选"><option value="">所有文件夹</option>{folders.map((folder) => <option value={folder.folder_id} key={folder.folder_id}>{folder.name}</option>)}</select>
-            <select value={tagId ?? ''} onChange={(event) => setTagId(event.target.value || undefined)} aria-label="按标签筛选"><option value="">所有标签</option>{tags.map((tag) => <option value={tag.tag_id} key={tag.tag_id}>{tag.name}</option>)}</select>
-            <select value={documentType ?? ''} onChange={(event) => setDocumentType(event.target.value || undefined)} aria-label="按类型筛选"><option value="">所有类型</option>{['PDF', 'DOCX', 'PPTX', 'TXT', 'MARKDOWN'].map((type) => <option value={type} key={type}>{type}</option>)}</select>
-            <select value={status ?? ''} onChange={(event) => setStatus(event.target.value || undefined)} aria-label="按状态筛选"><option value="">所有状态</option>{Object.entries(statusLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select>
-            <select value={sort} onChange={(event) => setSort(event.target.value)} aria-label="排序"><option value="updated_at">最近更新</option><option value="created_at">最近导入</option><option value="name">文件名</option><option value="size">大小</option><option value="type">类型</option></select>
+            <label className="search-field"><Search size={16} aria-hidden="true" /><input value={query} onChange={(event) => updateFilter('q', event.target.value)} placeholder="搜索名称、标签或正文" aria-label="搜索文件" /></label>
+            <select value={folderId ?? ''} onChange={(event) => updateFilter('folder_id', event.target.value)} aria-label="按文件夹筛选"><option value="">所有文件夹</option>{folders.map((folder) => <option value={folder.folder_id} key={folder.folder_id}>{folder.name}</option>)}</select>
+            <select value={tagId ?? ''} onChange={(event) => updateFilter('tag_id', event.target.value)} aria-label="按标签筛选"><option value="">所有标签</option>{tags.map((tag) => <option value={tag.tag_id} key={tag.tag_id}>{tag.name}</option>)}</select>
+            <select value={documentType ?? ''} onChange={(event) => updateFilter('document_type', event.target.value)} aria-label="按类型筛选"><option value="">所有类型</option>{['PDF', 'DOCX', 'PPTX', 'TXT', 'MARKDOWN'].map((type) => <option value={type} key={type}>{type}</option>)}</select>
+            <select value={status ?? ''} onChange={(event) => updateFilter('status', event.target.value)} aria-label="按状态筛选"><option value="">所有状态</option>{Object.entries(statusLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select>
+            <select value={sort} onChange={(event) => updateFilter('sort', event.target.value === 'updated_at' ? undefined : event.target.value)} aria-label="排序"><option value="updated_at">最近更新</option><option value="created_at">最近导入</option><option value="name">文件名</option><option value="size">大小</option><option value="type">类型</option></select>
             <span className="toolbar-meta">{files.length} 个文件 · 支持 PDF、DOCX、PPTX、TXT、Markdown</span>
           </div>
 
@@ -250,7 +279,7 @@ export default function FilesPage() {
           {selectedFiles.length > 0 && <div className="selection-bar"><strong>已选 {selectedFiles.length} 个</strong><select value={batchFolderId} onChange={(event) => setBatchFolderId(event.target.value)} aria-label="批量目标文件夹"><option value="">未分类</option>{folders.map((folder) => <option key={folder.folder_id} value={folder.folder_id}>{folder.name}</option>)}</select><button type="button" onClick={() => batchMutation.mutate({ action: 'MOVE', folderId: batchFolderId || null })}>移动</button><select value={batchTagId} onChange={(event) => setBatchTagId(event.target.value)} aria-label="批量目标标签"><option value="">选择标签</option>{tags.map((tag) => <option key={tag.tag_id} value={tag.tag_id}>{tag.name}</option>)}</select><button type="button" disabled={!batchTagId} onClick={() => batchMutation.mutate({ action: 'ADD_TAG', targetTagId: batchTagId })}>添加标签</button><button type="button" disabled={!batchTagId} onClick={() => batchMutation.mutate({ action: 'REMOVE_TAG', targetTagId: batchTagId })}>移除标签</button><button type="button" onClick={() => batchMutation.mutate({ action: 'REPROCESS' })}>重新处理</button><button type="button" onClick={() => batchMutation.mutate({ action: 'TRASH' })}><Trash2 size={15} aria-hidden="true" />移入回收站</button><button type="button" onClick={() => setSelected([])}>取消</button></div>}
 
           <div className="file-table-wrap">
-            <table className="file-table"><thead><tr><th><input type="checkbox" checked={files.length > 0 && selected.length === files.length} onChange={selectAll} aria-label="选择全部文件" /></th><th>名称</th><th>类型</th><th>状态</th><th>标签</th><th>大小</th><th>更新</th><th aria-label="操作" /></tr></thead><tbody>{files.map((file) => <tr key={file.file_id}><td><input type="checkbox" checked={selected.includes(file.file_id)} onChange={() => toggleSelected(file.file_id)} aria-label={`选择 ${file.display_name}`} /></td><td><Link className="file-name" to={`/files/${file.file_id}`}><FileTextGlyph type={file.document_type} /><span>{file.display_name}</span></Link></td><td>{file.document_type}</td><td><FileStatus status={file.status} /></td><td><span className="tag-list">{file.tags.map((tag) => <span className="tag-chip" key={tag.tag_id} style={tag.color ? { borderColor: tag.color, color: tag.color } : undefined}><TagIcon size={12} aria-hidden="true" />{tag.name}</span>)}</span></td><td>{formatBytes(file.byte_size)}</td><td>{formatDate(file.updated_at)}</td><td><button className="icon-button icon-button--small" type="button" onClick={() => deleteMutation.mutate(file)} aria-label={`移入回收站 ${file.display_name}`} title="移入回收站"><MoreHorizontal size={16} aria-hidden="true" /></button></td></tr>)}</tbody></table>
+            <table className="file-table"><thead><tr><th><input type="checkbox" checked={files.length > 0 && selected.length === files.length} onChange={selectAll} aria-label="选择全部文件" /></th><th>名称</th><th>类型</th><th>状态</th><th>标签</th><th>大小</th><th>更新</th><th aria-label="操作" /></tr></thead><tbody>{files.map((file) => <tr key={file.file_id}><td><input type="checkbox" checked={selected.includes(file.file_id)} onChange={() => toggleSelected(file.file_id)} aria-label={`选择 ${file.display_name}`} /></td><td><Link className="file-name" to={`/files/${file.file_id}`} onClick={(event) => openFile(event, file.file_id)}><FileTextGlyph type={file.document_type} /><span>{file.display_name}</span></Link></td><td>{file.document_type}</td><td><FileStatus status={file.status} /></td><td><span className="tag-list">{file.tags.map((tag) => <span className="tag-chip" key={tag.tag_id} style={tag.color ? { borderColor: tag.color, color: tag.color } : undefined}><TagIcon size={12} aria-hidden="true" />{tag.name}</span>)}</span></td><td>{formatBytes(file.byte_size)}</td><td>{formatDate(file.updated_at)}</td><td><button className="icon-button icon-button--small" type="button" onClick={() => deleteMutation.mutate(file)} aria-label={`移入回收站 ${file.display_name}`} title="移入回收站"><MoreHorizontal size={16} aria-hidden="true" /></button></td></tr>)}</tbody></table>
             {filesQuery.isLoading && <div className="empty-state"><strong>正在加载文件…</strong></div>}
             {filesQuery.isError && <div className="empty-state"><strong>文件加载失败</strong><span>{filesQuery.error instanceof Error ? filesQuery.error.message : '请稍后重试。'}</span><button type="button" className="quiet-button" onClick={() => void filesQuery.refetch()}>重试</button></div>}
             {!filesQuery.isLoading && !filesQuery.isError && files.length === 0 && <div className="empty-state"><FileUp size={24} aria-hidden="true" /><strong>{query || folderId || tagId || documentType || status ? '没有匹配的文件' : '还没有文件'}</strong><span>{query || folderId || tagId || documentType || status ? '尝试清除搜索和筛选条件。' : '导入 PDF、DOCX、PPTX、TXT 或 Markdown 开始整理。'}</span><button type="button" className="primary-button" onClick={() => inputRef.current?.click()}>导入文件</button></div>}

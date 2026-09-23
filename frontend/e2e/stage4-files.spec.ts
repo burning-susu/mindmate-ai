@@ -21,7 +21,9 @@ test('stage 4 file lifecycle works through the browser', async ({ page }) => {
   await expect(page.getByText('MindMate browser stage 4 check')).toBeVisible()
 
   await page.getByRole('link', { name: '返回文件' }).click()
+  const fileRow = page.getByRole('link', { name: /browser-check\.txt/ })
   await page.getByRole('button', { name: '移入回收站 browser-check.txt' }).click()
+  await expect(fileRow).not.toBeVisible()
   await page.getByRole('link', { name: '回收站' }).click()
   await expect(page.getByText('browser-check.txt')).toBeVisible()
   await page.getByRole('button', { name: '恢复', exact: true }).click()

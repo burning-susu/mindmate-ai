@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { BrowserRouter } from 'react-router-dom'
 
@@ -70,5 +70,41 @@ describe('stage 4 file workspace', () => {
     expect(await screen.findByText('PARSER_FAILED')).toBeInTheDocument()
     expect(screen.getByText('失败阶段')).toBeInTheDocument()
     expect(screen.getByText('重试次数')).toBeInTheDocument()
+  })
+
+  it('restores list filters, sorting, and scroll position after returning from details', async () => {
+    window.history.pushState({}, '', '/files')
+    Object.defineProperty(window, 'scrollY', { configurable: true, value: 240 })
+    const scrollTo = vi.fn()
+    vi.stubGlobal('scrollTo', scrollTo)
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      let payload: unknown = { items: [] }
+      if (url.includes('/system/session')) payload = { status: 'ready' }
+      else if (url.includes('/api/v1/files?')) payload = {
+        items: [{ file_id: 'file-1', display_name: 'lecture.txt', source_name: 'lecture.txt', extension: '.txt', document_type: 'TXT', folder_id: null, folder_name: null, status: 'PARSED', content_hash: 'hash', byte_size: 42, created_at: '2026-09-22T00:00:00Z', updated_at: '2026-09-22T00:00:00Z', deleted_at: null, purge_after: null, row_version: 1, tags: [], parsed_metadata: null, has_parsed_text: true, content_available: true, parse_failure_stage: null, parse_error_id: null, parse_retry_count: 0, can_reprocess: true }], next_cursor: null,
+      }
+      else if (url.endsWith('/api/v1/folders')) payload = { items: [] }
+      else if (url.endsWith('/api/v1/tags')) payload = { items: [] }
+      else if (url.endsWith('/api/v1/files/file-1')) payload = { file_id: 'file-1', display_name: 'lecture.txt', source_name: 'lecture.txt', extension: '.txt', document_type: 'TXT', folder_id: null, folder_name: null, status: 'PARSED', content_hash: 'hash', byte_size: 42, created_at: '2026-09-22T00:00:00Z', updated_at: '2026-09-22T00:00:00Z', deleted_at: null, purge_after: null, row_version: 1, tags: [], parsed_metadata: null, has_parsed_text: true, content_available: true, parse_failure_stage: null, parse_error_id: null, parse_retry_count: 0, can_reprocess: true }
+      else if (url.endsWith('/preview')) payload = { preview_available: true, text: 'lecture text', metadata: { line_count: 1, character_count: 12 } }
+      else if (url.endsWith('/knowledge-bases')) payload = { items: [] }
+      return new Response(JSON.stringify(payload), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }))
+
+    render(<BrowserRouter><App /></BrowserRouter>)
+    fireEvent.change(await screen.findByRole('textbox', { name: '搜索文件' }), { target: { value: 'lecture' } })
+    fireEvent.change(screen.getByRole('combobox', { name: '排序' }), { target: { value: 'name' } })
+    await waitFor(() => expect(window.location.search).toContain('q=lecture'))
+    expect(window.location.search).toContain('sort=name')
+
+    fireEvent.click(await screen.findByRole('link', { name: /lecture\.txt/ }))
+    expect(await screen.findByRole('heading', { name: 'lecture.txt' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('link', { name: '返回文件' }))
+    await screen.findByRole('heading', { name: '文件' })
+
+    await waitFor(() => expect(window.location.search).toContain('q=lecture'))
+    expect(window.location.search).toContain('sort=name')
+    await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ top: 240, behavior: 'auto' }))
   })
 })
