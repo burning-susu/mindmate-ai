@@ -22,6 +22,7 @@ from mindmate.api.knowledge_bases import router as knowledge_bases_router
 from mindmate.api.problem import ProblemDetail
 from mindmate.application.index_chunking_worker import IndexChunkingWorker
 from mindmate.application.index_embedding_worker import IndexEmbeddingWorker
+from mindmate.application.index_fts_worker import IndexFtsWorker
 from mindmate.application.index_preprocessing_worker import IndexPreprocessingWorker
 from mindmate.application.knowledge_membership_worker import KnowledgeMembershipWorker
 from mindmate.application.parse_worker_service import ParsingWorker
@@ -100,8 +101,13 @@ async def lifespan(app: FastAPI):
             app.state.session_factory, settings
         )
         app.state.index_embedding_worker.start()
+        app.state.index_fts_worker = IndexFtsWorker(app.state.session_factory, settings)
+        app.state.index_fts_worker.start()
         yield
     finally:
+        fts_worker = getattr(app.state, "index_fts_worker", None)
+        if fts_worker is not None:
+            fts_worker.stop()
         embedding_worker = getattr(app.state, "index_embedding_worker", None)
         if embedding_worker is not None:
             embedding_worker.stop()

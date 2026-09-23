@@ -1,7 +1,7 @@
 # 阶段 5：知识库基础与成员准入测试报告
 
 > 阶段：`5`
-> 批次：`第八批 + 第九批 + 第十批 + 第十一批 + 第十二批 + 第十三批`
+> 批次：`第八批 + 第九批 + 第十批 + 第十一批 + 第十二批 + 第十三批 + 第十四批`
 > 验证日期：`2026-09-23`
 > 第八批结论：`PASS`
 > 第九批结论：`PASS`
@@ -9,6 +9,7 @@
 > 第十一批结论：`PASS`
 > 第十二批结论：`PASS`
 > 第十三批结论：`PASS`
+> 第十四批结论：`PASS`
 > 阶段 5 状态：`PARTIAL`
 > 分支：`feat/v1-bootstrap`
 > 起始提交：`75a0653877b7f627bc254a859232689c19872777`
@@ -21,9 +22,9 @@
 
 ## 结论
 
-第八批“空知识库创建、编辑、列表、详情、回收站与恢复”闭环通过；第九批“已导入文件批量加入/移出知识库、持久成员准入任务和前端真实状态”闭环通过；第十批“索引配置、迁移与可恢复输入预处理”闭环通过；第十一批“结构优先版本化 Chunk 与可恢复切片”闭环通过；第十二批“可信固定 ONNX 产物获取、校验与独立 CPU Embedding Adapter”通过；第十三批“持久 EmbeddingRecord、单并发可恢复 Worker 与真实 sqlite-vec 向量写入”通过。空库保持 `EMPTY`；已生成 Embedding 的版本仍为 `BUILDING`，没有激活，不可检索。
+第八批“空知识库创建、编辑、列表、详情、回收站与恢复”闭环通过；第九批“已导入文件批量加入/移出知识库、持久成员准入任务和前端真实状态”闭环通过；第十批“索引配置、迁移与可恢复输入预处理”闭环通过；第十一批“结构优先版本化 Chunk 与可恢复切片”闭环通过；第十二批“可信固定 ONNX 产物获取、校验与独立 CPU Embedding Adapter”通过；第十三批“持久 EmbeddingRecord、单并发可恢复 Worker 与真实 sqlite-vec 向量写入”通过；第十四批“按 IndexVersion 隔离的持久 FTS5 Chunk 投影与可恢复构建”通过。空库保持 `EMPTY`；Embedding 与 FTS 生成完成的版本仍为 `BUILDING`，没有激活，不可检索。
 
-第十批 `INDEX_PREPROCESS` 的 `COMPLETED` 只证明输入快照、配置指纹与逐项预处理结果已持久化。第十一批 `INDEX_CHUNK` 的 `COMPLETED` 只表示切片阶段结束。第十三批 `INDEX_EMBED` 的 `COMPLETED` 只表示向量与 `EmbeddingRecord` 已生成并持久化，不表示索引就绪。`IndexVersion.status` 保持 `BUILDING`，`active_index_version_id` 不变，成员仍不可检索。阶段 5 仍为 `PARTIAL`：FTS5、向量 Top-K 查询、原子索引激活、混合检索、引用和 RAG 尚未实现。
+第十批 `INDEX_PREPROCESS` 的 `COMPLETED` 只证明输入快照、配置指纹与逐项预处理结果已持久化。第十一批 `INDEX_CHUNK` 的 `COMPLETED` 只表示切片阶段结束。第十三批 `INDEX_EMBED` 的 `COMPLETED` 只表示向量与 `EmbeddingRecord` 已生成并持久化。第十四批 `INDEX_FTS` 的 `COMPLETED` 只表示 FTS5 投影已建立。以上都不表示索引就绪；`IndexVersion.status` 保持 `BUILDING`，`active_index_version_id` 不变，成员仍不可检索。阶段 5 仍为 `PARTIAL`：向量 Top-K 查询、原子索引激活、混合检索、引用和 RAG 尚未实现。
 
 ## 实现范围
 
@@ -262,8 +263,59 @@ repo> git diff --check
 
 ## 未实现与下一批前置
 
-- Embedding 已生成并持久化，但 FTS5、向量 Top-K、RRF、增量/原子索引激活、测试检索、引用和 RAG 未实现。
-- 未建立关键词/向量索引、未激活索引或开放检索。
+- Embedding 和 FTS5 投影已生成并持久化，但向量 Top-K、RRF、增量/原子索引激活、测试检索、引用和 RAG 未实现。
+- 没有激活索引或开放检索；FTS5 投影不是公开关键词搜索能力。
 - 未宣称阶段 5 `PASS`，也未回填阶段 4 的发布候选遗留项。
 
-下一批唯一目标：为同一 `IndexVersion` 增加持久 FTS5 索引生成与逐输入检查点；不做 Top-K 查询、混合检索、索引激活、引用或 RAG。
+下一批唯一目标：增加同一 `IndexVersion` 的内部 sqlite-vec Top-K 查询与版本/成员过滤测试；不激活索引或开放 RAG。
+
+## 第十四批验收追踪：持久 FTS5 Chunk 投影
+
+| ID | 验收项 | 证据 | 结论 |
+| --- | --- | --- | --- |
+| S5-B14-01 | Alembic 增量增加 FTS5 虚表、版本映射、逐输入状态/原因/计数/时间与单运行租约约束 | `d60f2e8a7c31`；空库、既有库升级与 `quick_check=ok` | PASS |
+| S5-B14-02 | 按 `IndexVersion + Chunk` 隔离；映射可回溯文件、解析修订、切片配置和正文 hash，新版本不覆盖旧版本 | `test_fts5_is_versioned_chinese_short_query_bm25_and_rebuildable` | PASS |
+| S5-B14-03 | FTS5 MATCH/BM25 对固定中文、二字/单字短查询与英文词实际命中；不使用 LIKE | 同上；内部 `match_version` 查询与 BM25 排序 | PASS |
+| S5-B14-04 | FTS 映射、虚表行、逐文件检查点和任务进度原子提交；重复构建幂等 | `test_task_progress_checkpoint_counts_each_committed_input`、逐项失败/重试与重建回归 | PASS |
+| S5-B14-05 | 映射损坏可从权威 Chunk 重建，且 FTS5 内部完整性、映射/Chunk 一致性检查通过 | 损坏后删除目标版本派生投影并 rebuild；`integrity-check` 与 `consistency_check` | PASS |
+| S5-B14-06 | 单项失败隔离、稳定原因、显式重试；取消、租约过期接管和重复领取可恢复 | `test_fts_input_failure_isolated_and_explicit_retry_recovers`、`test_expired_lease_resumes_running_input_without_duplicate_projection`、取消专项 | PASS |
+| S5-B14-07 | 成员移出、文件回收站和版本变化立即排除旧 FTS 行；永久删除只清目标文件投影，知识库清理只影响本库版本 | 成员移除、文件回收站/永久删除、共享文件多知识库 purge 回归 | PASS |
+| S5-B14-08 | FTS-only 降级/再升级不删除 Chunk、EmbeddingRecord 或向量数据；投影可再构建 | `test_fts_migration_rollback_preserves_chunks_and_embedding_records`，降级至 `a81f3c6d2e90` 后重升 head | PASS |
+| S5-B14-09 | 本批不激活索引、不开放检索、Top-K、融合、引用或 RAG | `IndexVersion.status=BUILDING`、`active_index_version_id=NULL`、摘要 `available_for_retrieval=false` 断言；无 API/UI 变化 | PASS |
+
+## 第十四批实际验证
+
+~~~text
+backend> uv run --locked pytest
+105 passed
+
+backend> uv run --locked ruff check src tests
+All checks passed
+
+backend> uv run --locked pyright
+0 errors, 0 warnings, 0 informations
+
+backend> uv run --locked python -m compileall -q src tests migrations
+通过
+
+backend> 空库 / 既有数据库 Alembic upgrade head
+revision d60f2e8a7c31；PRAGMA quick_check=ok
+
+backend> FTS-only downgrade a81f3c6d2e90 -> upgrade head
+Chunk 与 EmbeddingRecord 数量保持；FTS 投影按设计移除，再由 Chunk 重建；PRAGMA quick_check=ok
+
+backend> uv run --locked uvicorn mindmate.main:app --host 127.0.0.1 --port 8014
+MINDMATE_DATA_DIR 指向临时隔离目录；health 返回 ok，E2E 完成后停止服务
+
+frontend> MINDMATE_API_PORT=8014 MINDMATE_WEB_PORT=5173 npm run test:e2e -- e2e/stage4-files.spec.ts e2e/stage5-knowledge-bases.spec.ts --reporter=line --workers=1
+2 passed（隔离数据目录、真实 FastAPI + Vite；使用项目允许的 5173 Origin）
+
+repo> git diff --check
+通过
+~~~
+
+FTS5 采用 `unicode61 remove_diacritics 2`。拉丁/Unicode 词项按词匹配；连续汉字同时索引重叠二元词与单字辅助列，以支持短中文查询。此策略不是 ICU/Jieba 词典分词；连续汉字采用二元词召回，BM25 的最终相关性/Recall 尚未评估，且本批没有公开 MATCH API。
+
+FTS 回退边界：只允许在需要撤销本批 schema 时从 `d60f2e8a7c31` 降级到 `a81f3c6d2e90`。该操作会删除可重建的 FTS5 虚表、映射和 FTS 检查点列，不修改 Chunk、EmbeddingRecord、向量数据库或原始资料；重新升级后映射为空，必须从 Chunk 重建。不得继续降级穿过之前批次的持久业务数据迁移。
+
+本批结论：`PASS`；阶段 5 继续 `PARTIAL`。没有激活 `IndexVersion`，FTS 投影完成不等于关键词检索可用。未实现向量 Top-K、混合检索、原子激活、引用和 RAG。

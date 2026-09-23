@@ -278,7 +278,7 @@ def test_cancelled_preprocessing_does_not_publish_or_reactivate(index_runtime) -
         assert session.get(KnowledgeBase, knowledge_base_id).active_index_version_id is None
 
 
-def test_permanent_file_delete_cleans_unbuilt_snapshot_without_deleting_other_files(
+def test_permanent_file_delete_invalidates_only_its_unbuilt_snapshot_input(
     index_runtime,
 ) -> None:
     client, settings, factory = index_runtime
@@ -304,7 +304,21 @@ def test_permanent_file_delete_cleans_unbuilt_snapshot_without_deleting_other_fi
     assert purged.status_code == 200
     assert client.get(f"/api/v1/files/{other_id}").status_code == 200
     with factory() as session:
-        assert session.get(IndexVersion, version_id) is None
+        version = session.get(IndexVersion, version_id)
+        assert version is not None and version.status == "NEEDS_REBUILD"
+        assert version.fts_status == "INVALIDATED"
+        assert session.scalar(
+            select(IndexVersionInput).where(
+                IndexVersionInput.index_version_id == version_id,
+                IndexVersionInput.file_id == file_id,
+            )
+        ) is None
+        assert session.scalar(
+            select(IndexVersionInput).where(
+                IndexVersionInput.index_version_id == version_id,
+                IndexVersionInput.file_id == other_id,
+            )
+        ) is not None
 
 
 def test_permanent_knowledge_base_delete_cleans_snapshot_and_keeps_source_file(

@@ -204,6 +204,9 @@ class IndexVersion(Base):
     embedding_status: Mapped[str] = mapped_column(
         String(30), default="NOT_STARTED", server_default=text("'NOT_STARTED'"), nullable=False
     )
+    fts_status: Mapped[str] = mapped_column(
+        String(30), default="NOT_STARTED", server_default=text("'NOT_STARTED'"), nullable=False
+    )
     input_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     prepared_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     skipped_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
@@ -254,6 +257,34 @@ class IndexVersionInput(Base):
         Integer, default=0, server_default=text("0"), nullable=False
     )
     embedded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    fts_status: Mapped[str] = mapped_column(
+        String(30), default="PENDING", server_default=text("'PENDING'"), nullable=False
+    )
+    fts_reason_code: Mapped[str | None] = mapped_column(String(80))
+    fts_count: Mapped[int] = mapped_column(
+        Integer, default=0, server_default=text("0"), nullable=False
+    )
+    fts_indexed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class FtsChunkMap(Base):
+    __tablename__ = "fts_chunk_map"
+    __table_args__ = (
+        UniqueConstraint("index_version_id", "chunk_id", name="uq_fts_chunk_version_chunk"),
+        Index("ix_fts_chunk_map_version_file", "index_version_id", "file_id"),
+        Index("ix_fts_chunk_map_chunk", "chunk_id"),
+    )
+    fts_row_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    index_version_id: Mapped[str] = mapped_column(
+        ForeignKey("index_versions.index_version_id"), nullable=False
+    )
+    chunk_id: Mapped[str] = mapped_column(ForeignKey("chunks.chunk_id"), nullable=False)
+    file_id: Mapped[str] = mapped_column(ForeignKey("files.file_id"), nullable=False)
+    parse_revision_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    chunking_config_id: Mapped[str] = mapped_column(
+        ForeignKey("chunking_configs.chunking_config_id"), nullable=False
+    )
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
 
 
 class Chunk(Base):

@@ -9,7 +9,7 @@ from sqlalchemy import create_engine, inspect, text
 from mindmate.config import Settings
 
 PREVIOUS_REVISION = "bc554b1b4366"
-CURRENT_REVISION = "a81f3c6d2e90"
+CURRENT_REVISION = "d60f2e8a7c31"
 
 
 def migration_config(data_dir: Path) -> tuple[Config, Settings]:
@@ -49,6 +49,7 @@ def test_empty_database_upgrade_downgrade_and_reupgrade(tmp_path: Path) -> None:
         "index_versions",
         "index_version_inputs",
         "chunks",
+        "fts_chunk_map",
     }.issubset(set(inspect(engine).get_table_names()))
     assert "chunking_status" in column_names(engine, "index_versions")
     assert {
@@ -57,6 +58,20 @@ def test_empty_database_upgrade_downgrade_and_reupgrade(tmp_path: Path) -> None:
         "chunk_count",
         "chunked_at",
     }.issubset(column_names(engine, "index_version_inputs"))
+    assert "fts_status" in column_names(engine, "index_versions")
+    assert {
+        "fts_status",
+        "fts_reason_code",
+        "fts_count",
+        "fts_indexed_at",
+    }.issubset(column_names(engine, "index_version_inputs"))
+    with engine.connect() as connection:
+        assert connection.scalar(
+            text(
+                "SELECT COUNT(*) FROM sqlite_master "
+                "WHERE type='table' AND name='index_chunk_fts'"
+            )
+        ) == 1
     engine.dispose()
 
     command.downgrade(config, PREVIOUS_REVISION)
@@ -66,6 +81,11 @@ def test_empty_database_upgrade_downgrade_and_reupgrade(tmp_path: Path) -> None:
     assert "parse_retry_count" not in column_names(engine, "files")
     assert "icon" not in column_names(engine, "knowledge_bases")
     assert "index_versions" not in inspect(engine).get_table_names()
+    assert "fts_chunk_map" not in inspect(engine).get_table_names()
+    with engine.connect() as connection:
+        assert connection.scalar(
+            text("SELECT COUNT(*) FROM sqlite_master WHERE name='index_chunk_fts'")
+        ) == 0
     engine.dispose()
 
     command.upgrade(config, "head")

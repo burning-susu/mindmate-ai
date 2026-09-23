@@ -86,3 +86,16 @@ Windows 11 x64 / Python 3.12.11 实际 CPU 验证使用 ONNX Runtime 1.30.0、to
 - 永久删除知识库只删除该知识库 `IndexVersion` 的向量数据库与版本快照，不删除其他知识库可能复用的文件级 Chunk/EmbeddingRecord。文件永久删除清理目标文件在相关 IndexVersion 中的向量记录，再删除该文件 EmbeddingRecord 与 Chunk；清理失败时业务行仍保留并返回可重试错误。
 - `INDEX_EMBED` 成功只表示“Embedding 已生成并持久化”。`IndexVersion.status` 继续为 `BUILDING`，`active_index_version_id` 不变，知识库成员 `index_state` 不变且 `available_for_retrieval=false`；本批没有 FTS5、向量 Top-K、索引激活、混合检索、引用或 RAG，也没有新 API 路由和 UI 页面。
 - Windows 11 / Python 3.12 的本批证据包括真实文件 sqlite-vec 512 维持久写入、重启双向映射对账，以及使用 Git 忽略的固定 `manager-validation` 模型缓存离线执行真实 ONNX Worker。缓存既不生成也不修改、不清理、不提交；若目标环境没有匹配缓存，仅以固定离线 Fixture 测试，不能宣称该环境完成了真实模型 Worker 冒烟。
+
+## 持久 FTS5 投影阶段（第十四批）
+
+- `INDEX_FTS` 是独立 SQLite 持久任务，只处理同一 `IndexVersion` 中仍为 `PREPARED + CHUNKED` 的输入；再次校验知识库未软删除、成员仍为 ACTIVE 且 `added_at` 与快照相同、文件未进回收站、内容 hash/解析修订一致、Chunk 集完整且属于该切片配置。
+- Alembic revision `d60f2e8a7c31` 增加 `IndexVersion.fts_status` 和 `IndexVersionInput.fts_status/fts_reason_code/fts_count/fts_indexed_at`，以及 `fts_chunk_map`。映射唯一键是 `index_version_id + chunk_id`，外键约束到 IndexVersion、Chunk、File 和 ChunkingConfig，并记录 `file_id`、`parse_revision_id`、`chunking_config_id` 和 Chunk 正文 `content_hash`；FTS 虚表 `index_chunk_fts` 的 rowid 对应映射主键。IndexVersion 是隔离边界，新版本构建不会清空旧版本。
+- 虚表只存派生的 Chunk 正文投影，不替代 `Chunk`。同一 SQLite 事务内替换该文件当前版本映射/FTS 行、更新逐输入结果和任务 JSON 检查点；崩溃只可能看到旧投影或新投影，不会看到半套。失败文件不阻断同版本其他文件；租约过期接管会把 RUNNING 输入复位为 PENDING，显式 `retry_failed` 可重试失败项；`rebuild=true` 可先清单个 IndexVersion 的派生行，再从权威 Chunk 重建。
+- 单运行约束使用 `INDEX_FTS + RUNNING` SQLite 部分唯一索引。Worker 支持关闭中断、任务取消和租约续期；任务摘要将索引状态固定为 `BUILDING`/`available_for_retrieval=false`，不设置 `active_index_version_id`。
+- FTS5 列为不索引的原文 `content`、`han_bigrams`、`han_unigrams` 和 `terms`，tokenizer 为 `unicode61 remove_diacritics 2`。连续汉字额外生成重叠二元词与单字辅助词，二字及单字短中文查询可匹配；拉丁/Unicode 非汉字词项按词并大小写折叠。当前未依赖 ICU/Jieba，英语支持词项检索但不承诺词干/同义词；BM25 可用于后续排序，本批不评估最终相关性、Recall 或公开查询 API。
+- 内部 MATCH/BM25 校验必须通过 `fts_chunk_map` 限定 IndexVersion，并 join 当前 `IndexVersionInput`、KnowledgeBaseFile、KnowledgeBase、FileRecord 和 Chunk，确认输入仍已索引、成员仍 ACTIVE 且加入时间未变、知识库/文件未删除、文件 hash/解析修订和 Chunk hash/配置仍一致、版本仍为 BUILDING。软删除或移出即使暂留历史 FTS 行也会被过滤；此内部校验不是公开检索端点。
+- FTS5 内部 `integrity-check` 验证虚表倒排结构；`consistency_check` 另验证映射、FTS row、当前 Chunk 正文/哈希/版本字段双向一致。两类检查不可互相替代。损坏时仅删除对应版本派生投影并从 Chunk 重建，不需要重跑解析、切片或 Embedding。
+- 永久删除知识库时只删除它的 IndexVersion FTS 映射/虚表行与版本向量空间，不删除其他知识库可复用的文件级 Chunk/EmbeddingRecord。永久删除文件时删除该源文件在相关版本中的 FTS 行与输入快照，同时清理该源文件自己的 Chunk/Embedding/向量；若未激活版本还有其他输入，则仅移除目标输入、保留其他文件映射并将该版本标记 `NEEDS_REBUILD`/`fts_status=INVALIDATED`，使旧版本不能继续被内部 MATCH 使用。版本不再含任何输入时才整体删除。
+- FTS-only 降级边界是从 `d60f2e8a7c31` 回退到 `a81f3c6d2e90`：删除 FTS 虚表、映射和 FTS 检查点列，即丢弃可重建衍生数据；不触碰 Chunk、EmbeddingRecord、sqlite-vec 文件、原始文件或其他业务表。重新升级后 FTS 为空，必须显式重建。禁止以此证据推导允许降级穿过此前包含持久用户数据的迁移。
+- 第十四批验证：后端 `105 passed`；Ruff、Pyright `0 errors`、compileall 通过；空库和已有数据升级、FTS-only downgrade/re-upgrade 后 Chunk/EmbeddingRecord 数量保持且可重建；固定中文/英文 MATCH、BM25、逐输入进度、租约接管、取消、逐项失败/重试、损坏恢复、成员移除、文件回收站/永久删除、共享 Chunk 和知识库定向清理均通过。该阶段没有新增公开 API、OpenAPI schema 或前端改动。

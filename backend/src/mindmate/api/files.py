@@ -43,6 +43,7 @@ from mindmate.application.files import (
 )
 from mindmate.application.tasks import add_event, cancel_task, create_task
 from mindmate.config import Settings
+from mindmate.infrastructure.fts5 import Fts5Projection
 from mindmate.infrastructure.models import (
     BackgroundTask,
     Chunk,
@@ -79,15 +80,38 @@ def _delete_unbuilt_index_snapshots_for_files(session: Session, file_ids: list[s
     )
     if not version_ids:
         return
-    session.execute(
-        delete(IndexVersionInput).where(IndexVersionInput.index_version_id.in_(version_ids))
-    )
-    session.execute(
-        delete(IndexVersion).where(
-            IndexVersion.index_version_id.in_(version_ids),
-            IndexVersion.status == "BUILDING",
+    for version_id in set(version_ids):
+        version = session.get(IndexVersion, version_id)
+        if version is None:
+            continue
+        session.execute(
+            delete(IndexVersionInput).where(
+                IndexVersionInput.index_version_id == version_id,
+                IndexVersionInput.file_id.in_(file_ids),
+            )
         )
-    )
+        remaining = session.scalar(
+            select(func.count()).select_from(IndexVersionInput).where(
+                IndexVersionInput.index_version_id == version_id
+            )
+        ) or 0
+        if remaining == 0:
+            Fts5Projection().delete_version(session, version_id)
+            session.delete(version)
+        else:
+            states: dict[str, int] = {}
+            for input_status, count in session.execute(
+                select(IndexVersionInput.status, func.count())
+                .where(IndexVersionInput.index_version_id == version_id)
+                .group_by(IndexVersionInput.status)
+            ).all():
+                states[str(input_status)] = int(count)
+            version.input_count = int(remaining)
+            version.prepared_count = int(states.get("PREPARED", 0))
+            version.skipped_count = int(states.get("SKIPPED", 0))
+            version.failed_count = int(states.get("FAILED", 0))
+            version.status = "NEEDS_REBUILD"
+            version.fts_status = "INVALIDATED"
 
 
 class FileApiError(Exception):
@@ -110,6 +134,7 @@ def _delete_embedding_artifacts_for_files(
 ) -> None:
     if not file_ids:
         return
+    Fts5Projection().delete_files(session, file_ids)
     vectors = list(
         session.execute(
             select(

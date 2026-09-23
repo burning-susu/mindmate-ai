@@ -17,9 +17,11 @@ from mindmate.api.files import VERSION_CONFLICT_RESPONSES, FileApiError
 from mindmate.application.chunking import CHUNK_GENERATION_TASK
 from mindmate.application.files import normalize_name, utc_now
 from mindmate.application.index_embedding import INDEX_EMBED_TASK
+from mindmate.application.index_fts import INDEX_FTS_TASK
 from mindmate.application.index_preprocessing import INDEX_PREPROCESS_TASK
 from mindmate.application.knowledge_membership_worker import KNOWLEDGE_MEMBERSHIP_TASK
 from mindmate.application.tasks import cancel_task, create_task
+from mindmate.infrastructure.fts5 import Fts5Projection
 from mindmate.infrastructure.models import (
     BackgroundTask,
     FileRecord,
@@ -510,6 +512,7 @@ def cancel_knowledge_membership_task(
         INDEX_PREPROCESS_TASK,
         CHUNK_GENERATION_TASK,
         INDEX_EMBED_TASK,
+        INDEX_FTS_TASK,
     }
     if task is None or task.task_type not in cancellable_types:
         raise FileApiError("TASK_NOT_FOUND", "任务不存在。", 404)
@@ -625,6 +628,9 @@ def purge_knowledge_base(
             )
         ).all()
     )
+    projection = Fts5Projection()
+    for version_id, _config_id in versions:
+        projection.delete_version(session, version_id)
     store = SqliteVecAdapter(request.app.state.settings.vectors_dir)
     try:
         for version_id, config_id in versions:
