@@ -62,9 +62,17 @@
 - 第十一批任务：新增独立 `INDEX_CHUNK` 持久 Worker，消费同一 `IndexVersion` 中 `PREPARED` 输入；逐文件 Chunk 集与检查点事务原子发布，支持取消检查、租约续期/过期接管、应用关闭续跑、显式失败重试及文件永久删除竞态。任务完成只代表切片阶段结束，索引保持 `BUILDING` 且不激活。
 - 生命周期与契约：文件或递归文件夹永久删除时按准确 `file_id` 清理 Chunk；保留其他文件/知识库仍可复用的 Chunk。任务详情 OpenAPI 增加 `task_type`、`index_version_id`，生成契约为 34 schemas / 50 operations。
 - 前端：知识库详情使用真实文件选择、成员列表、任务轮询、逐项结果和移出；解析中/失败、待索引与不可检索状态明确；刷新后恢复数据库状态。
-- 验收证据：第十一批结论 `PASS`；后端 `60 passed`、Ruff、Pyright、compileall；前端 lint/typecheck、Vitest `13 passed`、production build；真实本地后端阶段 5 Playwright `1 passed`、阶段 4 回归 `1 passed`；OpenAPI 3.1 `34 schemas / 50 operations`；空库、已有数据迁移、降级/再升级与 SQLite `quick_check=ok`。详见 `docs/test-reports/stage-5-knowledge-base-foundation.md`。
-- 未完成：模型下载、ONNX Embedding、FTS5、sqlite-vec、增量/原子索引激活、混合检索、引用和 RAG。因此阶段 5 不标记为 `PASS`。
-- 下一批次：以本批稳定 Chunk 为输入，单独实现本地 ONNX Embedding 生成、持久化与恢复；不提前进入 FTS、向量索引、激活或检索。
+- 验收证据：第十一批历史结论 `PASS`；当时后端 `60 passed`、真实阶段 4/5 Playwright 各 `1 passed`。完整历史与第十二批增量证据见 `docs/test-reports/stage-5-knowledge-base-foundation.md`。
+- 未完成：ONNX Adapter 尚未接入持久 Embedding Worker/`EmbeddingRecord`；FTS5、sqlite-vec、增量/原子索引激活、混合检索、引用和 RAG 也未实现。因此阶段 5 仍为 `PARTIAL`。
+- 下一批次唯一目标：把本批稳定 ONNX Adapter 接入持久 Embedding 任务与 `EmbeddingRecord`，实现生成、持久化和恢复；不提前进入 FTS5、sqlite-vec、索引激活、检索或 RAG。
+
+### 第十二批：固定 ONNX 模型来源与本地推理
+
+- 固定上游模型 `BAAI/bge-small-zh-v1.5` revision `7999e1d3359715c523056ef9478215996d62a620`。上游固定 revision 没有 ONNX；本批选用 `Xenova/bge-small-zh-v1.5` revision `75c43b069aac4d136ba6bc1122f995fedcfd2781`，并记录其上游 MIT 许可、第三方来源及 license metadata 缺失情况。各运行/参考文件 SHA-256 见模型来源契约。
+- 新增本地模型管理器与 ONNX Adapter。管理器固定 URL/revision、大小和 SHA-256，使用 `.partial`、路径/跳转/超时限制、取消、错误恢复和原子发布；Adapter 固定查询前缀、masked mean pooling、L2 normalization、512 维、CPU、批量/CPU 上限，超限输入显式报错。失败 fixture 不下载在线模型，应用启动不加载运行时。
+- 仅新建的默认 Embedding 配置写入复合 model revision/artifact fingerprint；历史 `model_revision=NULL` 行保留。没有创建迁移、EmbeddingRecord、持久 Embedding Worker，也没有接通索引激活/检索。
+- Windows 11 x64、Python 3.12.11 实测：onnxruntime 1.30.0 CPU、tokenizers 0.23.2；与官方 safetensors 权重对照固定中文 query/document 输入，输出 `(3,512)`，最大绝对误差 `1.1175871e-7`、最小余弦相似度 `1.0`，四位小数全批向量哈希一致。真实固定 revision 下载/校验状态 `READY`，离线复用后 adapter 输出有限且单位范数。
+- 验收：后端全量 `81 passed`、Ruff、Pyright `0 errors`、compileall；前端 lint/typecheck、Vitest `13 passed`、production build；阶段 4/5 真实后端 Playwright `2 passed`；OpenAPI 无变化。详细门禁与来源在阶段 5 测试报告和索引预处理契约。
 
 ## 进度口径
 

@@ -1,26 +1,28 @@
 # 阶段 5：知识库基础与成员准入测试报告
 
 > 阶段：`5`
-> 批次：`第八批 + 第九批 + 第十批 + 第十一批`
+> 批次：`第八批 + 第九批 + 第十批 + 第十一批 + 第十二批`
 > 验证日期：`2026-09-23`
 > 第八批结论：`PASS`
 > 第九批结论：`PASS`
 > 第十批结论：`PASS`
 > 第十一批结论：`PASS`
+> 第十二批结论：`PASS`
 > 阶段 5 状态：`PARTIAL`
 > 分支：`feat/v1-bootstrap`
 > 起始提交：`75a0653877b7f627bc254a859232689c19872777`
 > 第九批起始提交：`6fd248978b84bcf96702eda081ed05469dab4bf2`
 > 第十批起始提交：`3025a5abc2a89cca97edd9cadfbeb87bccdc985f`
 > 第十一批起始提交：`59101d692db842a68496ff88219e40c7f0307afe`
+> 第十二批起始提交：`b11fb76dec5de5581ec0e95594f577fd2d6310cd`
 > Provider：`MOCK_ONLY`
-> 真实外部请求：`DISABLED`
+> 真实 DeepSeek/付费 Provider 请求：`DISABLED`
 
 ## 结论
 
-第八批“空知识库创建、编辑、列表、详情、回收站与恢复”闭环通过；第九批“已导入文件批量加入/移出知识库、持久成员准入任务和前端真实状态”闭环通过；第十批“索引配置、迁移与可恢复输入预处理”闭环通过；第十一批“结构优先版本化 Chunk 与可恢复切片”闭环通过。空库保持 `EMPTY`；存在成员但尚未完成索引时为 `PREPARING`，成员保持 `index_state=PENDING`，可用文件数为 0。
+第八批“空知识库创建、编辑、列表、详情、回收站与恢复”闭环通过；第九批“已导入文件批量加入/移出知识库、持久成员准入任务和前端真实状态”闭环通过；第十批“索引配置、迁移与可恢复输入预处理”闭环通过；第十一批“结构优先版本化 Chunk 与可恢复切片”闭环通过；第十二批“可信固定 ONNX 产物获取、校验与独立 CPU Embedding Adapter”通过。空库保持 `EMPTY`；存在成员但尚未完成索引时为 `PREPARING`，成员保持 `index_state=PENDING`，可用文件数为 0。
 
-第十批 `INDEX_PREPROCESS` 的 `COMPLETED` 只证明输入快照、配置指纹与逐项预处理结果已持久化。第十一批 `INDEX_CHUNK` 的 `COMPLETED` 只表示切片阶段结束，不能表示索引就绪。`IndexVersion.status` 保持 `BUILDING`，`active_index_version_id` 保持空，成员仍不可检索。阶段 5 仍为 `PARTIAL`：Embedding、FTS5、sqlite-vec、原子索引激活、混合检索、引用和 RAG 均未实现。
+第十批 `INDEX_PREPROCESS` 的 `COMPLETED` 只证明输入快照、配置指纹与逐项预处理结果已持久化。第十一批 `INDEX_CHUNK` 的 `COMPLETED` 只表示切片阶段结束，不能表示索引就绪。第十二批完成了独立推理 Adapter，但没有持久 Embedding 任务或 `EmbeddingRecord`。`IndexVersion.status` 保持 `BUILDING`，`active_index_version_id` 保持空，成员仍不可检索。阶段 5 仍为 `PARTIAL`：持久 Embedding、FTS5、sqlite-vec、原子索引激活、混合检索、引用和 RAG 均未实现。
 
 ## 实现范围
 
@@ -43,7 +45,7 @@
 - 导入任务进入终态时再次失效文件列表，避免 Worker 完成后继续显示导入前缓存。
 - 第九批没有数据库结构变化，当时继续使用 Alembic revision `c7d5e8a1f204`；OpenAPI 3.1 与前端生成类型同步为 `33 schemas / 50 operations`。
 - 第十批 Alembic revision `d91f4a6b2c30` 新增 `ChunkingConfig`、`EmbeddingConfig`、`IndexVersion` 和逐文件 `IndexVersionInput`；默认切片参数为约 500/80 Unicode 字符，避免把旧 `target_tokens` 字段名误当最终单位。
-- 默认 Embedding 配置只预留本地 ONNX `BAAI/bge-small-zh-v1.5`、512 维、归一化与余弦距离元数据；revision 保持空，不伪造模型已下载或可推理。
+- 第十批默认 Embedding 配置当时保持未验证；第十二批真实模型及 tokenizer 校验通过后，新默认配置保存复合 revision 与产物 fingerprint，历史 `NULL` 配置行保留。
 - 独立 `INDEX_PREPROCESS` Worker 冻结活动成员、内容哈希、解析修订、成员加入时间、配置指纹与集合指纹；逐项结果为 `PREPARED/SKIPPED/FAILED`，支持租约过期接管、检查点续跑、取消和幂等。
 - 成员移出/重加、文件回收站、内容哈希或解析修订变化会产生稳定原因码；完成前二次校验，旧任务不会激活关系或发布过期可构建输入。
 - 本批未开放 `/rebuild` 或 `index-status`，没有 API schema 变化；知识库永久删除会先清理对应预处理快照，但不删除原始文件。
@@ -53,6 +55,11 @@
 - 文件或递归文件夹永久删除时只清理对应逻辑文件的 Chunk。文件在切片计算期间永久删除会让任务以稳定错误终止并释放租约；不会删除其他文件或其他知识库仍可复用的 Chunk。
 - `GET /api/v1/tasks/{task_id}` 增加正式响应契约字段 `task_type`、`index_version_id`；OpenAPI 3.1 和前端生成类型同步为 `34 schemas / 50 operations`。
 - `/api/v1/tasks/{task_id}/cancel` 扩展支持 `INDEX_CHUNK` 与 `INDEX_PREPROCESS`；取消在处理中可被 Worker 观察，响应保留任务类型和索引版本。
+
+- 第十二批固定基础模型 BAAI/bge-small-zh-v1.5 revision 7999e1d3359715c523056ef9478215996d62a620 与第三方 ONNX 仓库 Xenova/bge-small-zh-v1.5 revision 75c43b069aac4d136ba6bc1122f995fedcfd2781；该第三方卡片指向 BAAI base model，但未单独声明 license。许可、所有运行文件大小/SHA-256 与等价性细节详见 docs/project/index-preprocessing-contract.md。
+- 新增内部 ModelManager：固定 HTTPS URL/revision、单文件大小/哈希、128 MiB 总量、10 秒连接/30 秒读取/15 分钟总超时、可信跳转域、路径保护、同进程并发锁、下载进度/取消、稳定错误码、离线缺失状态；完整校验 .partial 后原子发布。下载失败、校验失败及最后一块取消都不会发布不完整目录，失败文件保留供重试。
+- 新增独立 OnnxEmbeddingAdapter：只启用 ONNX Runtime CPUExecutionProvider；查询加官方 BGE 中文指令，文档不加前缀；masked mean pooling + L2 normalization，输出 512 维。批量不超过 16，CPU 默认 2 线程且最多 4；输入字符超过 16,000 或 tokenizer 序列超过 512 时稳定失败，不截断正文。
+- 应用启动模块导入不加载 ONNX Runtime 或 tokenizers；模型只在显式调用时下载/加载。旧 spike 下载入口已改为固定安装器。新默认 Embedding 配置只在完成真实验证后写入复合 model_revision；历史 NULL 行保留。未新增数据库迁移、API、Worker 或 UI。
 
 ## 验收追踪
 
@@ -88,6 +95,19 @@
 | S5-B11-06 | 成员变化、回收站、永久删除、哈希/解析修订和配置变化不会发布陈旧 Chunk | 发布前快照复核及永久删除竞态测试 | PASS |
 | S5-B11-07 | 永久删除只清理当前逻辑文件 Chunk，不影响其他文件版本 | 文件回收站与 Chunk 集成测试 | PASS |
 | S5-B11-08 | 切片结束不激活 IndexVersion，不改变 `active_index_version_id` 或可检索状态 | 数据库、任务摘要与 API 状态断言 | PASS |
+
+## 第十二批验收追踪
+
+| ID | 验收项 | 证据 | 结论 |
+| --- | --- | --- | --- |
+| S5-B12-01 | 基础模型/第三方 ONNX/tokenizer revision、许可说明与逐文件哈希固定 | manifest、Hugging Face revision API、实际文件 SHA-256、来源契约 | PASS |
+| S5-B12-02 | 错误哈希、缺文件、部分响应、超时、取消/重试、末块取消、并发、离线、路径与跳转错误均失败关闭 | test_embedding_model_manager.py，离线 HTTP fixture | PASS |
+| S5-B12-03 | Adapter 批量上限、CPU Provider、确定性、有限/非零、512 维、归一化、查询/文档规则与超长拒绝 | test_embedding_adapter.py 固定 tokenizer 和 fake ONNX session | PASS |
+| S5-B12-04 | 应用启动导入不加载 ONNX Runtime/tokenizers | 隔离 Python 子进程导入 mindmate.main 回归 | PASS |
+| S5-B12-05 | 实际 ONNX 与官方原始权重固定中文样本数值对齐 | Windows 11 x64 CPU；(3,512)、max abs error 1.1175871e-7、min cosine 1.0、round-4 batch digest 相等 | PASS |
+| S5-B12-06 | 固定 revision 实际下载/校验/原子发布及离线再加载、CPU 推理成功 | 本地安装器状态 READY；输出 (2,512)，有限、L2 norm 约为 1 | PASS |
+| S5-B12-07 | 阶段 4/5 浏览器关键生命周期无回归 | 隔离 SQLite + 真实 FastAPI/Vite；Playwright 2 passed | PASS |
+| S5-B12-08 | 阶段 5 仍不可检索，不接 Embedding Worker/EmbeddingRecord/FTS/向量索引 | 实现范围、现有任务/状态契约和回归测试 | PASS |
 
 ## 自动化证据
 
@@ -140,10 +160,59 @@ repo> git diff --check
 
 测试仅出现 Starlette/httpx 与 Alembic 配置的依赖弃用警告，无测试失败。没有调用 DeepSeek、上传用户资料或使用真实凭据。
 
+## 第十二批自动化与真实模型证据
+
+~~~text
+backend> uv run --locked pytest
+81 passed
+
+backend> uv run --locked ruff check src tests spikes
+All checks passed
+
+backend> uv run --locked pyright
+0 errors, 0 warnings, 0 informations
+
+backend> uv run --locked python -m compileall -q src tests spikes
+通过
+
+backend> uv lock --check --offline
+Resolved 75 packages; lock is current
+
+frontend> npm run lint
+通过（ESLint + oxlint）
+
+frontend> npm run typecheck
+通过（tsc -b）
+
+frontend> npm run test
+5 files, 13 tests passed
+
+frontend> npm run build
+Vite production build succeeded
+
+frontend> npm run test:e2e -- e2e/stage4-files.spec.ts e2e/stage5-knowledge-bases.spec.ts --reporter=line --workers=1
+2 passed（真实本地 FastAPI + Vite；临时 SQLite 和允许来源）
+
+Windows 11 x64 / Python 3.12.11 / onnxruntime 1.30.0 / tokenizers 0.23.2
+官方权重对照工具（非应用依赖）：torch 2.8.0+cpu / transformers 4.56.2
+基础模型：BAAI/bge-small-zh-v1.5@7999e1d3359715c523056ef9478215996d62a620
+ONNX：Xenova/bge-small-zh-v1.5@75c43b069aac4d136ba6bc1122f995fedcfd2781
+产物指纹：4d07bfc3eefa75de01924a4350eef08182c163b0060228410c3d882c9f07c6a5
+来源文件 SHA-256、许可及 tokenizer 全文件哈希：见 docs/project/index-preprocessing-contract.md
+
+固定 query（含官方 BGE 指令）+ 2 个中文 document：
+shape=(3,512), max_abs_error=1.1175871e-7, min_cosine=1.0
+np.round(vectors, 4).astype('<f4').tobytes(order='C') SHA-256:
+eeb4b3cb2117502891e3af08e009d24aa733f3a4d65c7e4080827d407b3f0ac5（官方权重与 ONNX 相同）
+真实固定源下载/校验后安装状态 READY；离线复用后 CPU adapter 输出有限、512 维且单位范数。
+~~~
+
+本批没有生成或提交模型文件、模型缓存、凭据或真实用户资料；真实模型验证资产位于 Git 忽略的本地目录。
+
 ## 未实现与下一批前置
 
-- 已实现正式版本化 Chunk 与持久切片 Worker，但未实现 ONNX Embedding、FTS5、sqlite-vec、RRF、测试检索和 RAG。
-- 未下载 ONNX 模型、未创建 EmbeddingRecord、未建立关键词/向量索引、未激活索引或开放检索。
+- 已验证并实现本地 ONNX Adapter，但尚未接入持久 Embedding Worker 或创建 EmbeddingRecord；FTS5、sqlite-vec、RRF、测试检索和 RAG 未实现。
+- 未建立关键词/向量索引、未激活索引或开放检索。
 - 未宣称阶段 5 `PASS`，也未回填阶段 4 的发布候选遗留项。
 
-下一批只建议一个最小闭环：基于已持久化的文件级 Chunk，实现本地 ONNX Embedding 生成、持久化和可恢复任务；不同时实现 FTS、向量索引、激活或检索。
+下一批唯一目标：基于已持久化的文件级 Chunk，把本批已验证 ONNX Adapter 接入持久 Embedding 任务与 EmbeddingRecord，实现生成、持久化和恢复；不同时实现 FTS5、sqlite-vec、索引激活或检索。
