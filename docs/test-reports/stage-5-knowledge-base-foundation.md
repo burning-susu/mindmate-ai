@@ -1,8 +1,8 @@
 # 阶段 5：知识库基础与成员准入测试报告
 
 > 阶段：`5`
-> 批次：`第八批 + 第九批 + 第十批 + 第十一批 + 第十二批 + 第十三批 + 第十四批`
-> 验证日期：`2026-09-23`
+> 批次：`第八批 + 第九批 + 第十批 + 第十一批 + 第十二批 + 第十三批 + 第十四批 + 第十五批`
+> 验证日期：`2026-09-24`
 > 第八批结论：`PASS`
 > 第九批结论：`PASS`
 > 第十批结论：`PASS`
@@ -10,6 +10,7 @@
 > 第十二批结论：`PASS`
 > 第十三批结论：`PASS`
 > 第十四批结论：`PASS`
+> 第十五批结论：`PASS`
 > 阶段 5 状态：`PARTIAL`
 > 分支：`feat/v1-bootstrap`
 > 起始提交：`75a0653877b7f627bc254a859232689c19872777`
@@ -22,9 +23,9 @@
 
 ## 结论
 
-第八批“空知识库创建、编辑、列表、详情、回收站与恢复”闭环通过；第九批“已导入文件批量加入/移出知识库、持久成员准入任务和前端真实状态”闭环通过；第十批“索引配置、迁移与可恢复输入预处理”闭环通过；第十一批“结构优先版本化 Chunk 与可恢复切片”闭环通过；第十二批“可信固定 ONNX 产物获取、校验与独立 CPU Embedding Adapter”通过；第十三批“持久 EmbeddingRecord、单并发可恢复 Worker 与真实 sqlite-vec 向量写入”通过；第十四批“按 IndexVersion 隔离的持久 FTS5 Chunk 投影与可恢复构建”通过。空库保持 `EMPTY`；Embedding 与 FTS 生成完成的版本仍为 `BUILDING`，没有激活，不可检索。
+第八批“空知识库创建、编辑、列表、详情、回收站与恢复”闭环通过；第九批“已导入文件批量加入/移出知识库、持久成员准入任务和前端真实状态”闭环通过；第十批“索引配置、迁移与可恢复输入预处理”闭环通过；第十一批“结构优先版本化 Chunk 与可恢复切片”闭环通过；第十二批“可信固定 ONNX 产物获取、校验与独立 CPU Embedding Adapter”通过；第十三批“持久 EmbeddingRecord、单并发可恢复 Worker 与真实 sqlite-vec 向量写入”通过；第十四批“按 IndexVersion 隔离的持久 FTS5 Chunk 投影与可恢复构建”通过；第十五批“内部 sqlite-vec Top-K 与范围过滤”通过。空库保持 `EMPTY`；Embedding、FTS 和内部 Top-K 完成的版本仍为 `BUILDING`，没有激活，不可作为用户检索。
 
-第十批 `INDEX_PREPROCESS` 的 `COMPLETED` 只证明输入快照、配置指纹与逐项预处理结果已持久化。第十一批 `INDEX_CHUNK` 的 `COMPLETED` 只表示切片阶段结束。第十三批 `INDEX_EMBED` 的 `COMPLETED` 只表示向量与 `EmbeddingRecord` 已生成并持久化。第十四批 `INDEX_FTS` 的 `COMPLETED` 只表示 FTS5 投影已建立。以上都不表示索引就绪；`IndexVersion.status` 保持 `BUILDING`，`active_index_version_id` 不变，成员仍不可检索。阶段 5 仍为 `PARTIAL`：向量 Top-K 查询、原子索引激活、混合检索、引用和 RAG 尚未实现。
+第十批 `INDEX_PREPROCESS` 的 `COMPLETED` 只证明输入快照、配置指纹与逐项预处理结果已持久化。第十一批 `INDEX_CHUNK` 的 `COMPLETED` 只表示切片阶段结束。第十三批 `INDEX_EMBED` 的 `COMPLETED` 只表示向量与 `EmbeddingRecord` 已生成并持久化。第十四批 `INDEX_FTS` 的 `COMPLETED` 只表示 FTS5 投影已建立。第十五批内部 Top-K 只表示限定范围内的本地向量排序可用。以上都不表示索引就绪；`IndexVersion.status` 保持 `BUILDING`，`active_index_version_id` 不变，成员仍不可检索。阶段 5 仍为 `PARTIAL`：原子索引激活、混合检索、引用和 RAG 尚未实现。
 
 ## 实现范围
 
@@ -319,3 +320,48 @@ FTS5 采用 `unicode61 remove_diacritics 2`。拉丁/Unicode 词项按词匹配�
 FTS 回退边界：只允许在需要撤销本批 schema 时从 `d60f2e8a7c31` 降级到 `a81f3c6d2e90`。该操作会删除可重建的 FTS5 虚表、映射和 FTS 检查点列，不修改 Chunk、EmbeddingRecord、向量数据库或原始资料；重新升级后映射为空，必须从 Chunk 重建。不得继续降级穿过之前批次的持久业务数据迁移。
 
 本批结论：`PASS`；阶段 5 继续 `PARTIAL`。没有激活 `IndexVersion`，FTS 投影完成不等于关键词检索可用。未实现向量 Top-K、混合检索、原子激活、引用和 RAG。
+
+## 第十五批：内部向量 Top-K 与范围过滤
+
+### 交付范围
+
+- 新增 `SqliteVecAdapter.search`，提供固定 512 维单位向量的只读 Top-K 查询，默认/最大 `k=30`，返回向量记录 ID、Chunk ID、hash 和 sqlite-vec 原始距离。
+- 新增 `VectorTopKQuery` 与 `query_vector_top_k` 内部用例。调用方必须先确定知识库和 IndexVersion；用例验证知识库未回收、版本归属/`BUILDING`/sqlite-vec、固定 EmbeddingConfig 指纹与 512 维归一化余弦配置。
+- 业务范围在 Top-K 之前生效：只把当前 `ACTIVE` 成员、快照 `added_at` 未变化、文件已解析且未回收、内容哈希/解析修订一致、Chunk 未失效、EmbeddingRecord 为 `READY` 且 config/hash 一致的记录交给 Adapter。成员移出/重加、知识库或文件回收站、版本失效、Chunk/记录失效均不能返回命中。
+- sqlite-vec 当前每版本虚表没有动态成员分区列。为了避免先全局 Top-K 再过滤导致范围内近邻丢失，Adapter 读取该版本全部 KNN 行，先按允许记录集合过滤，再按距离和稳定记录 ID 排序并截断；该策略精确但查询成本为 O(N)，没有作为大规模性能证据。
+- 现有存储使用默认 L2 距离；因为写入和查询向量都单位归一化，应用将 `d_l2²/2` 暴露为余弦距离，将 `1-distance` 暴露为相似度，距离升序与相似度降序一致。同分按 `vector_store_record_id` 稳定排序。
+
+### 第十五批验收追踪
+
+| ID | 验收项 | 证据 | 结论 |
+| --- | --- | --- | --- |
+| S5-B15-01 | 固定 512 维向量近邻排序、距离/相似度、同分稳定排序、`k` 大于候选数 | `tests/test_stage5_vector_search.py::test_vector_top_k_orders_scores_and_does_not_change_index_state`、`test_adapter_scope_ties_and_empty_vector_space_are_deterministic` | PASS |
+| S5-B15-02 | 范围在 Top-K 前生效，范围外更近向量不挤出范围内候选 | `test_scope_is_applied_before_top_k_and_shared_file_is_independent` | PASS |
+| S5-B15-03 | 同版本/同配置隔离，跨知识库共享文件仍按目标库返回，错误版本/配置不可查询 | 同上、`test_query_rejects_bad_vector_k_and_cross_scope_version` | PASS |
+| S5-B15-04 | 成员移出重加、知识库/文件回收站、版本失效、Chunk/EmbeddingRecord 失效和永久清理后立即排除 | `test_scope_lifecycle_filters_trash_invalid_chunk_and_record`、`test_trashed_knowledge_base_and_invalidated_version_are_unavailable`、Adapter 删除版本断言 | PASS |
+| S5-B15-05 | 坏维度、未归一化向量、`k` 越界、空库和向量库异常返回稳定错误或空结果 | `test_query_rejects_bad_vector_k_and_cross_scope_version`、`test_query_propagates_vector_store_failure` | PASS |
+| S5-B15-06 | 查询只读，不修改 BUILDING/活动版本/可检索状态 | `test_vector_top_k_orders_scores_and_does_not_change_index_state` | PASS |
+| S5-B15-07 | 本批不新增 API/OpenAPI/前端，不激活索引、不做融合/RRF/引用/RAG | Git diff、无路由变更、状态断言 | PASS |
+
+### 第十五批实际验证
+
+~~~text
+backend> uv run --locked pytest
+112 passed
+
+backend> uv run --locked ruff check src tests
+All checks passed
+
+backend> uv run --locked pyright
+0 errors, 0 warnings, 0 informations
+
+backend> uv run --locked python -m compileall -q src tests migrations
+通过
+
+repo> git diff --check
+通过
+~~~
+
+本批未改数据库 schema、OpenAPI、前端或 Worker；没有真实模型下载、DeepSeek 请求、用户资料或付费接口调用。阶段 5 仍为 `PARTIAL`，内部 Top-K 不能等同知识库用户可用检索。
+
+本批结论：`PASS`。下一批唯一目标：实现同一 `IndexVersion` 内部 FTS5 与向量候选的合并去重，为后续 RRF 输入准备；不开放检索、不激活索引、不做引用或 RAG。

@@ -63,7 +63,7 @@
 - 生命周期与契约：文件或递归文件夹永久删除时按准确 `file_id` 清理 Chunk；保留其他文件/知识库仍可复用的 Chunk。任务详情 OpenAPI 增加 `task_type`、`index_version_id`，生成契约为 34 schemas / 50 operations。
 - 前端：知识库详情使用真实文件选择、成员列表、任务轮询、逐项结果和移出；解析中/失败、待索引与不可检索状态明确；刷新后恢复数据库状态。
 - 验收证据：第十一批历史结论 `PASS`；当时后端 `60 passed`、真实阶段 4/5 Playwright 各 `1 passed`。完整历史与第十二批增量证据见 `docs/test-reports/stage-5-knowledge-base-foundation.md`。
-- 未完成：FTS5、向量 Top-K 查询、增量/原子索引激活、混合检索、引用和 RAG 尚未实现。因此阶段 5 仍为 `PARTIAL`。
+- 阶段 5 初始未完成：FTS5、向量 Top-K 查询、增量/原子索引激活、混合检索、引用和 RAG；后续批次逐项补齐，阶段整体仍为 `PARTIAL`。
 
 ### 第十二批：固定 ONNX 模型来源与本地推理
 
@@ -92,6 +92,16 @@
 - 状态边界：FTS 完成只表示关键词投影完成；`IndexVersion.status` 保持 `BUILDING`，活动版本不变，`available_for_retrieval=false`。没有公开搜索 API、向量 Top-K、RRF、激活、引用、RAG、OpenAPI 或前端变更。
 - 验收：后端 `105 passed`；Ruff、Pyright `0 errors`、compileall 通过；空库和既有数据迁移、FTS-only 降级/再升级保留 Chunk/EmbeddingRecord、重建和 `quick_check=ok` 通过。
 - 阶段结论：第十四批 `PASS`；阶段 5 继续 `PARTIAL`。下一批唯一目标为同一 `IndexVersion` 的内部 sqlite-vec Top-K 查询及版本/成员过滤测试，不激活索引或开放 RAG。
+
+### 第十五批：内部向量 Top-K 与范围过滤
+
+- Adapter：`SqliteVecAdapter.search` 新增只读内部查询，校验有限的 512 维单位查询向量和 `1..30` 的 `k`；读取同一 `embedding_config_id + index_version_id` 的全部 sqlite-vec KNN 行，在 Adapter 内先按允许的 `vector_store_record_id` 集合过滤，再按原始距离和稳定记录 ID 排序并截断。
+- 应用用例：`VectorTopKQuery` 校验知识库未回收、版本归属/`BUILDING`/sqlite-vec、固定 EmbeddingConfig 指纹和余弦归一化约束；SQL 范围只接受当前 ACTIVE 成员、加入时间未变、文件已解析且未回收、Chunk 未失效、EmbeddingRecord 为 READY 且 hash/config 一致的记录，结果返回 Chunk/File/Version/Config、余弦距离、相似度、原始距离和 rank。
+- 距离语义：现有虚表使用 sqlite-vec 默认 L2；单位向量的余弦距离为 `d_l2²/2`，相似度为 `1-distance`，等分按稳定 ID 排序。没有改变已有向量写入、删除或 Worker 完成语义。
+- 生命周期证据：固定 512 维测试覆盖范围外更近向量、同分、`k` 大于候选数、版本/配置隔离、共享文件、成员移出重加、知识库/文件回收站、永久清理后的空库、失效 Chunk/EmbeddingRecord、坏维度/未归一化向量和向量库异常；查询后状态仍为 `BUILDING`，活动版本为空。
+- 边界：现有向量表没有动态成员分区，查询采用全量 KNN + 先过滤后排序的精确 O(N) 策略；本批不宣称大规模性能，不新增迁移、API/OpenAPI、前端、公开检索、混合排序、索引激活、引用或 RAG。
+- 验收：本批后端全量 `112 passed`；Ruff、Pyright `0 errors`、compileall、`git diff --check` 通过；阶段 5 结论仍为 `PARTIAL`。本批结论：`PASS`。
+- 下一批唯一目标：实现同一 `IndexVersion` 内部 FTS5 与向量候选的合并去重，为后续 RRF 输入准备；不开放检索、不激活索引、不做引用或 RAG。
 
 ## 进度口径
 

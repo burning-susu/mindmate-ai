@@ -5,6 +5,8 @@ import importlib.metadata
 import math
 import shutil
 import sqlite3
+from collections.abc import Collection
+from dataclasses import dataclass
 from pathlib import Path
 from uuid import UUID
 
@@ -14,12 +16,24 @@ from numpy.typing import NDArray
 
 VECTOR_DIMENSION = 512
 VECTOR_DATABASE_NAME = "vectors.sqlite3"
+DEFAULT_VECTOR_TOP_K = 30
+MAX_VECTOR_TOP_K = 30
 
 
 class VectorStoreError(RuntimeError):
     def __init__(self, code: str) -> None:
         super().__init__(code)
         self.code = code
+
+
+@dataclass(frozen=True, slots=True)
+class VectorStoreCandidate:
+    """A verified sqlite-vec row before application-level scope mapping."""
+
+    vector_store_record_id: str
+    chunk_id: str
+    vector_hash: str
+    distance: float
 
 
 class SqliteVecAdapter:
@@ -156,6 +170,99 @@ class SqliteVecAdapter:
             raise VectorStoreError("VECTOR_HASH_MISMATCH")
         return True
 
+    def search(
+        self,
+        *,
+        embedding_config_id: str,
+        index_version_id: str,
+        query_vector: NDArray[np.float32] | list[float],
+        allowed_record_ids: Collection[str] | None = None,
+        k: int = DEFAULT_VECTOR_TOP_K,
+    ) -> list[VectorStoreCandidate]:
+        """Return exact Top-K rows after applying the supplied record scope.
+
+        sqlite-vec's KNN ``k`` is evaluated before a JOIN or a metadata WHERE
+        clause.  The version databases currently have no dynamic partition key,
+        so this method asks sqlite-vec for every stored row, filters the allowed
+        record IDs in memory, and only then sorts/truncates.  This is exact for
+        the current stage and intentionally has O(N) query cost.
+        """
+        query = self._validate_query_vector(query_vector)
+        limit = self._validate_top_k(k)
+        allowed = None if allowed_record_ids is None else {str(value) for value in allowed_record_ids}
+        if allowed is not None and not allowed:
+            return []
+
+        database = self._existing_database(embedding_config_id, index_version_id)
+        if database is None:
+            return []
+        connection = self._connect(embedding_config_id, index_version_id)
+        try:
+            vector_count = int(connection.execute("SELECT count(*) FROM vectors").fetchone()[0])
+            metadata_rows = connection.execute(
+                "SELECT row_id, vector_store_record_id, chunk_id, vector_hash "
+                "FROM vector_metadata"
+            ).fetchall()
+            raw_rows = connection.execute("SELECT rowid, embedding FROM vectors").fetchall()
+            if len(metadata_rows) != vector_count or len(raw_rows) != vector_count:
+                raise VectorStoreError("VECTOR_STORE_INCONSISTENT")
+            metadata_by_row_id = {int(row[0]): row for row in metadata_rows}
+            raw_by_row_id = {int(row[0]): bytes(row[1]) for row in raw_rows}
+            if len(metadata_by_row_id) != vector_count or set(metadata_by_row_id) != set(raw_by_row_id):
+                raise VectorStoreError("VECTOR_STORE_INCONSISTENT")
+            if vector_count == 0:
+                return []
+
+            encoded = sqlite_vec.serialize_float32(query.tolist())
+            rows = connection.execute(
+                "SELECT rowid, distance FROM vectors "
+                "WHERE embedding MATCH ? AND k = ?",
+                (encoded, vector_count),
+            ).fetchall()
+            if len(rows) != vector_count:
+                raise VectorStoreError("VECTOR_STORE_INCONSISTENT")
+
+            candidates: list[VectorStoreCandidate] = []
+            for row_id_raw, distance_raw in rows:
+                row_id = int(row_id_raw)
+                metadata = metadata_by_row_id.get(row_id)
+                raw = raw_by_row_id.get(row_id)
+                if metadata is None or raw is None or len(raw) != self._dimension * 4:
+                    raise VectorStoreError("VECTOR_STORE_INCONSISTENT")
+                vector_store_record_id = str(metadata[1])
+                if allowed is not None and vector_store_record_id not in allowed:
+                    continue
+                values = np.frombuffer(raw, dtype="<f4")
+                norm = float(np.linalg.norm(values))
+                if not np.isfinite(values).all() or not math.isfinite(norm) or abs(norm - 1.0) > 1e-4:
+                    raise VectorStoreError("VECTOR_STORE_INCONSISTENT")
+                actual_hash = self._blob_hash(raw)
+                if actual_hash != str(metadata[3]):
+                    raise VectorStoreError("VECTOR_STORE_INCONSISTENT")
+                distance = float(distance_raw)
+                if not math.isfinite(distance) or distance < 0:
+                    raise VectorStoreError("VECTOR_STORE_INCONSISTENT")
+                candidates.append(
+                    VectorStoreCandidate(
+                        vector_store_record_id=vector_store_record_id,
+                        chunk_id=str(metadata[2]),
+                        vector_hash=actual_hash,
+                        distance=distance,
+                    )
+                )
+            candidates.sort(key=lambda candidate: (candidate.distance, candidate.vector_store_record_id))
+            return candidates[:limit]
+        except VectorStoreError:
+            raise
+        except (sqlite3.Error, TypeError, ValueError, OverflowError):
+            raise VectorStoreError("VECTOR_STORE_READ_FAILED") from None
+        finally:
+            connection.close()
+
+    def query(self, **kwargs: object) -> list[VectorStoreCandidate]:
+        """Compatibility alias for the internal Adapter query contract."""
+        return self.search(**kwargs)  # type: ignore[arg-type]
+
     def delete(
         self,
         *,
@@ -274,6 +381,25 @@ class SqliteVecAdapter:
             if connection is not None:
                 connection.close()
             raise VectorStoreError("VECTOR_STORE_UNAVAILABLE") from None
+
+    @staticmethod
+    def _validate_top_k(k: int) -> int:
+        if isinstance(k, bool) or not isinstance(k, int) or not 1 <= k <= MAX_VECTOR_TOP_K:
+            raise VectorStoreError("VECTOR_TOP_K_INVALID")
+        return k
+
+    @staticmethod
+    def _validate_query_vector(vector: NDArray[np.float32] | list[float]) -> NDArray[np.float32]:
+        try:
+            values = np.asarray(vector, dtype="<f4")
+        except (TypeError, ValueError):
+            raise VectorStoreError("VECTOR_QUERY_INVALID") from None
+        if values.shape != (VECTOR_DIMENSION,) or not np.isfinite(values).all():
+            raise VectorStoreError("VECTOR_QUERY_INVALID")
+        norm = float(np.linalg.norm(values))
+        if not math.isfinite(norm) or abs(norm - 1.0) > 1e-4:
+            raise VectorStoreError("VECTOR_QUERY_NOT_NORMALIZED")
+        return values
 
     def _existing_database(self, embedding_config_id: str, index_version_id: str) -> Path | None:
         directory = self._version_directory(embedding_config_id, index_version_id)

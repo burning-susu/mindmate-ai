@@ -99,3 +99,13 @@ Windows 11 x64 / Python 3.12.11 实际 CPU 验证使用 ONNX Runtime 1.30.0、to
 - 永久删除知识库时只删除它的 IndexVersion FTS 映射/虚表行与版本向量空间，不删除其他知识库可复用的文件级 Chunk/EmbeddingRecord。永久删除文件时删除该源文件在相关版本中的 FTS 行与输入快照，同时清理该源文件自己的 Chunk/Embedding/向量；若未激活版本还有其他输入，则仅移除目标输入、保留其他文件映射并将该版本标记 `NEEDS_REBUILD`/`fts_status=INVALIDATED`，使旧版本不能继续被内部 MATCH 使用。版本不再含任何输入时才整体删除。
 - FTS-only 降级边界是从 `d60f2e8a7c31` 回退到 `a81f3c6d2e90`：删除 FTS 虚表、映射和 FTS 检查点列，即丢弃可重建衍生数据；不触碰 Chunk、EmbeddingRecord、sqlite-vec 文件、原始文件或其他业务表。重新升级后 FTS 为空，必须显式重建。禁止以此证据推导允许降级穿过此前包含持久用户数据的迁移。
 - 第十四批验证：后端 `105 passed`；Ruff、Pyright `0 errors`、compileall 通过；空库和已有数据升级、FTS-only downgrade/re-upgrade 后 Chunk/EmbeddingRecord 数量保持且可重建；固定中文/英文 MATCH、BM25、逐输入进度、租约接管、取消、逐项失败/重试、损坏恢复、成员移除、文件回收站/永久删除、共享 Chunk 和知识库定向清理均通过。该阶段没有新增公开 API、OpenAPI schema 或前端改动。
+
+## 内部向量 Top-K 查询阶段（第十五批）
+
+- `SqliteVecAdapter.search` 是只读的内部 Adapter 查询，输入固定 `512` 维、有限、L2 单位归一化查询向量，以及 `1..30` 的 `k`；默认和最大候选数均为 `Top 30`。查询向量维度、有限值、单位范数和 `k` 越界分别返回稳定错误码，不静默截断或补齐。
+- `VectorTopKQuery` 只接受内部已选择的 `knowledge_base_id + index_version_id`，并验证版本属于该知识库、仍为 `BUILDING`、使用 `sqlite-vec`，EmbeddingConfig 与固定 `LOCAL_ONNX`/`BAAI/bge-small-zh-v1.5`/512 维/归一化余弦配置和指纹一致。没有公开路由，前端不能提交任意版本 ID。
+- 范围在 Top-K 前生效：业务 SQLite 先限定 `IndexVersionInput` 为 `PREPARED + CHUNKED + EMBEDDED`，当前成员为 `ACTIVE` 且 `added_at` 与输入快照一致，知识库和文件未软删除，文件仍为 `PARSED` 且内容哈希/解析修订一致，Chunk 未失效且属于该切片配置，EmbeddingRecord 为 `READY`、未失效、配置指纹和向量 hash 一致；只把这些记录的 `vector_store_record_id` 交给 Adapter。
+- 现有每版本 sqlite-vec 虚表没有动态成员分区列，不能使用 `k` 较小的 KNN 结果再做 SQL JOIN 过滤，否则范围外近邻会挤掉范围内候选。Adapter 因此读取当前版本全部 KNN 行（`k = 向量总数`），在 Adapter 内先按允许记录集合过滤，再按原始距离和稳定 `vector_store_record_id` 排序并截断；这是精确的两阶段策略，查询成本为 O(N)，后续大规模检索需要专门的分区/候选索引设计，不能把本实现当成 10 万 Chunk 性能证据。
+- sqlite-vec 当前虚表使用默认 L2 距离；在存储向量和查询向量均为单位范数时，应用结果的余弦距离固定为 `d_l2² / 2`，相似度为 `1 - cosine_distance`，距离升序与相似度降序等价。等分时按 `vector_store_record_id` 升序，返回 `chunk_id`、`file_id`、`index_version_id`、配置 ID、记录 ID、距离、相似度、原始 sqlite-vec 距离和稳定 rank。
+- 空库、没有向量或有效范围为空返回空结果；版本/知识库/配置不匹配、向量库文件不可用或 ID/hash/维度不一致返回明确内部错误。查询不写业务 SQLite 或向量库，不改变 `IndexVersion.status=BUILDING`、`active_index_version_id`、成员 `index_state` 或 `available_for_retrieval=false`。
+- 第十五批不新增 Alembic、API/OpenAPI、前端或 Worker；FTS5 投影、Embedding 生成和已有删除/清理语义保持不变。内部 Top-K 通过不等同知识库公开检索，不实现 FTS/向量融合、RRF、阈值、重排、引用、索引激活或 RAG。
