@@ -3,7 +3,18 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, text
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from uuid6 import uuid7
 
@@ -134,6 +145,93 @@ class KnowledgeBaseFile(Base):
     index_state: Mapped[str] = mapped_column(String(30), default="PENDING", nullable=False)
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     removed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ChunkingConfig(Base):
+    __tablename__ = "chunking_configs"
+    chunking_config_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    config_version: Mapped[str] = mapped_column(String(30), nullable=False)
+    algorithm_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    measurement_unit: Mapped[str] = mapped_column(String(30), nullable=False)
+    target_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    min_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    max_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    overlap_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    structure_rules_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    config_fingerprint: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class EmbeddingConfig(Base):
+    __tablename__ = "embedding_configs"
+    embedding_config_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    config_version: Mapped[str] = mapped_column(String(30), nullable=False)
+    provider_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    model_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    model_revision: Mapped[str | None] = mapped_column(String(200))
+    vector_dimension: Mapped[int] = mapped_column(Integer, nullable=False)
+    normalization: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    distance_metric: Mapped[str] = mapped_column(String(30), nullable=False)
+    config_fingerprint: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class IndexVersion(Base):
+    __tablename__ = "index_versions"
+    __table_args__ = (
+        Index("ix_index_versions_scope_status", "scope_type", "scope_id", "status"),
+        Index("ix_index_versions_preprocessing_status", "preprocessing_status"),
+    )
+    index_version_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    scope_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    scope_id: Mapped[str] = mapped_column(
+        ForeignKey("knowledge_bases.knowledge_base_id"), nullable=False
+    )
+    parse_revision_set_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    chunking_config_id: Mapped[str] = mapped_column(
+        ForeignKey("chunking_configs.chunking_config_id"), nullable=False
+    )
+    embedding_config_id: Mapped[str] = mapped_column(
+        ForeignKey("embedding_configs.embedding_config_id"), nullable=False
+    )
+    vector_engine: Mapped[str] = mapped_column(String(100), nullable=False)
+    vector_engine_version: Mapped[str] = mapped_column(String(100), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False)
+    preprocessing_status: Mapped[str] = mapped_column(String(30), nullable=False)
+    input_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    prepared_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    skipped_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    failed_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    artifact_relative_path: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    preprocessed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    retired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class IndexVersionInput(Base):
+    __tablename__ = "index_version_inputs"
+    __table_args__ = (
+        UniqueConstraint("index_version_id", "file_id", name="uq_index_version_input_file"),
+        Index("ix_index_version_inputs_status", "index_version_id", "status"),
+    )
+    index_version_input_id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=new_id
+    )
+    index_version_id: Mapped[str] = mapped_column(
+        ForeignKey("index_versions.index_version_id"), nullable=False
+    )
+    knowledge_base_file_id: Mapped[str] = mapped_column(
+        ForeignKey("knowledge_base_files.knowledge_base_file_id"), nullable=False
+    )
+    file_id: Mapped[str] = mapped_column(ForeignKey("files.file_id"), nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    parse_revision_id: Mapped[str | None] = mapped_column(String(36))
+    membership_added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False)
+    reason_code: Mapped[str | None] = mapped_column(String(80))
+    prepared_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class BackgroundTask(Base):

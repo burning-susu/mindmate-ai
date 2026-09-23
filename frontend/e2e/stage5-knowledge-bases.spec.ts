@@ -27,9 +27,8 @@ test('stage 5 knowledge base membership lifecycle works through the browser', as
   const fileOption = page.locator('label', { hasText: fileName })
   await fileOption.getByRole('checkbox').check()
   await page.getByRole('button', { name: '加入 1 个' }).click()
-  await expect(page.getByText(`${fileName}：成员已加入，索引仍待建立。`)).toBeVisible({ timeout: 10_000 })
   const memberRow = page.locator('.member-row', { hasText: fileName })
-  await expect(memberRow.getByText('待建立索引')).toBeVisible()
+  await expect(memberRow.getByText('待建立索引')).toBeVisible({ timeout: 10_000 })
   await expect(memberRow.getByText('索引待建立')).toBeVisible()
 
   await page.reload()

@@ -20,6 +20,8 @@ from mindmate.application.tasks import cancel_task, create_task
 from mindmate.infrastructure.models import (
     BackgroundTask,
     FileRecord,
+    IndexVersion,
+    IndexVersionInput,
     KnowledgeBase,
     KnowledgeBaseFile,
     new_id,
@@ -600,6 +602,22 @@ def purge_knowledge_base(
             412,
             current_row_version=record.row_version,
         )
+    session.execute(
+        delete(IndexVersionInput).where(
+            IndexVersionInput.index_version_id.in_(
+                select(IndexVersion.index_version_id).where(
+                    IndexVersion.scope_id == knowledge_base_id,
+                    IndexVersion.scope_type == "KNOWLEDGE_BASE",
+                )
+            )
+        )
+    )
+    session.execute(
+        delete(IndexVersion).where(
+            IndexVersion.scope_id == knowledge_base_id,
+            IndexVersion.scope_type == "KNOWLEDGE_BASE",
+        )
+    )
     session.execute(
         delete(KnowledgeBaseFile).where(
             KnowledgeBaseFile.knowledge_base_id == knowledge_base_id

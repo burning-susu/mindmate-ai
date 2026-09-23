@@ -9,7 +9,7 @@ from sqlalchemy import create_engine, inspect, text
 from mindmate.config import Settings
 
 PREVIOUS_REVISION = "bc554b1b4366"
-CURRENT_REVISION = "c7d5e8a1f204"
+CURRENT_REVISION = "d91f4a6b2c30"
 
 
 def migration_config(data_dir: Path) -> tuple[Config, Settings]:
@@ -43,6 +43,12 @@ def test_empty_database_upgrade_downgrade_and_reupgrade(tmp_path: Path) -> None:
         "parse_retry_count",
     }.issubset(column_names(engine, "files"))
     assert {"icon", "color"}.issubset(column_names(engine, "knowledge_bases"))
+    assert {
+        "chunking_configs",
+        "embedding_configs",
+        "index_versions",
+        "index_version_inputs",
+    }.issubset(set(inspect(engine).get_table_names()))
     engine.dispose()
 
     command.downgrade(config, PREVIOUS_REVISION)
@@ -51,6 +57,7 @@ def test_empty_database_upgrade_downgrade_and_reupgrade(tmp_path: Path) -> None:
     assert "row_version" not in column_names(engine, "tags")
     assert "parse_retry_count" not in column_names(engine, "files")
     assert "icon" not in column_names(engine, "knowledge_bases")
+    assert "index_versions" not in inspect(engine).get_table_names()
     engine.dispose()
 
     command.upgrade(config, "head")
@@ -131,7 +138,6 @@ def test_existing_stage3_data_is_preserved_and_backfilled(tmp_path: Path) -> Non
             {"sha256": "a" * 64, "timestamp": timestamp},
         )
     engine.dispose()
-
     command.upgrade(config, "head")
     engine = database_engine(settings)
     with engine.connect() as connection:
@@ -175,5 +181,96 @@ def test_existing_stage3_data_is_preserved_and_backfilled(tmp_path: Path) -> Non
         assert connection.scalar(
             text("SELECT COUNT(*) FROM knowledge_bases WHERE knowledge_base_id = 'kb-1'")
         ) == 1
+        assert connection.scalar(text("PRAGMA quick_check")) == "ok"
+    engine.dispose()
+
+
+def test_stage9_membership_and_task_data_survive_index_schema_upgrade(tmp_path: Path) -> None:
+    config, settings = migration_config(tmp_path)
+    command.upgrade(config, "c7d5e8a1f204")
+    engine = database_engine(settings)
+    timestamp = "2026-09-23 08:00:00"
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                INSERT INTO content_objects (
+                    content_object_id, sha256, byte_size, detected_mime_type,
+                    storage_relative_path, storage_state, reference_count, created_at
+                ) VALUES ('content-9', :sha256, 9, 'text/plain', 'objects/nine.txt',
+                          'READY', 1, :timestamp)
+                """
+            ),
+            {"sha256": "9" * 64, "timestamp": timestamp},
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO files (
+                    file_id, content_object_id, display_name, extension, document_type,
+                    folder_id, status, source_name, content_hash, byte_size,
+                    parse_revision_id, parse_failure_stage, parse_error_id, parse_retry_count,
+                    created_at, updated_at, row_version
+                ) VALUES ('file-9', 'content-9', 'nine.txt', '.txt', 'TXT', NULL,
+                          'PARSED', 'nine.txt', :sha256, 9, 'parse-9', NULL, NULL, 0,
+                          :timestamp, :timestamp, 1)
+                """
+            ),
+            {"sha256": "9" * 64, "timestamp": timestamp},
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO knowledge_bases (
+                    knowledge_base_id, name, description, icon, color, status,
+                    active_index_version_id, created_at, updated_at, deleted_at,
+                    purge_after, row_version
+                ) VALUES ('kb-9', '第九批知识库', NULL, 'book-open', '#176b87',
+                          'PREPARING', NULL, :timestamp, :timestamp, NULL, NULL, 2)
+                """
+            ),
+            {"timestamp": timestamp},
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO knowledge_base_files (
+                    knowledge_base_file_id, knowledge_base_id, file_id, membership_status,
+                    index_state, added_at, removed_at
+                ) VALUES ('member-9', 'kb-9', 'file-9', 'ACTIVE', 'PENDING', :timestamp, NULL)
+                """
+            ),
+            {"timestamp": timestamp},
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO background_tasks (
+                    task_id, task_type, status, phase, priority, progress, idempotency_key,
+                    parent_task_id, checkpoint_version, checkpoint_json, error_summary,
+                    lease_owner, lease_until, created_at, updated_at, started_at,
+                    completed_at, row_version
+                ) VALUES ('task-9', 'KNOWLEDGE_MEMBERSHIP_ADD', 'QUEUED', NULL, 0, NULL,
+                          'stage9-task', NULL, 0, '{}', NULL, NULL, NULL, :timestamp,
+                          :timestamp, NULL, NULL, 1)
+                """
+            ),
+            {"timestamp": timestamp},
+        )
+    engine.dispose()
+
+    command.upgrade(config, "head")
+    engine = database_engine(settings)
+    with engine.connect() as connection:
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == CURRENT_REVISION
+        assert connection.scalar(
+            text("SELECT membership_status FROM knowledge_base_files WHERE knowledge_base_file_id='member-9'")
+        ) == "ACTIVE"
+        assert connection.scalar(
+            text("SELECT status FROM background_tasks WHERE task_id='task-9'")
+        ) == "QUEUED"
+        assert connection.scalar(
+            text("SELECT active_index_version_id FROM knowledge_bases WHERE knowledge_base_id='kb-9'")
+        ) is None
         assert connection.scalar(text("PRAGMA quick_check")) == "ok"
     engine.dispose()

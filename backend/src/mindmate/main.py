@@ -20,6 +20,7 @@ from mindmate.api.files import FileApiError
 from mindmate.api.files import router as files_router
 from mindmate.api.knowledge_bases import router as knowledge_bases_router
 from mindmate.api.problem import ProblemDetail
+from mindmate.application.index_preprocessing_worker import IndexPreprocessingWorker
 from mindmate.application.knowledge_membership_worker import KnowledgeMembershipWorker
 from mindmate.application.parse_worker_service import ParsingWorker
 from mindmate.config import Settings, get_settings
@@ -85,8 +86,15 @@ async def lifespan(app: FastAPI):
             app.state.session_factory, settings
         )
         app.state.knowledge_membership_worker.start()
+        app.state.index_preprocessing_worker = IndexPreprocessingWorker(
+            app.state.session_factory, settings
+        )
+        app.state.index_preprocessing_worker.start()
         yield
     finally:
+        index_worker = getattr(app.state, "index_preprocessing_worker", None)
+        if index_worker is not None:
+            index_worker.stop()
         knowledge_worker = getattr(app.state, "knowledge_membership_worker", None)
         if knowledge_worker is not None:
             knowledge_worker.stop()

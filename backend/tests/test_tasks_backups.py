@@ -70,6 +70,7 @@ def test_workers_only_claim_registered_task_types(tmp_path: Path) -> None:
             "knowledge-only",
             {"items": []},
         )
+        index = create_task(session, "INDEX_PREPROCESS", "index-only", {"items": []})
         session.commit()
 
         claimed = claim_next_task(
@@ -80,6 +81,13 @@ def test_workers_only_claim_registered_task_types(tmp_path: Path) -> None:
         assert claimed is not None
         assert claimed.task_id == knowledge.task_id
         assert claimed.task_type == "KNOWLEDGE_MEMBERSHIP_ADD"
+        claimed_index = claim_next_task(
+            session,
+            "index-worker",
+            task_types={"INDEX_PREPROCESS"},
+        )
+        assert claimed_index is not None
+        assert claimed_index.task_id == index.task_id
 
 
 def test_backup_manifest_and_hash_verification(tmp_path: Path) -> None:

@@ -1,22 +1,24 @@
 # 阶段 5：知识库基础与成员准入测试报告
 
 > 阶段：`5`
-> 批次：`第八批 + 第九批`
+> 批次：`第八批 + 第九批 + 第十批`
 > 验证日期：`2026-09-23`
 > 第八批结论：`PASS`
 > 第九批结论：`PASS`
+> 第十批结论：`PASS`
 > 阶段 5 状态：`PARTIAL`
 > 分支：`feat/v1-bootstrap`
 > 起始提交：`75a0653877b7f627bc254a859232689c19872777`
 > 第九批起始提交：`6fd248978b84bcf96702eda081ed05469dab4bf2`
+> 第十批起始提交：`3025a5abc2a89cca97edd9cadfbeb87bccdc985f`
 > Provider：`MOCK_ONLY`
 > 真实外部请求：`DISABLED`
 
 ## 结论
 
-第八批“空知识库创建、编辑、列表、详情、回收站与恢复”闭环通过；第九批“已导入文件批量加入/移出知识库、持久成员准入任务和前端真实状态”闭环通过。空库保持 `EMPTY`；存在成员但未建立索引时为 `PREPARING`，成员保持 `index_state=PENDING`，可用文件数为 0。
+第八批“空知识库创建、编辑、列表、详情、回收站与恢复”闭环通过；第九批“已导入文件批量加入/移出知识库、持久成员准入任务和前端真实状态”闭环通过；第十批“索引配置、迁移与可恢复输入预处理”闭环通过。空库保持 `EMPTY`；存在成员但未建立索引时为 `PREPARING`，成员保持 `index_state=PENDING`，可用文件数为 0。
 
-第九批父任务的 `COMPLETED` 只证明成员准入、关系持久化和逐项结果已完成，不表示索引就绪。阶段 5 仍为 `PARTIAL`：Chunk、Embedding、FTS5、sqlite-vec、原子索引激活、混合检索、引用和 RAG 均未实现。
+第十批 `INDEX_PREPROCESS` 的 `COMPLETED` 只证明输入快照、配置指纹与逐项检查点已持久化，不表示索引就绪。`IndexVersion` 保持 `BUILDING`，`active_index_version_id` 保持空。阶段 5 仍为 `PARTIAL`：正式 Chunk、Embedding、FTS5、sqlite-vec、原子索引激活、混合检索、引用和 RAG 均未实现。
 
 ## 实现范围
 
@@ -37,7 +39,12 @@
 - 移出后立即不在成员列表与未来检索范围内；请求时间与移除时间防止旧任务在移出后复活成员。
 - 前端接入真实文件选择、批量添加、任务轮询、逐项结果、成员状态与移出；刷新后从数据库恢复，明确显示解析失败/处理中、待索引和不可检索。
 - 导入任务进入终态时再次失效文件列表，避免 Worker 完成后继续显示导入前缓存。
-- 本批没有数据库结构变化，继续使用 Alembic revision `c7d5e8a1f204`；OpenAPI 3.1 与前端生成类型同步为 `33 schemas / 50 operations`。
+- 第九批没有数据库结构变化，当时继续使用 Alembic revision `c7d5e8a1f204`；OpenAPI 3.1 与前端生成类型同步为 `33 schemas / 50 operations`。
+- 第十批 Alembic revision `d91f4a6b2c30` 新增 `ChunkingConfig`、`EmbeddingConfig`、`IndexVersion` 和逐文件 `IndexVersionInput`；默认切片参数为约 500/80 Unicode 字符，避免把旧 `target_tokens` 字段名误当最终单位。
+- 默认 Embedding 配置只预留本地 ONNX `BAAI/bge-small-zh-v1.5`、512 维、归一化与余弦距离元数据；revision 保持空，不伪造模型已下载或可推理。
+- 独立 `INDEX_PREPROCESS` Worker 冻结活动成员、内容哈希、解析修订、成员加入时间、配置指纹与集合指纹；逐项结果为 `PREPARED/SKIPPED/FAILED`，支持租约过期接管、检查点续跑、取消和幂等。
+- 成员移出/重加、文件回收站、内容哈希或解析修订变化会产生稳定原因码；完成前二次校验，旧任务不会激活关系或发布过期可构建输入。
+- 本批未开放 `/rebuild` 或 `index-status`，没有 API schema 变化；知识库永久删除会先清理对应预处理快照，但不删除原始文件。
 
 ## 验收追踪
 
@@ -59,15 +66,24 @@
 | S5-B09-04 | Worker 类型隔离、取消竞态和租约恢复基础 | `test_tasks_backups.py`、取消竞态测试 | PASS |
 | S5-B09-05 | 前端真实选择、进度、逐项结果、刷新恢复与移出 | Vitest + 真实后端 Playwright | PASS |
 | S5-B09-06 | 无索引时始终不可检索 | API 成员状态、UI 状态与 E2E 断言 | PASS |
+| S5-B10-01 | 字符单位配置、Embedding 元数据与稳定指纹 | 默认配置专项测试、迁移种子 | PASS |
+| S5-B10-02 | 空库及第九批知识库/成员/任务无损迁移 | 迁移专项、`quick_check=ok` | PASS |
+| S5-B10-03 | 一致输入快照与混合成功/跳过/失败 | 预处理专项测试 | PASS |
+| S5-B10-04 | 移出、解析修订变化与回收站不发布过期结果 | 快照竞态与完成前复核测试 | PASS |
+| S5-B10-05 | 幂等、租约过期接管、检查点续跑、取消与类型隔离 | Worker/任务专项测试 | PASS |
+| S5-B10-06 | 预处理不激活索引、不改变可检索状态 | IndexVersion、知识库和成员断言 | PASS |
 
 ## 自动化证据
 
 ```text
 backend> uv run pytest
-42 passed
+50 passed
 
 backend> uv run pytest tests/test_stage5_knowledge_bases.py
 11 passed
+
+backend> uv run pytest tests/test_stage4_migration.py tests/test_stage5_index_preprocessing.py
+10 passed
 
 backend> .\.venv\Scripts\python.exe -m ruff check src tests
 All checks passed
@@ -100,7 +116,8 @@ repo> .\scripts\generate-api.ps1
 OpenAPI 3.1.0；Generated 33 schemas and 50 operations
 
 backend> 空库/已有数据 upgrade -> downgrade 9f3a1c7e2b40 -> upgrade head
-最终 revision c7d5e8a1f204；已有知识库数据保留；PRAGMA quick_check=ok
+backend> 第九批数据库 c7d5e8a1f204 -> upgrade head
+最终 revision d91f4a6b2c30；已有文件、知识库、成员和任务保留；PRAGMA quick_check=ok
 
 repo> git diff --check
 通过
@@ -110,8 +127,8 @@ repo> git diff --check
 
 ## 未实现与下一批前置
 
-- 已实现成员准入父任务，但未实现真正的索引构建 Worker；任务完成不代表索引完成。
-- 未实现 ChunkingConfig、EmbeddingConfig、IndexVersion、ONNX Embedding、FTS5、sqlite-vec、RRF、测试检索和 RAG。
+- 已实现索引输入预处理 Worker，但未生成正式 Chunk、Embedding、FTS 或向量产物；任务完成不代表索引完成。
+- 未实现正式 Chunk、ONNX Embedding、FTS5、sqlite-vec、RRF、测试检索和 RAG。
 - 未宣称阶段 5 `PASS`，也未回填阶段 4 的发布候选遗留项。
 
-下一批只建议一个最小闭环：ChunkingConfig/EmbeddingConfig/IndexVersion 与可恢复索引构建任务骨架。开始前需根据本批 `PENDING` 成员与任务检查点再次核对索引版本语义。
+下一批只建议一个最小闭环：消费本批 `PREPARED` 快照，生成并持久化版本化 Chunk，支持取消、恢复和失效校验；不同时实现 Embedding、FTS、向量或检索。

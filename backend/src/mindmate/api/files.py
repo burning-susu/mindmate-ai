@@ -49,6 +49,8 @@ from mindmate.infrastructure.models import (
     FileRecord,
     FileTag,
     Folder,
+    IndexVersion,
+    IndexVersionInput,
     KnowledgeBase,
     KnowledgeBaseFile,
     Tag,
@@ -56,6 +58,33 @@ from mindmate.infrastructure.models import (
 )
 
 router = APIRouter(prefix="/api/v1")
+
+
+def _delete_unbuilt_index_snapshots_for_files(session: Session, file_ids: list[str]) -> None:
+    if not file_ids:
+        return
+    version_ids = list(
+        session.scalars(
+            select(IndexVersionInput.index_version_id)
+            .join(
+                IndexVersion,
+                IndexVersion.index_version_id == IndexVersionInput.index_version_id,
+            )
+            .where(IndexVersionInput.file_id.in_(file_ids), IndexVersion.status == "BUILDING")
+            .distinct()
+        )
+    )
+    if not version_ids:
+        return
+    session.execute(
+        delete(IndexVersionInput).where(IndexVersionInput.index_version_id.in_(version_ids))
+    )
+    session.execute(
+        delete(IndexVersion).where(
+            IndexVersion.index_version_id.in_(version_ids),
+            IndexVersion.status == "BUILDING",
+        )
+    )
 
 
 class FileApiError(Exception):
@@ -1875,6 +1904,7 @@ def purge_trash(
             raise FileApiError("FILE_NOT_IN_TRASH", "只有回收站中的文件才能永久删除。", 409)
         _assert_row_version(record.row_version, expected_version)
         content = session.get(ContentObject, record.content_object_id)
+        _delete_unbuilt_index_snapshots_for_files(session, [object_id])
         session.execute(delete(FileTag).where(FileTag.file_id == object_id))
         session.execute(delete(KnowledgeBaseFile).where(KnowledgeBaseFile.file_id == object_id))
         session.delete(record)
@@ -1908,6 +1938,9 @@ def purge_trash(
         )
         folder_ids = [item.folder_id for item in folders]
         records = list(session.scalars(select(FileRecord).where(FileRecord.folder_id.in_(folder_ids))))
+        _delete_unbuilt_index_snapshots_for_files(
+            session, [record.file_id for record in records]
+        )
         contents: dict[str, ContentObject] = {}
         for record in records:
             content = session.get(ContentObject, record.content_object_id)

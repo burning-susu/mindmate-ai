@@ -51,13 +51,16 @@
 - 状态：`PARTIAL`
 - 第八批起点：`75a0653877b7f627bc254a859232689c19872777`
 - 第九批起点：`6fd248978b84bcf96702eda081ed05469dab4bf2`
+- 第十批起点：`3025a5abc2a89cca97edd9cadfbeb87bccdc985f`
 - 已完成：空知识库创建、正常列表、详情、编辑和回收站；已导入文件批量加入/移出、多库共享、幂等重复提交、移出重加、逐项失败隔离与文件所属知识库查询。
 - 数据与并发：Alembic revision `c7d5e8a1f204` 增加 `icon`/`color`；编辑、删除和恢复使用原子 `row_version` 条件更新，冲突返回 412。
 - 任务：独立成员准入 Worker 复用 SQLite `BackgroundTask`、原子领取、租约、检查点、取消和关闭恢复；解析 Worker 与成员 Worker 按任务类型隔离。父任务完成只表示成员关系已持久化，不表示索引完成。
+- 第十批数据：Alembic revision `d91f4a6b2c30` 增加版本化 ChunkingConfig、EmbeddingConfig、IndexVersion 和 IndexVersionInput；切片默认参数明确采用约 500/80 Unicode 字符，配置和解析集合均保存稳定 SHA-256 指纹。
+- 第十批任务：新增独立 `INDEX_PREPROCESS` Worker，在请求外冻结一致输入快照并逐文件记录准备、跳过和失败；支持幂等、租约接管、检查点续跑、取消及成员/解析修订变化复核。预处理完成后仍为 `BUILDING`，不激活索引。
 - 前端：知识库详情使用真实文件选择、成员列表、任务轮询、逐项结果和移出；解析中/失败、待索引与不可检索状态明确；刷新后恢复数据库状态。
-- 验收证据：后端 `42 passed`；Ruff、Pyright、compileall；前端 lint/typecheck、Vitest `13 passed`、build；阶段 5 Playwright `1 passed`，阶段 4 回归 `1 passed`；OpenAPI 3.1 `33 schemas / 50 operations`。详见 `docs/test-reports/stage-5-knowledge-base-foundation.md`。
-- 未完成：ChunkingConfig、EmbeddingConfig、IndexVersion、模型下载、ONNX Embedding、FTS5、sqlite-vec、增量/原子索引、混合检索、引用和 RAG。因此阶段 5 不标记为 `PASS`。
-- 下一批次：只进入索引配置与可恢复索引构建任务骨架的最小闭环，实施前复核本批代码与冻结需求。
+- 验收证据：后端 `50 passed`；Ruff、Pyright、compileall；前端 lint/typecheck、Vitest `13 passed`、build；阶段 5 Playwright `1 passed`，阶段 4 回归 `1 passed`；OpenAPI 3.1 `33 schemas / 50 operations`；空库及第九批数据迁移、降级/再升级和 `quick_check` 通过。详见 `docs/test-reports/stage-5-knowledge-base-foundation.md`。
+- 未完成：正式 Chunk、模型下载、ONNX Embedding、FTS5、sqlite-vec、增量/原子索引激活、混合检索、引用和 RAG。因此阶段 5 不标记为 `PASS`。
+- 下一批次：只实现基于已准备快照的版本化 Chunk 生成与可恢复持久化，不提前进入 Embedding、FTS、向量或 RAG。
 
 ## 进度口径
 
