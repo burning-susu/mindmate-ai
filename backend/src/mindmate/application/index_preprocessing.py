@@ -8,6 +8,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from mindmate.ai.embeddings.manifest import MODEL_REVISION
 from mindmate.application.tasks import create_task
 from mindmate.infrastructure.models import ChunkingConfig, EmbeddingConfig
 
@@ -43,9 +44,7 @@ def default_embedding_payload() -> dict[str, Any]:
         "config_version": EMBEDDING_CONFIG_VERSION,
         "provider_type": "LOCAL_ONNX",
         "model_name": "BAAI/bge-small-zh-v1.5",
-        # The pinned downloadable revision is a release-time external fact. Null means
-        # metadata is reserved but no model was downloaded or validated in this batch.
-        "model_revision": None,
+        "model_revision": MODEL_REVISION,
         "vector_dimension": 512,
         "normalization": True,
         "distance_metric": "COSINE",

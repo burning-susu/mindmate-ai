@@ -434,6 +434,8 @@ dependencies = [
     { name = "alembic" },
     { name = "fastapi" },
     { name = "httpx" },
+    { name = "numpy" },
+    { name = "onnxruntime" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "pypdf" },
@@ -441,6 +443,7 @@ dependencies = [
     { name = "python-multipart" },
     { name = "python-pptx" },
     { name = "sqlalchemy" },
+    { name = "tokenizers" },
     { name = "uuid6" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -448,14 +451,12 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "keyring" },
-    { name = "onnxruntime" },
     { name = "pyinstaller" },
     { name = "pyright" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "ruff" },
     { name = "sqlite-vec" },
-    { name = "tokenizers" },
 ]
 
 [package.metadata]
@@ -463,6 +464,8 @@ requires-dist = [
     { name = "alembic", specifier = ">=1.14,<2" },
     { name = "fastapi", specifier = ">=0.115,<1" },
     { name = "httpx", specifier = ">=0.28,<1" },
+    { name = "numpy", specifier = ">=1.26,<3" },
+    { name = "onnxruntime", specifier = ">=1.20,<2" },
     { name = "pydantic", specifier = ">=2.10,<3" },
     { name = "pydantic-settings", specifier = ">=2.7,<3" },
     { name = "pypdf", specifier = ">=6.0,<7" },
@@ -470,6 +473,7 @@ requires-dist = [
     { name = "python-multipart", specifier = ">=0.0.20,<1" },
     { name = "python-pptx", specifier = ">=1.0,<2" },
     { name = "sqlalchemy", specifier = ">=2.0,<3" },
+    { name = "tokenizers", specifier = ">=0.21,<1" },
     { name = "uuid6", specifier = ">=2024.7,<2026" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34,<1" },
 ]
@@ -477,14 +481,12 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "keyring", specifier = ">=25.6,<26" },
-    { name = "onnxruntime", specifier = ">=1.20,<2" },
     { name = "pyinstaller", specifier = ">=6.11,<7" },
     { name = "pyright", specifier = ">=1.1.390,<2" },
     { name = "pytest", specifier = ">=8.3,<9" },
     { name = "pytest-asyncio", specifier = ">=0.25,<1" },
     { name = "ruff", specifier = ">=0.9,<1" },
     { name = "sqlite-vec", specifier = ">=0.1.6,<1" },
-    { name = "tokenizers", specifier = ">=0.21,<1" },
 ]
 
 [[package]]

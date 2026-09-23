@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     def runtime_dir(self) -> Path:
         return self.resolved_data_dir / "runtime"
 
+    @property
+    def model_dir(self) -> Path:
+        return self.resolved_data_dir / "models"
+
     def ensure_data_dirs(self) -> None:
         for name in (
             "database",
@@ -54,6 +58,7 @@ class Settings(BaseSettings):
             "previews",
             "tasks",
             "backups",
+            "models",
             "logs",
             "cache",
             "config",

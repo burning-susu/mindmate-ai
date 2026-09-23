@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select, update
 
+from mindmate.ai.embeddings.manifest import MODEL_REVISION
 from mindmate.application.index_preprocessing import (
     default_chunking_payload,
     default_embedding_payload,
@@ -107,7 +108,7 @@ def test_default_configs_are_character_based_fingerprinted_and_non_secret(index_
         "config_version": "bge-small-zh-v1",
         "provider_type": "LOCAL_ONNX",
         "model_name": "BAAI/bge-small-zh-v1.5",
-        "model_revision": None,
+        "model_revision": MODEL_REVISION,
         "vector_dimension": 512,
         "normalization": True,
         "distance_metric": "COSINE",
@@ -120,7 +121,17 @@ def test_default_configs_are_character_based_fingerprinted_and_non_secret(index_
     run_claimed(IndexPreprocessingWorker(factory, settings, worker_id="config-worker"))
     with factory() as session:
         assert session.scalar(select(ChunkingConfig)).config_fingerprint == fingerprint(chunking)
-        assert session.scalar(select(EmbeddingConfig)).config_fingerprint == fingerprint(embedding)
+        verified_config = session.scalar(
+            select(EmbeddingConfig).where(
+                EmbeddingConfig.config_fingerprint == fingerprint(embedding)
+            )
+        )
+        legacy_config = session.scalar(
+            select(EmbeddingConfig).where(EmbeddingConfig.model_revision.is_(None))
+        )
+        assert verified_config is not None
+        assert verified_config.model_revision == MODEL_REVISION
+        assert legacy_config is not None
 
 
 def test_preprocessing_freezes_inputs_and_never_activates_or_marks_ready(index_runtime) -> None:
