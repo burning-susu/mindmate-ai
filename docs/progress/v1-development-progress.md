@@ -50,12 +50,14 @@
 
 - 状态：`PARTIAL`
 - 第八批起点：`75a0653877b7f627bc254a859232689c19872777`
-- 已完成：空知识库创建、正常列表、详情、名称/描述/颜色/图标编辑、同名提示、30 天回收站、恢复和永久删除；知识库删除不删除原始文件。
+- 第九批起点：`6fd248978b84bcf96702eda081ed05469dab4bf2`
+- 已完成：空知识库创建、正常列表、详情、编辑和回收站；已导入文件批量加入/移出、多库共享、幂等重复提交、移出重加、逐项失败隔离与文件所属知识库查询。
 - 数据与并发：Alembic revision `c7d5e8a1f204` 增加 `icon`/`color`；编辑、删除和恢复使用原子 `row_version` 条件更新，冲突返回 412。
-- 前端：`/knowledge-bases`、`/knowledge-bases/new`、`/knowledge-bases/:id` 与 `/trash` 使用真实 API；添加文件/索引明确标记为下一批开放。
-- 验收证据：后端 `38 passed`；Ruff、Pyright、compileall；前端 lint/typecheck、Vitest `12 passed`、build；阶段 5 Playwright `1 passed`，阶段 4 回归 `1 passed`；OpenAPI 3.1 `29 schemas / 46 operations`；迁移往返与 `quick_check=ok`。详见 `docs/test-reports/stage-5-knowledge-base-foundation.md`。
-- 未完成：成员关系、批量添加、持久索引任务、Chunk、Embedding、FTS5、sqlite-vec、混合检索、引用和 RAG。因此阶段 5 不标记为 `PASS`。
-- 下一批次：只进入“成员关系、批量添加与持久索引任务的入口”最小闭环，实施前复核本批代码与冻结需求。
+- 任务：独立成员准入 Worker 复用 SQLite `BackgroundTask`、原子领取、租约、检查点、取消和关闭恢复；解析 Worker 与成员 Worker 按任务类型隔离。父任务完成只表示成员关系已持久化，不表示索引完成。
+- 前端：知识库详情使用真实文件选择、成员列表、任务轮询、逐项结果和移出；解析中/失败、待索引与不可检索状态明确；刷新后恢复数据库状态。
+- 验收证据：后端 `42 passed`；Ruff、Pyright、compileall；前端 lint/typecheck、Vitest `13 passed`、build；阶段 5 Playwright `1 passed`，阶段 4 回归 `1 passed`；OpenAPI 3.1 `33 schemas / 50 operations`。详见 `docs/test-reports/stage-5-knowledge-base-foundation.md`。
+- 未完成：ChunkingConfig、EmbeddingConfig、IndexVersion、模型下载、ONNX Embedding、FTS5、sqlite-vec、增量/原子索引、混合检索、引用和 RAG。因此阶段 5 不标记为 `PASS`。
+- 下一批次：只进入索引配置与可恢复索引构建任务骨架的最小闭环，实施前复核本批代码与冻结需求。
 
 ## 进度口径
 

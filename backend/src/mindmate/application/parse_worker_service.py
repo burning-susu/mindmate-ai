@@ -119,6 +119,7 @@ class ParsingWorker:
                 session,
                 self.worker_id,
                 self._settings.parse_worker_lease_seconds,
+                {FILE_IMPORT_TASK, FILE_REPROCESS_TASK},
             )
             if task is None:
                 return None

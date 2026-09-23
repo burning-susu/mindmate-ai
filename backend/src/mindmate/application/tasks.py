@@ -126,12 +126,17 @@ def claim_task(
 
 
 def claim_next_task(
-    session: Session, worker_id: str, lease_seconds: int = 60
+    session: Session,
+    worker_id: str,
+    lease_seconds: int = 60,
+    task_types: set[str] | None = None,
 ) -> BackgroundTask | None:
     """Find candidates and use the atomic claim boundary for each one."""
+    statement = select(BackgroundTask.task_id).where(_claimable_clause(now()))
+    if task_types is not None:
+        statement = statement.where(BackgroundTask.task_type.in_(task_types))
     candidate_ids = session.scalars(
-        select(BackgroundTask.task_id)
-        .where(_claimable_clause(now()))
+        statement
         .order_by(BackgroundTask.priority.desc(), BackgroundTask.created_at)
         .limit(32)
     )

@@ -26,14 +26,14 @@ export default function KnowledgeBasesPage() {
         <div>
           <span className="eyebrow">本地资料空间</span>
           <h1>知识库</h1>
-          <p>把资料组织成独立主题，索引能力将在下一批接入。</p>
+          <p>把已导入资料组织成独立主题，并查看真实的成员与索引状态。</p>
         </div>
         <Link className="primary-button" to="/knowledge-bases/new"><Plus size={16} aria-hidden="true" />新建知识库</Link>
       </div>
 
       {query.isLoading && <div className="empty-state"><RefreshCw size={22} aria-hidden="true" /><strong>正在加载知识库</strong></div>}
       {query.isError && <div className="empty-state" role="alert"><strong>知识库加载失败</strong><span>{query.error instanceof Error ? query.error.message : '请稍后重试。'}</span><button className="quiet-button" type="button" onClick={() => void query.refetch()}>重试</button></div>}
-      {!query.isLoading && !query.isError && query.data?.items.length === 0 && <div className="empty-state"><BookOpen size={26} aria-hidden="true" /><strong>还没有知识库</strong><span>先创建一个空知识库，之后再添加和索引文件。</span><Link className="primary-button" to="/knowledge-bases/new"><Plus size={16} aria-hidden="true" />创建第一个知识库</Link></div>}
+      {!query.isLoading && !query.isError && query.data?.items.length === 0 && <div className="empty-state"><BookOpen size={26} aria-hidden="true" /><strong>还没有知识库</strong><span>创建知识库后，可从已导入文件中批量添加成员。</span><Link className="primary-button" to="/knowledge-bases/new"><Plus size={16} aria-hidden="true" />创建第一个知识库</Link></div>}
       <div className="knowledge-grid">
         {query.data?.items.map((item) => (
           <Link className="knowledge-card" to={`/knowledge-bases/${item.knowledge_base_id}`} key={item.knowledge_base_id}>

@@ -80,16 +80,67 @@ describe('stage 5 knowledge base foundation', () => {
         patchBody = JSON.parse(String(init.body)) as Record<string, unknown>
         return response({ ...baseItem, ...patchBody, row_version: 4 })
       }
+      if (url.endsWith('/api/v1/knowledge-bases/kb-1/files')) return response({ items: [] })
+      if (url.includes('/api/v1/files?sort=name')) return response({ items: [], next_cursor: null })
       if (url.endsWith('/api/v1/knowledge-bases/kb-1')) return response(baseItem)
       return response({ status: 'ok', version: '0.1.0' })
     }))
 
     render(<BrowserRouter><App /></BrowserRouter>)
-    expect(await screen.findByText('添加文件与持久索引任务将在下一批开放。')).toBeInTheDocument()
+    expect(await screen.findByText('尚未加入任何文件。')).toBeInTheDocument()
+    expect(screen.getByText('索引待开放')).toBeInTheDocument()
     fireEvent.change(screen.getByRole('textbox', { name: '知识库描述' }), { target: { value: '新说明' } })
     fireEvent.click(screen.getByRole('button', { name: '保存更改' }))
 
     await waitFor(() => expect(patchBody).toMatchObject({ description: '新说明', row_version: 3 }))
+  })
+
+  it('adds imported files, shows persisted task results, and removes a member', async () => {
+    window.history.pushState({}, '', '/knowledge-bases/kb-1')
+    let addBody: Record<string, unknown> | undefined
+    let removed = false
+    let taskPolls = 0
+    const file = {
+      file_id: 'file-1', display_name: '讲义.txt', document_type: 'TXT', status: 'PARSED',
+      extension: '.txt', folder_id: null, tags: [], byte_size: 12, content_hash: 'hash',
+      created_at: '2026-09-23T00:00:00Z', updated_at: '2026-09-23T00:00:00Z',
+      deleted_at: null, purge_after: null, row_version: 1,
+    }
+    const member = {
+      knowledge_base_file_id: 'member-1', file_id: 'file-1', display_name: '讲义.txt',
+      document_type: 'TXT', file_status: 'PARSED', membership_status: 'ACTIVE',
+      index_state: 'PENDING', available_for_retrieval: false, unavailable_reason: '索引待建立',
+      added_at: '2026-09-23T00:00:00Z',
+    }
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.includes('/system/session')) return response({ status: 'ready' })
+      if (url.endsWith('/api/v1/knowledge-bases/kb-1/files') && init?.method === 'POST') {
+        addBody = JSON.parse(String(init.body)) as Record<string, unknown>
+        return response({ task_id: 'task-1', status: 'QUEUED', phase: null, progress: 0, knowledge_base_id: 'kb-1', items: [], results: [], summary: null, error: null }, 202)
+      }
+      if (url.endsWith('/api/v1/tasks/task-1')) {
+        taskPolls += 1
+        return response({ task_id: 'task-1', status: 'COMPLETED', phase: 'COMPLETED', progress: 100, knowledge_base_id: 'kb-1', items: [], results: [{ file_id: 'file-1', display_name: '讲义.txt', status: 'ADDED', message: '成员已加入，索引仍待建立。' }], summary: { added: 1, failed: 0 }, error: null })
+      }
+      if (url.endsWith('/api/v1/knowledge-bases/kb-1/files/file-1') && init?.method === 'DELETE') {
+        removed = true
+        return response({ knowledge_base_id: 'kb-1', file_id: 'file-1', status: 'REMOVED' })
+      }
+      if (url.endsWith('/api/v1/knowledge-bases/kb-1/files')) return response({ items: taskPolls > 0 && !removed ? [member] : [] })
+      if (url.includes('/api/v1/files?sort=name')) return response({ items: removed ? [file] : taskPolls > 0 ? [] : [file], next_cursor: null })
+      if (url.endsWith('/api/v1/knowledge-bases/kb-1')) return response({ ...baseItem, status: taskPolls > 0 ? 'PREPARING' : 'EMPTY', file_count: taskPolls > 0 && !removed ? 1 : 0, row_version: taskPolls > 0 ? 4 : 3 })
+      return response({ status: 'ok', version: '0.1.0' })
+    }))
+
+    render(<BrowserRouter><App /></BrowserRouter>)
+    fireEvent.click(await screen.findByRole('checkbox'))
+    fireEvent.click(screen.getByRole('button', { name: '加入 1 个' }))
+    await waitFor(() => expect(addBody).toEqual({ file_ids: ['file-1'] }))
+    expect(await screen.findByText('讲义.txt：成员已加入，索引仍待建立。')).toBeInTheDocument()
+    const removeButton = await screen.findByRole('button', { name: '移出知识库 讲义.txt' })
+    fireEvent.click(removeButton)
+    await waitFor(() => expect(removed).toBe(true))
   })
 
   it('loads knowledge bases in trash and restores with the persisted version', async () => {

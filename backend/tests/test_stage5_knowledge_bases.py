@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import threading
 from pathlib import Path
+from time import monotonic, sleep
 
 import pytest
 from fastapi.testclient import TestClient
 
+from mindmate.application.knowledge_membership_worker import KnowledgeMembershipWorker
 from mindmate.config import Settings
 from mindmate.main import create_app
 
@@ -37,6 +40,28 @@ def create_kb(client: TestClient, name: str = "机器学习") -> dict:
     )
     assert response.status_code == 201
     return response.json()
+
+
+def wait_for_task(client: TestClient, task_id: str) -> dict:
+    deadline = monotonic() + 5
+    while monotonic() < deadline:
+        task = client.get(f"/api/v1/tasks/{task_id}").json()
+        if task["status"] in {"COMPLETED", "FAILED", "CANCELLED"}:
+            return task
+        sleep(0.02)
+    raise AssertionError(f"task {task_id} did not finish")
+
+
+def import_text(client: TestClient, name: str, content: bytes, key: str) -> str:
+    response = client.post(
+        "/api/v1/file-imports",
+        headers=write_headers(key),
+        files={"files": (name, content, "text/plain")},
+    )
+    assert response.status_code == 202
+    body = response.json()
+    wait_for_task(client, body["task_id"])
+    return body["items"][0]["file_id"]
 
 
 def test_empty_knowledge_base_crud_and_duplicate_hint(knowledge_client) -> None:
@@ -192,3 +217,130 @@ def test_patch_rejects_explicit_null_name(knowledge_client) -> None:
         json={"name": None, "row_version": knowledge_base["row_version"]},
     )
     assert response.status_code == 422
+
+
+def test_membership_task_supports_partial_results_shared_files_and_readd(knowledge_client) -> None:
+    client, _ = knowledge_client
+    first = create_kb(client, "第一知识库")
+    second = create_kb(client, "第二知识库")
+    file_id = import_text(client, "shared.txt", b"shared knowledge", "shared-source")
+
+    submitted = client.post(
+        f"/api/v1/knowledge-bases/{first['knowledge_base_id']}/files",
+        headers=write_headers("membership-mixed"),
+        json={"file_ids": [file_id, "missing-file", file_id]},
+    )
+    assert submitted.status_code == 202
+    completed = wait_for_task(client, submitted.json()["task_id"])
+    assert completed["status"] == "COMPLETED"
+    assert completed["summary"] == {"added": 1, "failed": 1}
+    assert {item["reason"] for item in completed["results"] if item["status"] == "FAILED"} == {
+        "FILE_NOT_FOUND"
+    }
+
+    members = client.get(
+        f"/api/v1/knowledge-bases/{first['knowledge_base_id']}/files"
+    ).json()["items"]
+    assert len(members) == 1
+    assert members[0]["file_id"] == file_id
+    assert members[0]["file_status"] == "PARSED"
+    assert members[0]["index_state"] == "PENDING"
+    assert members[0]["available_for_retrieval"] is False
+    assert members[0]["unavailable_reason"] == "索引待建立"
+    assert client.get(f"/api/v1/knowledge-bases/{first['knowledge_base_id']}").json()[
+        "status"
+    ] == "PREPARING"
+
+    other_task = client.post(
+        f"/api/v1/knowledge-bases/{second['knowledge_base_id']}/files",
+        headers=write_headers("membership-other-kb"),
+        json={"file_ids": [file_id]},
+    ).json()
+    assert wait_for_task(client, other_task["task_id"])["status"] == "COMPLETED"
+    assert len(client.get(f"/api/v1/files/{file_id}/knowledge-bases").json()["items"]) == 2
+
+    removed = client.delete(
+        f"/api/v1/knowledge-bases/{first['knowledge_base_id']}/files/{file_id}",
+        headers=write_headers("membership-remove"),
+    )
+    assert removed.status_code == 200
+    assert client.get(
+        f"/api/v1/knowledge-bases/{first['knowledge_base_id']}/files"
+    ).json()["items"] == []
+    assert client.get(f"/api/v1/files/{file_id}").status_code == 200
+
+    readded = client.post(
+        f"/api/v1/knowledge-bases/{first['knowledge_base_id']}/files",
+        headers=write_headers("membership-readd"),
+        json={"file_ids": [file_id]},
+    ).json()
+    result = wait_for_task(client, readded["task_id"])["results"][0]
+    assert result["action"] == "RESTORED"
+    assert len(client.get(
+        f"/api/v1/knowledge-bases/{first['knowledge_base_id']}/files"
+    ).json()["items"]) == 1
+
+
+def test_membership_request_is_idempotent_and_rejects_trashed_file(knowledge_client) -> None:
+    client, _ = knowledge_client
+    knowledge_base = create_kb(client, "幂等验证")
+    file_id = import_text(client, "trash.txt", b"trash", "trash-source")
+    file = client.get(f"/api/v1/files/{file_id}").json()
+    trashed = client.delete(
+        f"/api/v1/files/{file_id}?expected_version={file['row_version']}",
+        headers=write_headers("trash-member-source"),
+    )
+    assert trashed.status_code == 200
+
+    headers = write_headers("same-membership-request")
+    first = client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base['knowledge_base_id']}/files",
+        headers=headers,
+        json={"file_ids": [file_id]},
+    )
+    second = client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base['knowledge_base_id']}/files",
+        headers=headers,
+        json={"file_ids": [file_id]},
+    )
+    assert first.status_code == second.status_code == 202
+    assert first.json()["task_id"] == second.json()["task_id"]
+    completed = wait_for_task(client, first.json()["task_id"])
+    assert completed["results"][0]["reason"] == "FILE_IN_TRASH"
+    assert client.get(
+        f"/api/v1/knowledge-bases/{knowledge_base['knowledge_base_id']}/files"
+    ).json()["items"] == []
+
+
+def test_running_membership_task_cancellation_is_not_overwritten(
+    knowledge_client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, _ = knowledge_client
+    knowledge_base = create_kb(client, "取消验证")
+    file_id = import_text(client, "cancel.txt", b"cancel", "cancel-source")
+    entered = threading.Event()
+    release = threading.Event()
+    original = KnowledgeMembershipWorker._process_item
+
+    def blocked_process(self, session, target, item):
+        entered.set()
+        assert release.wait(3)
+        return original(self, session, target, item)
+
+    monkeypatch.setattr(KnowledgeMembershipWorker, "_process_item", blocked_process)
+    submitted = client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base['knowledge_base_id']}/files",
+        headers=write_headers("cancel-membership-task"),
+        json={"file_ids": [file_id]},
+    )
+    assert submitted.status_code == 202
+    task_id = submitted.json()["task_id"]
+    assert entered.wait(3)
+    cancelled = client.post(
+        f"/api/v1/tasks/{task_id}/cancel",
+        headers=write_headers("cancel-membership-now"),
+    )
+    assert cancelled.status_code == 200
+    assert cancelled.json()["status"] == "CANCELLED"
+    release.set()
+    assert wait_for_task(client, task_id)["status"] == "CANCELLED"

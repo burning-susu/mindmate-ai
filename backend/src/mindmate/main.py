@@ -20,6 +20,7 @@ from mindmate.api.files import FileApiError
 from mindmate.api.files import router as files_router
 from mindmate.api.knowledge_bases import router as knowledge_bases_router
 from mindmate.api.problem import ProblemDetail
+from mindmate.application.knowledge_membership_worker import KnowledgeMembershipWorker
 from mindmate.application.parse_worker_service import ParsingWorker
 from mindmate.config import Settings, get_settings
 from mindmate.infrastructure.db import create_session_factory, create_sqlite_engine, quick_check
@@ -80,8 +81,15 @@ async def lifespan(app: FastAPI):
         app.state.session = LocalSession()
         app.state.parse_worker = ParsingWorker(app.state.session_factory, settings)
         app.state.parse_worker.start()
+        app.state.knowledge_membership_worker = KnowledgeMembershipWorker(
+            app.state.session_factory, settings
+        )
+        app.state.knowledge_membership_worker.start()
         yield
     finally:
+        knowledge_worker = getattr(app.state, "knowledge_membership_worker", None)
+        if knowledge_worker is not None:
+            knowledge_worker.stop()
         worker = getattr(app.state, "parse_worker", None)
         if worker is not None:
             worker.stop()

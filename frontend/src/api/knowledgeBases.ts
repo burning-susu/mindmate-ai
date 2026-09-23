@@ -4,6 +4,9 @@ import { apiRequest } from './client'
 export type KnowledgeBaseItem = components['KnowledgeBaseResponse']
 export type KnowledgeBaseListResponse = components['KnowledgeBaseListResponse']
 export type KnowledgeBaseCreate = components['KnowledgeBaseCreate']
+export type KnowledgeBaseMember = components['KnowledgeBaseMemberResponse']
+export type KnowledgeBaseMemberList = components['KnowledgeBaseMemberListResponse']
+export type KnowledgeMembershipTask = components['KnowledgeMembershipTaskResponse']
 
 export function createKnowledgeBase(payload: KnowledgeBaseCreate): Promise<KnowledgeBaseItem> {
   return apiRequest('/api/v1/knowledge-bases', {
@@ -45,4 +48,33 @@ export function purgeKnowledgeBase(item: KnowledgeBaseItem): Promise<{ status: s
   return apiRequest(`/api/v1/trash/knowledge-base/${item.knowledge_base_id}?${params}`, {
     method: 'DELETE',
   })
+}
+
+export function listKnowledgeBaseMembers(
+  knowledgeBaseId: string,
+): Promise<KnowledgeBaseMemberList> {
+  return apiRequest(`/api/v1/knowledge-bases/${knowledgeBaseId}/files`)
+}
+
+export function addKnowledgeBaseMembers(
+  knowledgeBaseId: string,
+  fileIds: string[],
+): Promise<KnowledgeMembershipTask> {
+  return apiRequest(`/api/v1/knowledge-bases/${knowledgeBaseId}/files`, {
+    method: 'POST',
+    body: JSON.stringify({ file_ids: fileIds }),
+  })
+}
+
+export function removeKnowledgeBaseMember(
+  knowledgeBaseId: string,
+  fileId: string,
+): Promise<{ knowledge_base_id: string; file_id: string; status: string }> {
+  return apiRequest(`/api/v1/knowledge-bases/${knowledgeBaseId}/files/${fileId}`, {
+    method: 'DELETE',
+  })
+}
+
+export function getKnowledgeMembershipTask(taskId: string): Promise<KnowledgeMembershipTask> {
+  return apiRequest(`/api/v1/tasks/${taskId}`)
 }

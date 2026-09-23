@@ -451,7 +451,10 @@ def _task_payload(task: BackgroundTask) -> dict[str, Any]:
         "items": _task_items(task),
         "folder_id": context.get("folder_id"),
         "tag_ids": context.get("tag_ids", []),
-        "knowledge_base_id": context.get("knowledge_base_id"),
+        "knowledge_base_id": context.get("knowledge_base_id")
+        or (checkpoint.get("knowledge_base_id") if isinstance(checkpoint, dict) else None),
+        "results": checkpoint.get("results", []) if isinstance(checkpoint, dict) else [],
+        "summary": checkpoint.get("summary") if isinstance(checkpoint, dict) else None,
         "error": task.error_summary,
     }
 

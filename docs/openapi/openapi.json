@@ -401,6 +401,239 @@
         }
       }
     },
+    "/api/v1/knowledge-bases/{knowledge_base_id}/files": {
+      "get": {
+        "tags": [
+          "knowledge-bases"
+        ],
+        "summary": "List Knowledge Base Files",
+        "operationId": "list_knowledge_base_files_api_v1_knowledge_bases__knowledge_base_id__files_get",
+        "parameters": [
+          {
+            "name": "knowledge_base_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Knowledge Base Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeBaseMemberListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "knowledge-bases"
+        ],
+        "summary": "Add Knowledge Base Files",
+        "operationId": "add_knowledge_base_files_api_v1_knowledge_bases__knowledge_base_id__files_post",
+        "parameters": [
+          {
+            "name": "knowledge_base_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Knowledge Base Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeBaseFilesAdd"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeMembershipTaskResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/knowledge-bases/{knowledge_base_id}/files/{file_id}": {
+      "delete": {
+        "tags": [
+          "knowledge-bases"
+        ],
+        "summary": "Remove Knowledge Base File",
+        "operationId": "remove_knowledge_base_file_api_v1_knowledge_bases__knowledge_base_id__files__file_id__delete",
+        "parameters": [
+          {
+            "name": "knowledge_base_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Knowledge Base Id"
+            }
+          },
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "File Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Remove Knowledge Base File Api V1 Knowledge Bases  Knowledge Base Id  Files  File Id  Delete"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/files/{file_id}/knowledge-bases": {
+      "get": {
+        "tags": [
+          "files"
+        ],
+        "summary": "File Knowledge Bases",
+        "operationId": "file_knowledge_bases_api_v1_files__file_id__knowledge_bases_get",
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "File Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response File Knowledge Bases Api V1 Files  File Id  Knowledge Bases Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tasks/{task_id}/cancel": {
+      "post": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "Cancel Knowledge Membership Task",
+        "operationId": "cancel_knowledge_membership_task_api_v1_tasks__task_id__cancel_post",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeMembershipTaskResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/trash/knowledge-bases": {
       "get": {
         "tags": [
@@ -1284,50 +1517,6 @@
                   "type": "object",
                   "additionalProperties": true,
                   "title": "Response File Text Api V1 Files  File Id  Text Get"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/files/{file_id}/knowledge-bases": {
-      "get": {
-        "tags": [
-          "files"
-        ],
-        "summary": "File Knowledge Bases",
-        "operationId": "file_knowledge_bases_api_v1_files__file_id__knowledge_bases_get",
-        "parameters": [
-          {
-            "name": "file_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "File Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response File Knowledge Bases Api V1 Files  File Id  Knowledge Bases Get"
                 }
               }
             }
@@ -3006,6 +3195,23 @@
         ],
         "title": "KnowledgeBaseCreate"
       },
+      "KnowledgeBaseFilesAdd": {
+        "properties": {
+          "file_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "File Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file_ids"
+        ],
+        "title": "KnowledgeBaseFilesAdd"
+      },
       "KnowledgeBaseListResponse": {
         "properties": {
           "items": {
@@ -3032,6 +3238,87 @@
           "items"
         ],
         "title": "KnowledgeBaseListResponse"
+      },
+      "KnowledgeBaseMemberListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeBaseMemberResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "KnowledgeBaseMemberListResponse"
+      },
+      "KnowledgeBaseMemberResponse": {
+        "properties": {
+          "knowledge_base_file_id": {
+            "type": "string",
+            "title": "Knowledge Base File Id"
+          },
+          "file_id": {
+            "type": "string",
+            "title": "File Id"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "document_type": {
+            "type": "string",
+            "title": "Document Type"
+          },
+          "file_status": {
+            "type": "string",
+            "title": "File Status"
+          },
+          "membership_status": {
+            "type": "string",
+            "title": "Membership Status"
+          },
+          "index_state": {
+            "type": "string",
+            "title": "Index State"
+          },
+          "available_for_retrieval": {
+            "type": "boolean",
+            "title": "Available For Retrieval"
+          },
+          "unavailable_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unavailable Reason"
+          },
+          "added_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Added At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "knowledge_base_file_id",
+          "file_id",
+          "display_name",
+          "document_type",
+          "file_status",
+          "membership_status",
+          "index_state",
+          "available_for_retrieval",
+          "added_at"
+        ],
+        "title": "KnowledgeBaseMemberResponse"
       },
       "KnowledgeBasePatch": {
         "properties": {
@@ -3207,6 +3494,92 @@
           "row_version"
         ],
         "title": "KnowledgeBaseResponse"
+      },
+      "KnowledgeMembershipTaskResponse": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "title": "Task Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "phase": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phase"
+          },
+          "progress": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Progress"
+          },
+          "knowledge_base_id": {
+            "type": "string",
+            "title": "Knowledge Base Id"
+          },
+          "items": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "results": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Results"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_id",
+          "status",
+          "knowledge_base_id",
+          "items",
+          "results"
+        ],
+        "title": "KnowledgeMembershipTaskResponse"
       },
       "ProblemDetail": {
         "properties": {

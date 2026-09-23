@@ -11,6 +11,7 @@ from mindmate.application.backups import create_backup, verify_backup
 from mindmate.application.tasks import (
     cancel_task,
     checkpoint_task,
+    claim_next_task,
     claim_task,
     create_task,
     recover_running_tasks,
@@ -53,6 +54,32 @@ def test_task_checkpoint_cancel_and_recovery(tmp_path: Path) -> None:
             )
             == "CANCELLED"
         )
+
+
+def test_workers_only_claim_registered_task_types(tmp_path: Path) -> None:
+    engine = create_engine(f"sqlite:///{(tmp_path / 'task-types.db').as_posix()}")
+    Base.metadata.create_all(
+        engine,
+        tables=cast(Any, [BackgroundTask.__table__, TaskAttempt.__table__, TaskEvent.__table__]),
+    )
+    with Session(engine) as session:
+        create_task(session, "FILE_IMPORT", "parse-only", {"items": []})
+        knowledge = create_task(
+            session,
+            "KNOWLEDGE_MEMBERSHIP_ADD",
+            "knowledge-only",
+            {"items": []},
+        )
+        session.commit()
+
+        claimed = claim_next_task(
+            session,
+            "knowledge-worker",
+            task_types={"KNOWLEDGE_MEMBERSHIP_ADD"},
+        )
+        assert claimed is not None
+        assert claimed.task_id == knowledge.task_id
+        assert claimed.task_type == "KNOWLEDGE_MEMBERSHIP_ADD"
 
 
 def test_backup_manifest_and_hash_verification(tmp_path: Path) -> None:

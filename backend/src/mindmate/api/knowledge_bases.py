@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterator
 from datetime import datetime, timedelta
+from hashlib import sha256
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -14,7 +15,15 @@ from sqlalchemy.orm import Session
 
 from mindmate.api.files import VERSION_CONFLICT_RESPONSES, FileApiError
 from mindmate.application.files import normalize_name, utc_now
-from mindmate.infrastructure.models import KnowledgeBase, KnowledgeBaseFile, new_id
+from mindmate.application.knowledge_membership_worker import KNOWLEDGE_MEMBERSHIP_TASK
+from mindmate.application.tasks import cancel_task, create_task
+from mindmate.infrastructure.models import (
+    BackgroundTask,
+    FileRecord,
+    KnowledgeBase,
+    KnowledgeBaseFile,
+    new_id,
+)
 
 router = APIRouter(prefix="/api/v1")
 
@@ -114,6 +123,39 @@ class KnowledgeBaseListResponse(BaseModel):
     next_cursor: str | None = None
 
 
+class KnowledgeBaseFilesAdd(BaseModel):
+    file_ids: list[str] = Field(min_length=1)
+
+
+class KnowledgeBaseMemberResponse(BaseModel):
+    knowledge_base_file_id: str
+    file_id: str
+    display_name: str
+    document_type: str
+    file_status: str
+    membership_status: str
+    index_state: str
+    available_for_retrieval: bool
+    unavailable_reason: str | None = None
+    added_at: datetime
+
+
+class KnowledgeBaseMemberListResponse(BaseModel):
+    items: list[KnowledgeBaseMemberResponse]
+
+
+class KnowledgeMembershipTaskResponse(BaseModel):
+    task_id: str
+    status: str
+    phase: str | None = None
+    progress: int | None = None
+    knowledge_base_id: str
+    items: list[dict[str, Any]]
+    results: list[dict[str, Any]]
+    summary: dict[str, Any] | None = None
+    error: str | None = None
+
+
 def get_session(request: Request) -> Iterator[Session]:
     factory = getattr(request.app.state, "session_factory", None)
     if factory is None:
@@ -184,6 +226,55 @@ def _get(session: Session, knowledge_base_id: str, *, deleted: bool = False) -> 
     if record is None or (record.deleted_at is not None) != deleted:
         raise FileApiError("KNOWLEDGE_BASE_NOT_FOUND", "知识库不存在。", 404)
     return record
+
+
+def _member_payload(member: KnowledgeBaseFile, file: FileRecord) -> dict[str, Any]:
+    reasons = {
+        "QUEUED": "文件等待解析",
+        "PARSING": "文件正在解析",
+        "PARSE_FAILED": "文件解析失败",
+    }
+    available = (
+        member.membership_status == "ACTIVE"
+        and file.deleted_at is None
+        and file.status == "PARSED"
+        and member.index_state == "READY"
+    )
+    unavailable_reason = None
+    if not available:
+        if file.deleted_at is not None:
+            unavailable_reason = "文件位于回收站"
+        elif file.status != "PARSED":
+            unavailable_reason = reasons.get(file.status, "文件当前不可用")
+        elif member.index_state != "READY":
+            unavailable_reason = "索引待建立"
+    return {
+        "knowledge_base_file_id": member.knowledge_base_file_id,
+        "file_id": file.file_id,
+        "display_name": file.display_name,
+        "document_type": file.document_type,
+        "file_status": "IN_TRASH" if file.deleted_at is not None else file.status,
+        "membership_status": member.membership_status,
+        "index_state": member.index_state,
+        "available_for_retrieval": available,
+        "unavailable_reason": unavailable_reason,
+        "added_at": member.added_at,
+    }
+
+
+def _membership_task_payload(task: BackgroundTask) -> dict[str, Any]:
+    checkpoint = task.checkpoint_json if isinstance(task.checkpoint_json, dict) else {}
+    return {
+        "task_id": task.task_id,
+        "status": task.status,
+        "phase": task.phase,
+        "progress": task.progress,
+        "knowledge_base_id": str(checkpoint.get("knowledge_base_id", "")),
+        "items": checkpoint.get("items", []),
+        "results": checkpoint.get("results", []),
+        "summary": checkpoint.get("summary"),
+        "error": task.error_summary,
+    }
 
 
 def _atomic_update(
@@ -269,6 +360,146 @@ def get_knowledge_base(
     knowledge_base_id: str, session: Session = Depends(get_session)
 ) -> dict[str, Any]:
     return _payload(session, _get(session, knowledge_base_id))
+
+
+@router.get(
+    "/knowledge-bases/{knowledge_base_id}/files",
+    response_model=KnowledgeBaseMemberListResponse,
+    tags=["knowledge-bases"],
+)
+def list_knowledge_base_files(
+    knowledge_base_id: str, session: Session = Depends(get_session)
+) -> dict[str, Any]:
+    _get(session, knowledge_base_id)
+    rows = session.execute(
+        select(KnowledgeBaseFile, FileRecord)
+        .join(FileRecord, FileRecord.file_id == KnowledgeBaseFile.file_id)
+        .where(
+            KnowledgeBaseFile.knowledge_base_id == knowledge_base_id,
+            KnowledgeBaseFile.membership_status == "ACTIVE",
+        )
+        .order_by(KnowledgeBaseFile.added_at.desc())
+    ).all()
+    return {"items": [_member_payload(member, file) for member, file in rows]}
+
+
+@router.post(
+    "/knowledge-bases/{knowledge_base_id}/files",
+    status_code=202,
+    response_model=KnowledgeMembershipTaskResponse,
+    tags=["knowledge-bases"],
+)
+def add_knowledge_base_files(
+    knowledge_base_id: str,
+    payload: KnowledgeBaseFilesAdd,
+    request: Request,
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    _get(session, knowledge_base_id)
+    unique_file_ids = list(dict.fromkeys(payload.file_ids))
+    request_time = utc_now()
+    raw_key = request.headers.get("idempotency-key", "")
+    idempotency_key = "kb-members:" + sha256(
+        f"{knowledge_base_id}:{raw_key}".encode()
+    ).hexdigest()
+    task = create_task(
+        session,
+        KNOWLEDGE_MEMBERSHIP_TASK,
+        idempotency_key,
+        {
+            "knowledge_base_id": knowledge_base_id,
+            "items": [
+                {"file_id": file_id, "requested_at": request_time.isoformat()}
+                for file_id in unique_file_ids
+            ],
+            "results": [],
+        },
+    )
+    if task.task_type != KNOWLEDGE_MEMBERSHIP_TASK:
+        raise FileApiError("IDEMPOTENCY_CONFLICT", "幂等键已用于其他操作。", 409)
+    session.commit()
+    return _membership_task_payload(task)
+
+
+@router.delete(
+    "/knowledge-bases/{knowledge_base_id}/files/{file_id}",
+    tags=["knowledge-bases"],
+)
+def remove_knowledge_base_file(
+    knowledge_base_id: str,
+    file_id: str,
+    session: Session = Depends(get_session),
+) -> dict[str, str]:
+    knowledge_base = _get(session, knowledge_base_id)
+    membership = session.scalar(
+        select(KnowledgeBaseFile).where(
+            KnowledgeBaseFile.knowledge_base_id == knowledge_base_id,
+            KnowledgeBaseFile.file_id == file_id,
+            KnowledgeBaseFile.membership_status == "ACTIVE",
+        )
+    )
+    if membership is None:
+        raise FileApiError("KNOWLEDGE_BASE_MEMBER_NOT_FOUND", "知识库成员不存在。", 404)
+    now = utc_now()
+    membership.membership_status = "REMOVED"
+    membership.index_state = "PENDING"
+    membership.removed_at = now
+    remaining = session.scalar(
+        select(KnowledgeBaseFile.knowledge_base_file_id)
+        .where(
+            KnowledgeBaseFile.knowledge_base_id == knowledge_base_id,
+            KnowledgeBaseFile.membership_status == "ACTIVE",
+            KnowledgeBaseFile.file_id != file_id,
+        )
+        .limit(1)
+    )
+    knowledge_base.status = "PREPARING" if remaining is not None else "EMPTY"
+    knowledge_base.updated_at = now
+    knowledge_base.row_version += 1
+    session.commit()
+    return {"knowledge_base_id": knowledge_base_id, "file_id": file_id, "status": "REMOVED"}
+
+
+@router.get(
+    "/files/{file_id}/knowledge-bases",
+    response_model=KnowledgeBaseListResponse,
+    tags=["knowledge-bases"],
+)
+def list_file_knowledge_bases(
+    file_id: str, session: Session = Depends(get_session)
+) -> dict[str, Any]:
+    if session.get(FileRecord, file_id) is None:
+        raise FileApiError("FILE_NOT_FOUND", "文件不存在。", 404)
+    records = session.scalars(
+        select(KnowledgeBase)
+        .join(
+            KnowledgeBaseFile,
+            KnowledgeBaseFile.knowledge_base_id == KnowledgeBase.knowledge_base_id,
+        )
+        .where(
+            KnowledgeBaseFile.file_id == file_id,
+            KnowledgeBaseFile.membership_status == "ACTIVE",
+            KnowledgeBase.deleted_at.is_(None),
+        )
+        .order_by(KnowledgeBase.updated_at.desc())
+    )
+    return {"items": [_payload(session, record) for record in records], "next_cursor": None}
+
+
+@router.post(
+    "/tasks/{task_id}/cancel",
+    response_model=KnowledgeMembershipTaskResponse,
+    tags=["tasks"],
+)
+def cancel_knowledge_membership_task(
+    task_id: str, session: Session = Depends(get_session)
+) -> dict[str, Any]:
+    task = session.get(BackgroundTask, task_id)
+    if task is None or task.task_type != KNOWLEDGE_MEMBERSHIP_TASK:
+        raise FileApiError("TASK_NOT_FOUND", "知识库成员任务不存在。", 404)
+    cancel_task(session, task)
+    session.commit()
+    return _membership_task_payload(task)
 
 
 @router.patch(

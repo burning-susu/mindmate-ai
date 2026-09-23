@@ -186,6 +186,12 @@ export default function FilesPage() {
   const selectedFiles = files.filter((file) => selected.includes(file.file_id))
 
   useEffect(() => {
+    if (!activeImportResult || !['COMPLETED', 'FAILED', 'CANCELLED'].includes(activeImportResult.status)) return
+    void queryClient.invalidateQueries({ queryKey: ['files'] })
+    void queryClient.invalidateQueries({ queryKey: ['folders'] })
+  }, [activeImportResult, queryClient])
+
+  useEffect(() => {
     const routeState = location.state as { restoreFileListScroll?: number } | null
     if (!filesQuery.isSuccess || routeState?.restoreFileListScroll === undefined) return
     const frame = window.requestAnimationFrame(() => {

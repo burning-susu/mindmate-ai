@@ -114,9 +114,27 @@ export interface components {
     "icon"?: string | null;
     "color"?: string | null
   };
+  "KnowledgeBaseFilesAdd": {
+    "file_ids": Array<string>
+  };
   "KnowledgeBaseListResponse": {
     "items": Array<components["KnowledgeBaseResponse"]>;
     "next_cursor"?: string | null
+  };
+  "KnowledgeBaseMemberListResponse": {
+    "items": Array<components["KnowledgeBaseMemberResponse"]>
+  };
+  "KnowledgeBaseMemberResponse": {
+    "knowledge_base_file_id": string;
+    "file_id": string;
+    "display_name": string;
+    "document_type": string;
+    "file_status": string;
+    "membership_status": string;
+    "index_state": string;
+    "available_for_retrieval": boolean;
+    "unavailable_reason"?: string | null;
+    "added_at": string
   };
   "KnowledgeBasePatch": {
     "name"?: string | null;
@@ -140,6 +158,17 @@ export interface components {
     "deleted_at"?: string | null;
     "purge_after"?: string | null;
     "row_version": number
+  };
+  "KnowledgeMembershipTaskResponse": {
+    "task_id": string;
+    "status": string;
+    "phase"?: string | null;
+    "progress"?: number | null;
+    "knowledge_base_id": string;
+    "items": Array<Record<string, unknown>>;
+    "results": Array<Record<string, unknown>>;
+    "summary"?: Record<string, unknown> | null;
+    "error"?: string | null
   };
   "ProblemDetail": {
     "type": string;
@@ -245,6 +274,21 @@ export interface operations {
   "DELETE /api/v1/knowledge-bases/{knowledge_base_id}": {
     operationId: "trash_knowledge_base_api_v1_knowledge_bases__knowledge_base_id__delete"
   };
+  "GET /api/v1/knowledge-bases/{knowledge_base_id}/files": {
+    operationId: "list_knowledge_base_files_api_v1_knowledge_bases__knowledge_base_id__files_get"
+  };
+  "POST /api/v1/knowledge-bases/{knowledge_base_id}/files": {
+    operationId: "add_knowledge_base_files_api_v1_knowledge_bases__knowledge_base_id__files_post"
+  };
+  "DELETE /api/v1/knowledge-bases/{knowledge_base_id}/files/{file_id}": {
+    operationId: "remove_knowledge_base_file_api_v1_knowledge_bases__knowledge_base_id__files__file_id__delete"
+  };
+  "GET /api/v1/files/{file_id}/knowledge-bases": {
+    operationId: "file_knowledge_bases_api_v1_files__file_id__knowledge_bases_get"
+  };
+  "POST /api/v1/tasks/{task_id}/cancel": {
+    operationId: "cancel_knowledge_membership_task_api_v1_tasks__task_id__cancel_post"
+  };
   "GET /api/v1/trash/knowledge-bases": {
     operationId: "list_trashed_knowledge_bases_api_v1_trash_knowledge_bases_get"
   };
@@ -289,9 +333,6 @@ export interface operations {
   };
   "GET /api/v1/files/{file_id}/text": {
     operationId: "file_text_api_v1_files__file_id__text_get"
-  };
-  "GET /api/v1/files/{file_id}/knowledge-bases": {
-    operationId: "file_knowledge_bases_api_v1_files__file_id__knowledge_bases_get"
   };
   "POST /api/v1/files/{file_id}/reprocess": {
     operationId: "reprocess_file_api_v1_files__file_id__reprocess_post"
