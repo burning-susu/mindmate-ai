@@ -1,7 +1,7 @@
 # 阶段 5：知识库基础与成员准入测试报告
 
 > 阶段：`5`
-> 批次：`第八批 + 第九批 + 第十批 + 第十一批 + 第十二批 + 第十三批 + 第十四批 + 第十五批 + 第十六批`
+> 批次：`第八批 + 第九批 + 第十批 + 第十一批 + 第十二批 + 第十三批 + 第十四批 + 第十五批 + 第十六批 + 第十七批 + 第十八批`
 > 验证日期：`2026-09-24`
 > 第八批结论：`PASS`
 > 第九批结论：`PASS`
@@ -12,6 +12,8 @@
 > 第十四批结论：`PASS`
 > 第十五批结论：`PASS`
 > 第十六批结论：`PASS`
+> 第十七批结论：`PASS`
+> 第十八批结论：`PASS`
 > 阶段 5 状态：`PARTIAL`
 > 分支：`feat/v1-bootstrap`
 > 起始提交：`75a0653877b7f627bc254a859232689c19872777`
@@ -24,9 +26,9 @@
 
 ## 结论
 
-第八批“空知识库创建、编辑、列表、详情、回收站与恢复”闭环通过；第九批“已导入文件批量加入/移出知识库、持久成员准入任务和前端真实状态”闭环通过；第十批“索引配置、迁移与可恢复输入预处理”闭环通过；第十一批“结构优先版本化 Chunk 与可恢复切片”闭环通过；第十二批“可信固定 ONNX 产物获取、校验与独立 CPU Embedding Adapter”通过；第十三批“持久 EmbeddingRecord、单并发可恢复 Worker 与真实 sqlite-vec 向量写入”通过；第十四批“按 IndexVersion 隔离的持久 FTS5 Chunk 投影与可恢复构建”通过；第十五批“内部 sqlite-vec Top-K 与范围过滤”通过；第十六批“同一 IndexVersion 的 FTS5/向量 Top 30 双路候选合并去重”通过。空库保持 `EMPTY`；Embedding、FTS、内部 Top-K 和双路候选完成的版本仍为 `BUILDING`，没有激活，不可作为用户检索。
+第八至第十六批完成知识库成员、索引预处理、Chunk、Embedding、FTS5、向量 Top-K 与双路候选基础；第十七批完成内部 RRF/多样性 Top 8；第十八批完成 Top 8 后的内部证据充分性判定与严格拒答结果。空库保持 `EMPTY`；Embedding、FTS、检索排序及证据判定均不激活索引，也不可作为用户检索。
 
-第十批 `INDEX_PREPROCESS` 的 `COMPLETED` 只证明输入快照、配置指纹与逐项预处理结果已持久化。第十一批 `INDEX_CHUNK` 的 `COMPLETED` 只表示切片阶段结束。第十三批 `INDEX_EMBED` 的 `COMPLETED` 只表示向量与 `EmbeddingRecord` 已生成并持久化。第十四批 `INDEX_FTS` 的 `COMPLETED` 只表示 FTS5 投影已建立。第十五批内部 Top-K 只表示限定范围内的本地向量排序可用。第十六批只建立双路候选收集和按 Chunk ID 去重，尚未执行 RRF、最终重排或公开检索。以上都不表示索引就绪；`IndexVersion.status` 保持 `BUILDING`，`active_index_version_id` 不变，成员仍不可检索。阶段 5 仍为 `PARTIAL`：原子索引激活、RRF/混合排序、引用和 RAG 尚未实现。
+第十批 `INDEX_PREPROCESS` 的 `COMPLETED` 只证明输入快照与预处理结果已持久化；第十一批 `INDEX_CHUNK` 只证明切片阶段结束；第十三批 `INDEX_EMBED` 只证明向量已持久化；第十四批 `INDEX_FTS` 只证明 FTS5 投影已建立。第十五至十八批依次提供内部向量 Top-K、双路候选、RRF/多样性排序与证据门控；`supported` 只表示候选具备进入后续引用绑定/生成流程的资格，不证明最终答案获事实支持。以上均不表示索引就绪；`IndexVersion.status` 保持 `BUILDING`，`active_index_version_id` 不变，成员仍不可检索。阶段 5 仍为 `PARTIAL`：产物完整性复核与原子激活、服务端来源快照/引用绑定、公开检索、RAG、前端和质量验收仍未完成。
 
 ## 实现范围
 
@@ -450,3 +452,48 @@ repo> git diff --check
 ~~~
 
 本批没有改前端或 API，因此没有运行阶段 4/5 UI E2E；真实 SQLite FTS5/sqlite-vec 的内部检索集成测试已纳入后端 pytest。没有调用 DeepSeek、真实凭据、付费服务或真实用户资料。第十七批结论 `PASS`；阶段 5 继续 `PARTIAL`。下一批唯一目标：对内部 Top 8 实现配置化的证据充分性阈值判定和严格拒答结果，仍不公开检索、不激活索引、不生成回答或引用。
+
+## 第十八批验收追踪：内部证据充分性判定与严格拒答
+
+| ID | 验收项 | 证据 | 结论 |
+| --- | --- | --- | --- |
+| S5-B18-01 | 内部 Top 8 后产生 `supported/insufficient/unavailable` 结构化判定，保留规则版本、原因和候选身份 | `test_stage5_evidence_gate.py`；`test_hybrid_search_assesses_scoped_top_eight_without_activating_index` | PASS |
+| S5-B18-02 | 判定组合正文锚点/编号、经验证余弦相似度、原始排名、融合排名、来源数与问题类型 | 精确问题/改写/单文件、低相似度、短词、编号、数值及来源覆盖用例 | PASS |
+| S5-B18-03 | 标题命中、精确奖励或高 RRF 排名不能绕过正文证据；短词、未知分数和缺失答案保守拒绝 | `test_high_similarity_does_not_support_a_missing_numeric_answer`、`test_short_terms_title_only_and_missing_identifier_are_not_support`、`test_weak_or_unverified_vector_signal_never_passes_the_gate` | PASS |
+| S5-B18-04 | 空结果、单文件、重复切片、部分覆盖复合问题及冲突资料均有明确行为 | `test_empty_results_return_fixed_safe_message_and_validated_config`、`test_supports_exact_and_reasonably_rephrased_single_file_evidence`、`test_repeated_chunks_do_not_inflate_distinct_source_coverage`、`test_composite_questions_and_conflicting_sources_fail_closed` | PASS |
+| S5-B18-05 | 未请求通道、通道失败、错误范围/版本或范围变化返回 `unavailable`，不显示资料不足文案 | `test_route_failures_are_unavailable_and_never_refusal_copy`、`test_assessment_keeps_missing_route_and_wrong_scope_out_of_insufficient`、`test_assessment_reports_scope_change_as_unavailable`、`test_hybrid_vector_failure_is_explicit_and_optional_degrade` | PASS |
+| S5-B18-06 | 真实 SQLite FTS5 + sqlite-vec 内部链路运行到证据判定；没有范围外候选、活动版本变化或虚假引用 | `test_hybrid_search_assesses_scoped_top_eight_without_activating_index` | PASS |
+| S5-B18-07 | 不调用模型，不生成答案/引用编号，不增加公开检索 API、迁移、OpenAPI 或 UI | 代码差异、集成状态断言与公开契约检查 | PASS |
+
+### 第十八批规则与边界
+
+- 规则版本为 `evidence-gate-v1`。默认配置：余弦相似度下限 `0.82`；最终排序不晚于第 `3` 位；FTS 与 vector 原始 rank 均不晚于 `5`；正文至少覆盖 `2` 个问题锚点且覆盖率至少 `0.60`，或包含至少 `5` 个规范化字符的完整查询短语；完整编号必须出现在正文；数值类问题必须在正文锚点 `48` 个字符范围内找到数值；默认最少独立支持来源为 `1`。
+- 向量字段按既有 Adapter 语义解释：单位向量使用 sqlite-vec 默认 L2，余弦距离为 `d_l2² / 2`，相似度为 `1 - cosine_distance`。门控要求距离在 `[0,2]`、相似度在 `[-1,1]` 且两者误差不超过 `1e-5`；空值、非有限值或不一致按无效信号处理。
+- RRF 分数、精确命中奖励和多样性惩罚只决定候选次序；门控只使用融合名次和原始路由 rank，不读取最终分数/奖励作为放行条件。关键词覆盖只在 Chunk 正文统计，文件标题和 heading 不算作答案证据。支持来源按 `file_id` 计数，重复 Chunk 不会增加来源数；最小来源默认 1，因此单文件有效证据不会因来源数量被拒绝。
+- 复合/开放列举问题整体 `insufficient`，不尝试部分答案拆分；多个合格来源出现不同数值或相反肯定/否定标记时整体 `insufficient`。冲突与问题类型识别是简单本地规则，无法可靠分类时会偏向拒绝，不表示语义蕴含已经解决。
+- `insufficient` 才带固定本地提示和补充/调整资料建议，不携带模型生成文本或伪引用。范围变化、活动/失效/未就绪版本、失败/降级通道、未请求向量路由返回 `unavailable` 和稳定原因码，不以拒答文案掩盖故障。`supported` 只表示候选可以进入后续服务端来源快照、引用绑定和生成流程，不宣称答案最终通过事实验证。
+- 离线固定样本预期/实测：精确定义问题与保留核心实体的合理改写 `supported/supported`；语义相近但缺所问数值、高相似度但无答案、标题/错误编号/短词命中、向量弱或无效、同文件重复 Chunk、部分覆盖复合问题、数值/肯定否定冲突 `insufficient/insufficient`；单文件有效证据 `supported/supported`；空结果 `insufficient/insufficient`；未请求向量、通道故障、范围变化和错误知识库版本 `unavailable/unavailable`。固定样本共 8 个纯判定用例，另有真实 SQLite 集成覆盖，不含个人资料。
+- `0.82` 等默认值是保守实现初值，不是基于标注数据集校准的最终阈值。固定样本通过不等价于最终 Recall@10、答案蕴含或知识问答质量验收。
+
+### 第十八批实际验证
+
+~~~text
+backend> uv run pytest
+133 passed（串行运行）
+
+backend> uv run ruff check src tests
+All checks passed
+
+backend> uv run pyright
+0 errors, 0 warnings, 0 informations
+
+backend> uv run python -m compileall -q src tests migrations
+通过
+
+repo> git diff --check
+通过
+~~~
+
+首次完整 pytest 运行曾有一次既有 `test_embedding_claim_releases_only_expired_singleton_lease` 失败；单项重跑通过，之后完整串行重跑 `133 passed`。额外运行的 `uv run ruff check .` 报告 14 条既有 Alembic migration lint 项；本批相关源码/测试范围 Ruff 通过，迁移文件未修改。未运行 UI E2E（无前端/API 变化），未调用 DeepSeek、真实凭据、付费接口或用户资料。第十八批结论 `PASS`；阶段 5 继续 `PARTIAL`。
+
+下一开发批次唯一目标：为已完成索引版本实现产物完整性复核与原子激活，继续不开放用户检索。

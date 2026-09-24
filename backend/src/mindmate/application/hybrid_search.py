@@ -11,6 +11,13 @@ from numpy.typing import NDArray
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from mindmate.application.evidence_gate import (
+    DEFAULT_EVIDENCE_CONFIG,
+    EvidenceAssessment,
+    EvidenceSufficiencyConfig,
+    assess_evidence,
+    unavailable_assessment,
+)
 from mindmate.application.vector_search import VectorTopKHit, VectorTopKQuery
 from mindmate.infrastructure.fts5 import DEFAULT_FTS_TOP_K, Fts5Projection
 from mindmate.infrastructure.models import (
@@ -142,6 +149,16 @@ class HybridSearchResult:
     @property
     def degraded(self) -> bool:
         return self.fts_error is not None or self.vector_error is not None
+
+
+@dataclass(frozen=True, slots=True)
+class HybridAssessmentResult:
+    """Internal retrieval plus a gate decision, or an explicit unavailable result."""
+
+    retrieval: HybridSearchResult | None
+    assessment: EvidenceAssessment
+    retrieval_error_code: str | None = None
+    retrieval_error_route: str | None = None
 
 
 class _VectorQuery(Protocol):
@@ -523,10 +540,12 @@ class HybridCandidateQuery:
         projection: Fts5Projection | None = None,
         vector_query: _VectorQuery | None = None,
         ranking_config: HybridRankingConfig | None = None,
+        evidence_config: EvidenceSufficiencyConfig | None = None,
     ) -> None:
         self._projection = projection or Fts5Projection()
         self._vector_query = vector_query or VectorTopKQuery(vector_store)
         self._ranking_config = ranking_config or DEFAULT_HYBRID_RANKING_CONFIG
+        self._evidence_config = evidence_config or DEFAULT_EVIDENCE_CONFIG
 
     def search_with_status(
         self,
@@ -605,6 +624,68 @@ class HybridCandidateQuery:
             RANKING_ALGORITHM_VERSION,
             self._ranking_config,
         )
+
+    def search_and_assess_with_status(
+        self,
+        session: Session,
+        *,
+        knowledge_base_id: str,
+        index_version_id: str,
+        query_text: str,
+        query_vector: NDArray[Any] | list[float] | None,
+        allow_degraded: bool = False,
+        k: int = DEFAULT_CANDIDATE_TOP_K,
+    ) -> HybridAssessmentResult:
+        """Run the internal Top 8 pipeline, then apply the evidence-only gate."""
+        try:
+            signature = self._fresh_scope_signature(
+                session, knowledge_base_id, index_version_id
+            )
+            if signature == (None,):
+                raise HybridQueryError("INDEX_VERSION_NOT_AVAILABLE")
+            version = signature[0]
+            if (
+                version[0] != "BUILDING"
+                or version[1] != "KNOWLEDGE_BASE"
+                or version[2] != knowledge_base_id
+                or version[7] is not None
+            ):
+                raise HybridQueryError("INDEX_VERSION_NOT_AVAILABLE")
+            if version[5] not in {"COMPLETED", "PARTIAL"}:
+                raise HybridQueryError("FTS_INDEX_NOT_READY", route="fts")
+            if query_vector is not None and version[6] not in {"COMPLETED", "PARTIAL"}:
+                raise HybridQueryError("VECTOR_INDEX_NOT_READY", route="vector")
+            retrieval = self.search_with_status(
+                session,
+                knowledge_base_id=knowledge_base_id,
+                index_version_id=index_version_id,
+                query_text=query_text,
+                query_vector=query_vector,
+                allow_degraded=allow_degraded,
+                k=k,
+            )
+        except HybridQueryError as error:
+            return HybridAssessmentResult(
+                retrieval=None,
+                assessment=unavailable_assessment(
+                    error.code,
+                    query_text=query_text,
+                    route=error.route,
+                    config=self._evidence_config,
+                ),
+                retrieval_error_code=error.code,
+                retrieval_error_route=error.route,
+            )
+
+        assessment = assess_evidence(
+            retrieval.candidates,
+            query_text=query_text,
+            vector_requested=query_vector is not None,
+            fts_error=retrieval.fts_error,
+            vector_error=retrieval.vector_error,
+            config=self._evidence_config,
+        )
+        return HybridAssessmentResult(retrieval=retrieval, assessment=assessment)
 
     def search(self, *args: Any, **kwargs: Any) -> list[HybridCandidate]:
         return list(self.search_with_status(*args, **kwargs).candidates)

@@ -130,3 +130,14 @@ Windows 11 x64 / Python 3.12.11 实际 CPU 验证使用 ONNX Runtime 1.30.0、to
 - 双路前后范围指纹逻辑保持不变，读取候选文件标题和 Chunk 上下文后再做一次范围复核；文件显示名也纳入范围指纹，避免标题变化期间使用不一致的精确匹配上下文。任何版本、成员、文件、Chunk 或 EmbeddingRecord 范围变化仍返回 `RETRIEVAL_SCOPE_CHANGED`。不改变 `IndexVersion.status=BUILDING`、`active_index_version_id` 或 `available_for_retrieval=false`。
 - 固定离线样本覆盖 FTS-only、Vector-only、双路同 Chunk、两个文件相关性相近、相邻高重叠片段、完整编号/标题与模糊短词、大小写/全半角/标点、同分与反转输入顺序、空候选、Top 8、单路显式降级和范围变化。真实 SQLite FTS5 + sqlite-vec 集成测试验证排序信号。该固定样本不等价于最终 Recall@10 验收。
 - 第十七批验证：后端 `122 passed` 串行；Ruff 全量通过；Pyright `0 errors, 0 warnings, 0 informations`；compileall 与 `git diff --check` 通过。没有前端/API 改动，未运行 UI E2E；没有 DeepSeek/真实凭据/付费服务调用或真实用户资料。第十七批 `PASS`；阶段 5 仍 `PARTIAL`，证据阈值、严格拒答、引用、RAG 与索引激活仍未完成。
+
+## 内部证据充分性判定阶段（第十八批）
+
+- `HybridCandidateQuery.search_and_assess_with_status` 在既有知识库/`IndexVersion` 校验、双路范围指纹复核、按 `chunk_id` 合并及 RRF/多样性 Top 8 后调用本地门控。判定器不访问数据库、模型或外部服务；`IndexVersion` 必须仍为 `BUILDING` 且内部 FTS/Embedding 状态可用。版本不在范围、失效/回收站、未就绪或检索过程中范围变化不会被转成“资料不足”。
+- 门控规则版本为 `evidence-gate-v1`，参数由 `EvidenceSufficiencyConfig` 集中管理并在创建时校验：`min_vector_similarity=0.82`、`max_candidate_rank=3`、`max_original_rank=5`、`minimum_anchor_count=2`、`minimum_anchor_coverage=0.60`、`minimum_phrase_characters=5`、`minimum_distinct_sources=1`、`numeric_context_characters=48`。规则版本当前固定为 `evidence-gate-v1`，未知版本及越界/非有限参数被拒绝。
+- 向量相似度沿用第十五批语义：sqlite-vec 默认 L2 距离，输入和存储向量均单位归一化，因此 `cosine_distance=d_l2²/2`、`vector_similarity=1-cosine_distance`。只接受有限 `vector_distance∈[0,2]`、`vector_score∈[-1,1]`，并要求 `vector_score` 与 `1-vector_distance` 差不超过 `1e-5`；空值、异常或未知量纲不参与放行。
+- 每个支持候选必须有 FTS 与 vector 原始 rank，二者均不晚于 5，融合后名次不晚于 3；正文需覆盖至少两个查询锚点且覆盖率不低于 0.60，或包含至少五个规范化字符的完整查询短语。查询中的编号必须在正文出现；数值问题还要求某个匹配锚点附近 48 个规范化字符内存在数值。文件名和 heading 不计正文覆盖；RRF/精确奖励/多样性分不作为证据门槛，不能单独绕过门控。
+- 来源数按符合门槛候选的 distinct `file_id` 计算，默认至少 1；重复 Chunk 不会制造额外来源，单文件有效证据可以通过。简单本地问题分类将多子问/开放列举视为整体不足；两个以上支持来源出现不同数值或明确相反肯定/否定标记时整体拒绝。本批不做可回答子问题拆分；问题类型与冲突启发式有边界，规则无法确认时按不足处理。
+- 结构化结果状态为 `supported`、`insufficient`、`unavailable`，包含规则版本、问题类型、原因码、候选的 Chunk/File/IndexVersion 身份及原始 rank/相似度/锚点等信号。`insufficient` 只带固定本地提示和补充/调整资料建议，不输出候选正文，不调用模型、不拼引用；`unavailable` 不带拒答提示，保留索引、范围或通道错误原因；`supported` 仅表示候选可进入后续服务端来源快照、引用绑定和生成流程，不代表事实蕴含或最终答案验证通过。
+- 第十八批固定离线样本覆盖：精确问题与核心实体改写、无结果、相似但缺少所问数值、短词误命中、标题/编号假阳性、低/空/不一致余弦信号、奖励分不能绕过、重复位置切片、单文件证据、部分覆盖复合问题、数值和极性冲突、单路未请求/显式故障、跨范围版本及范围变化。8 个纯判定样本通过；另有真实 SQLite FTS5 + sqlite-vec 链路确认候选全在范围内、门控在 Top 8 后运行、无引用编号、版本仍 `BUILDING` 且活动版本为空。样本不包含私人文件，不等价于最终 Recall@10 或问答质量验收。
+- 第十八批验证：后端串行 `133 passed`；`uv run ruff check src tests`、Pyright、`python -m compileall -q src tests migrations`、`git diff --check` 通过。测试曾有一次既有 Embedding Worker 互斥用例失败，单测重跑及后续全量重跑通过。额外 `ruff check .` 报 14 条未修改的既有 Alembic migration lint 问题；本批 `src`/`tests` lint 通过。没有 OpenAPI、前端、API 或迁移改动；没有 UI E2E、DeepSeek、真实凭据、付费服务或用户资料。阶段 5 仍为 `PARTIAL`。

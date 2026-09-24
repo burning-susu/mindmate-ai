@@ -125,6 +125,19 @@
 - 验收：后端全量串行 `122 passed`；Ruff `All checks passed`；Pyright `0 errors, 0 warnings, 0 informations`；`python -m compileall -q src tests migrations` 通过；`git diff --check` 通过。未运行阶段 4/5 UI E2E（无前端/API 改动）；未调用 DeepSeek、真实凭据、付费外部调用或用户资料。
 - 下一开发批次唯一目标：对内部 Top 8 实现配置化的证据充分性阈值判定和严格拒答结果；继续不公开检索、不激活索引、不生成回答或引用。
 
+### 第十八批：内部证据充分性判定与严格拒答
+
+- 状态：本批 `PASS`；阶段 5 仍为 `PARTIAL`。
+- 实现：新增 `evidence-gate-v1` 配置化纯判定规则，并接入 `HybridCandidateQuery.search_and_assess_with_status`，在范围复核和内部 Top 8 排序后评估候选。结构化结果区分 `supported`、`insufficient`、`unavailable`，包含规则版本、问题类型、触发原因、Chunk/File/IndexVersion 身份和逐候选可审计信号。
+- 放行条件：默认余弦相似度至少 `0.82` 且 `vector_score == 1 - vector_distance`（绝对误差不超过 `1e-5`）；融合排名不晚于 3、原始 FTS/vector rank 均不晚于 5；正文至少命中两个问题锚点且覆盖率至少 `0.60`，或正文含至少 5 个规范化字符的完整查询短语；包含编号时正文必须命中完整编号；数值问题还必须在正文锚点附近找到数值。标题、RRF 分、精确奖励和多样性调整不能绕过这些门槛。
+- 来源与拒答：默认最少一个独立支持文件，重复 Chunk 按 `file_id` 去重，因此单文件有效证据可通过。同一问题存在多个子问题/开放列举或强候选出现数值/肯定否定冲突时整体 `insufficient`，不做部分回答。`insufficient` 仅产生固定本地提示和资料建议；路由错误/显式降级、未请求向量通道、索引未就绪、版本或范围变化为 `unavailable`，保留错误码，不返回资料不足文案。
+- 语义边界：`supported` 只代表候选可进入后续来源快照、引用绑定和生成流程，不证明正文在语义上蕴含答案。规则阈值为保守开发初值；固定样本通过不代表阈值已由验收集校准，也不等同 Recall@10 或问答质量验收。
+- 固定离线矩阵：精确定义问题与核心实体保留的合理改写预期并实测 `supported`；空结果、语义相近但缺少数值答案、弱/未知余弦值、标题命中、错误编号、高精确奖励、重复同文件切片、只覆盖部分子问题及多来源冲突预期并实测 `insufficient`；单文件有效证据预期并实测 `supported`；未请求向量通道、通道失败、跨库版本和检索中途范围变化预期并实测 `unavailable`。8 个纯离线用例均通过，不含私人资料。
+- SQLite 集成：真实 SQLite FTS5 + sqlite-vec 路径从 Top 30 双路召回、范围校验、RRF/Top 8 到证据判定；实测支持结果只保留候选身份，不生成引用编号；所有候选文件属于当前范围；`IndexVersion` 仍为 `BUILDING` 且 `active_index_version_id` 为空。
+- 边界：没有数据库迁移、公开检索/API、OpenAPI、前端、DeepSeek/真实模型调用或索引激活。阶段 5 仍需索引产物完整性复核与原子激活、服务端来源快照/引用绑定、公开检索/对话前端及基于验收集的阈值/质量评估。
+- 验收：串行后端 `133 passed`；`uv run ruff check src tests` 通过；Pyright `0 errors, 0 warnings, 0 informations`；`uv run python -m compileall -q src tests migrations` 与 `git diff --check` 通过。额外 `uv run ruff check .` 检出 14 条未修改的 Alembic migration lint 项。全量测试曾有一次既有 Embedding Worker 互斥用例失败；单项重跑及随后全量串行重跑均通过，最终 `133 passed`。无前端/API 改动，未跑 UI E2E；未调用 DeepSeek、真实凭据、付费接口或真实用户资料。
+- 下一开发批次唯一目标：为已完成索引版本实现产物完整性复核与原子激活，继续不开放用户检索。
+
 ## 进度口径
 
 文件产出不等于测试通过；测试通过不等于 Spike 通过；Spike 通过不等于业务验收或发布完成。

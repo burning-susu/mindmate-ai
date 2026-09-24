@@ -6,7 +6,7 @@
 - 当前远程提交：以 `git ls-remote --heads origin feat/v1-bootstrap` 为准；本文件随本批次收口提交推送
 - 最后更新时间：`2026-09-24`
 - 当前开发阶段：阶段 5 开发中，状态 `PARTIAL`
-- 当前批次状态：第十七批“内部 RRF 与多样性排序”结论 `PASS`；阶段 5 状态 `PARTIAL`
+- 当前批次状态：第十八批“内部证据充分性判定与严格拒答”结论 `PASS`；阶段 5 状态 `PARTIAL`
 
 ## 已完成阶段
 
@@ -15,7 +15,7 @@
 - 阶段 2：安全本地应用壳，`0b19795`
 - 阶段 3：数据、任务和备份基础，`02a32b8`
 - 阶段 4：初始实现 `bc30e1f`，证据修订 `9e0174a`，收口修复 `3b29d22`，第四批交接 `0448d5b`；第五批完成数据模型、迁移、乐观锁、解析失败持久化与契约同步；第六批完成持久解析 Worker、原子领取/租约、重试恢复和 Windows Job Object；第七批补齐列表状态恢复并完成最终验收，状态 `PASS`
-- 阶段 5：第八批完成空知识库持久化基础；第九批完成成员加入/移出、多库共享、批量准入、持久任务、取消/恢复和前端真实状态闭环；第十批完成索引配置、不可变版本输入快照与可恢复预处理 Worker；第十一批完成可复用版本化 Chunk 与独立可恢复切片任务；第十二批完成固定 ONNX 产物来源、哈希验证与本地 CPU Adapter；第十三批完成持久 EmbeddingRecord、单并发 Worker 与 sqlite-vec 向量写入；第十四批完成按 IndexVersion 隔离的持久 FTS5 投影与逐输入恢复；第十五批完成内部向量 Top-K 与范围过滤；第十六批完成同一 IndexVersion 的 FTS5/向量 Top 30 候选收集、稳定按 Chunk ID 去重与范围变更复核；第十七批完成内部 RRF、精确命中奖励和确定性多样性 Top 8；阶段整体仍为 `PARTIAL`
+- 阶段 5：第八批完成空知识库持久化基础；第九批完成成员加入/移出、多库共享、批量准入、持久任务、取消/恢复和前端真实状态闭环；第十批完成索引配置、不可变版本输入快照与可恢复预处理 Worker；第十一批完成可复用版本化 Chunk 与独立可恢复切片任务；第十二批完成固定 ONNX 产物来源、哈希验证与本地 CPU Adapter；第十三批完成持久 EmbeddingRecord、单并发 Worker 与 sqlite-vec 向量写入；第十四批完成按 IndexVersion 隔离的持久 FTS5 投影与逐输入恢复；第十五批完成内部向量 Top-K 与范围过滤；第十六批完成双路 Top 30 候选收集、稳定按 Chunk ID 去重与范围变化复核；第十七批完成内部 RRF、精确命中奖励和确定性多样性 Top 8；第十八批完成 Top 8 后的内部证据门控与结构化严格拒答；阶段整体仍为 `PARTIAL`
 
 ## 当前已实现能力
 
@@ -23,7 +23,7 @@
 - 任务与资源安全：复用 `BackgroundTask` 实现文件导入/重新处理及知识库成员准入；解析 Worker 与成员 Worker 按任务类型隔离领取，均使用原子领取、租约、过期恢复、关闭中断与取消状态；Windows 解析子进程使用 Job Object 的 `KILL_ON_JOB_CLOSE` 与进程内存上限，默认 `512 MiB`。
 - 前端：真实 API 文件工作台、嵌套目录、筛选排序、导入与重复决策、详情编辑/预览、文件和文件夹回收站操作；列表查询参数、详情返回后的筛选/排序/滚动恢复；返回前刷新列表避免旧 `row_version` 竞态；版本冲突提示并引导重新加载，不自动覆盖。
 - 数据库：SQLite/Alembic 核心实体、持久任务、内容对象引用计数和软删除字段；revision `d91f4a6b2c30` 增加 ChunkingConfig、EmbeddingConfig、IndexVersion 与逐文件输入快照；revision `f2c7a1d8e904` 增加文件级 Chunk 与切片检查点；revision `a81f3c6d2e90` 增加 EmbeddingRecord、逐输入 Embedding 检查点及 INDEX_EMBED 单运行租约约束；revision `d60f2e8a7c31` 增加逐输入 FTS 状态、映射表、FTS5 虚表和 INDEX_FTS 单运行租约约束。
-- 测试与工程：第十四批后端全量 `105 passed`、Ruff、Pyright、compileall、FTS5 完整性/映射对账、空库及含 Chunk/EmbeddingRecord 数据的迁移回滚与重建回归；前端既有 13 tests 和阶段 4/5 Playwright 生命周期证据见测试状态。
+- 测试与工程：第十八批后端全量 `133 passed`；Ruff（`src`/`tests`）、Pyright、compileall 和 `git diff --check` 通过；前端既有 13 tests 和阶段 4/5 Playwright 生命周期证据见测试状态。
 - 知识库：空库创建保持 `EMPTY`；名称/描述/颜色/图标编辑；回收站生命周期；已导入文件批量加入/移出、多库共享、幂等重加与逐项结果；成员准入完成后保持 `index_state=PENDING` 和知识库 `PREPARING`，不伪造可检索状态。
 - 索引预处理：独立 `INDEX_PREPROCESS` Worker 在请求生命周期外冻结活动成员、内容哈希、解析修订、配置指纹与集合指纹；逐文件记录 `PREPARED/SKIPPED/FAILED`，支持幂等、租约接管、检查点续跑、取消和完成前版本复核。预处理后 `IndexVersion.status=BUILDING`，不会写入 `active_index_version_id`。
 - 版本化切片：独立 `INDEX_CHUNK` Worker 仅消费同版本 `PREPARED` 快照；Chunk 按文件/解析修订/切片配置复用，不与知识库绑定；文件级 Chunk 集、切片检查点和任务进度原子提交，支持取消、租约接管、关闭续跑、显式失败重试、多库复用与旧解析/配置版本共存。完成后仍为 `BUILDING` 且不可检索。
@@ -35,32 +35,34 @@
 - 向量 Adapter：在 Windows 文件 SQLite 中校验 512 维、有限单位向量、持久存在性、hash 对账、幂等 upsert 和按 ID/版本删除；扩展加载权限仅在加载期间开启。永久删除知识库只清理其版本向量，保留仍可复用的 Chunk/EmbeddingRecord；永久删除文件清理其向量映射、记录和 Chunk。
 - 内部向量 Top-K：`SqliteVecAdapter.search` 校验 512 维单位查询向量和 `k<=30`，全量读取同版本 KNN 候选后先按业务范围过滤，再按距离与记录 ID 稳定排序；`VectorTopKQuery` 重新校验知识库、IndexVersion、成员加入时间、文件解析修订/回收站、Chunk 和 `EmbeddingRecord` 有效性，返回可追溯的 Chunk/File/Version/距离/相似度/rank。该查询只读，不激活索引，也没有公开 API。
 - 持久 FTS5：独立 `INDEX_FTS` Worker 只消费同版本有效的 `PREPARED + CHUNKED` 输入；以 `IndexVersion + Chunk` 映射隔离，逐文件 FTS5 行、映射、输入检查点和任务进度在同一主 SQLite 事务提交。支持租约接管、取消、幂等重建和显式失败重试，不修改 Chunk/Embedding 权威数据，也不激活版本。
-- 中文关键词投影：FTS5 仍使用 `unicode61` 和 BM25；中文按连续汉字生成重叠二元词及单字辅助列，支持中文短查询；拉丁词项大小写折叠。没有接入公开 MATCH API、RRF 或前端搜索；向量 Top-K 只存在于内部用例。
+- 中文关键词投影：FTS5 仍使用 `unicode61` 和 BM25；中文按连续汉字生成重叠二元词及单字辅助列，支持中文短查询；拉丁词项大小写折叠。没有公开 MATCH API 或前端搜索；向量 Top-K、RRF 和证据门控只存在于内部链路及用例。
 - 内部检索排序：双路 Top 30 按 `chunk_id` 合并后使用 RRF 常量 `60`，分数为各有效通道 `1/(60 + rank)` 之和；NFKC/大小写折叠后的完整查询短语和精确词项获得最高 `0.004` 的局部奖励；相同来源及相邻高重叠 Chunk 接受有界软惩罚，确定性输出最多 Top 8。结果保留原始双路信号、排序版本/参数、精确命中字段、调整原因和显式降级状态。仅供内部用例，无公开检索/API，不改变 `BUILDING`、活动版本或可检索状态。
+- 内部证据充分性判定：排序后最多 Top 8 使用版本化规则 `evidence-gate-v1`；要求有效双路排名、校验过的余弦相似度、正文精确术语/编号覆盖和靠前排名，记录问题类型、来源覆盖与触发原因。标题、RRF 奖励和多样性分不能单独放行；复合问题或明显冲突整体拒绝。`insufficient` 只产生固定本地提示与建议；索引/范围/通道故障返回 `unavailable`，不伪装成资料不足。`supported` 只表示可进入后续引用绑定/生成候选流程，不是事实证明。只供内部用例，无公开 API、模型调用、引用编号或索引激活。
 
 ## 当前已知缺口
 
 - 阶段 4 无未解决功能、安全、数据一致性或迁移阻塞项；需求追踪详见 `docs/test-reports/stage-4-file-management.md`。
 - 发布候选保留：正式恶意文档集、真实资源耗尽边界、干净 Windows 安装/升级/卸载包，依据发布流程执行，不回填为阶段 4 已完成证据。
-- 阶段 5 缺口：证据充分性阈值、服务端引用、严格拒答/RAG 流程和增量/原子索引激活仍未实现。第十七批排序仅产生内部 Top 8 候选，不证明证据充分，不开放用户检索；Embedding、FTS、Top-K、候选合并或排序完成都不会使知识库可检索。
+- 阶段 5 缺口：服务端来源快照与引用绑定、用户级严格拒答/RAG 流程、增量/原子索引激活及面向验收集的证据阈值校准仍未完成。第十八批只提供内部初始门槛，不证明候选蕴含事实，不开放用户检索；Embedding、FTS、Top-K、候选合并、排序或门控完成都不会使知识库可检索。
 
-## 第十七批交接
+## 第十八批交接
 
 - 本批结论：`PASS`；阶段 5 继续 `PARTIAL`。
-- 验收：后端全量串行 `122 passed`；Ruff 全量通过；Pyright `0 errors`；compileall 通过；`git diff --check` 在提交前通过。
-- 固定样本和算法参数见 `docs/test-reports/stage-5-knowledge-base-foundation.md` 及 `docs/project/index-preprocessing-contract.md`。真实 SQLite FTS5 + sqlite-vec 内部集成覆盖排序；没有前端/API 变化，因此未运行无关 UI E2E。
-- 下一开发批次唯一目标：对内部 Top 8 实现配置化的证据充分性阈值判定和严格拒答结果；继续不公开检索、不激活索引、不生成回答或引用。
+- 实现：内部 Top 8 之后新增 `evidence-gate-v1`；保留 Chunk/File/IndexVersion 身份和可审计信号；错误/降级/不完整索引映射到 `unavailable`，只有资料不足返回固定本地提示。没有模型调用、回答生成、引用编号或公开 API。
+- 验收：串行后端 `133 passed`；`ruff check src tests` 通过；Pyright `0 errors`；compileall 和 `git diff --check` 通过。全目录 `ruff check .` 另报 14 条既有 Alembic migration lint 问题，本批未修改迁移文件。
+- 全量测试曾有一次既有 Embedding Worker 互斥用例失败；单项重跑和随后全量重跑均通过，最终全量为 `133 passed`。
+- 下一开发批次唯一目标：为已完成索引版本实现产物完整性复核与原子激活，继续不开放用户检索。
 
 ## 测试状态
 
-- 后端测试：`122 passed`（新增固定 RRF/精确命中/多样性/确定性 Top 8 样本，以及真实 SQLite FTS5 + sqlite-vec 排序集成；覆盖单路缺失、范围变更失败关闭和显式降级）
+- 后端测试：`133 passed`（新增 8 个证据判定离线样本，以及真实 SQLite FTS5 + sqlite-vec 检索/门控集成；覆盖弱相似度、编号/标题误命中、数值缺失、重复来源、冲突、复合问题、范围变化和降级）
 - 阶段 4 后端定向测试：`21 passed`
-- 后端静态检查：Ruff 全量通过；Pyright `0 errors, 0 warnings, 0 informations`
+- 后端静态检查：`uv run ruff check src tests` 通过；Pyright `0 errors, 0 warnings, 0 informations`。`ruff check .` 的额外全目录扫描发现既有 migrations lint 项，本批未改。
 - 后端 compileall：通过
 - 前端测试：`13 passed`
 - 前端类型检查：通过
 - 前端构建：通过
-- 浏览器 E2E：最近一次历史证据为阶段 4 文件回归与阶段 5 知识库共 `2 passed`（各 1 项），由隔离 SQLite、真实本地 FastAPI + Vite 代理运行；第十七批仅改后端内部排序，无前端/API 改动，未重跑 UI E2E
+- 浏览器 E2E：最近一次历史证据为阶段 4 文件回归与阶段 5 知识库共 `2 passed`（各 1 项），由隔离 SQLite、真实本地 FastAPI + Vite 代理运行；第十八批仅改后端内部判定，无前端/API 改动，未重跑 UI E2E
 - OpenAPI 同步：OpenAPI 3.1，`34 schemas / 50 operations`；任务详情包含 `task_type` 和 `index_version_id`
 - 数据库迁移：最新 revision `d60f2e8a7c31`；空库及既有 Chunk/EmbeddingRecord 数据升级通过；降级到 `a81f3c6d2e90` 仅移除可重建的 FTS 投影，再升级后可从 Chunk 重建；`PRAGMA quick_check=ok`
 

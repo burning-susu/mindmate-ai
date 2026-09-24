@@ -614,6 +614,69 @@ def test_hybrid_search_uses_real_fts_and_vector_scopes_and_deduplicates(vector_f
         assert knowledge_base is not None and knowledge_base.active_index_version_id is None
 
 
+def test_hybrid_search_assesses_scoped_top_eight_without_activating_index(vector_fixture) -> None:
+    fixture: VectorFixture = vector_fixture
+    _prepare_fts_for_hybrid(fixture)
+
+    with fixture.factory() as session:
+        result = HybridCandidateQuery(fixture.store).search_and_assess_with_status(
+            session,
+            knowledge_base_id=fixture.knowledge_base_id,
+            index_version_id=fixture.index_version_id,
+            query_text="固定向量测试文件 0",
+            query_vector=fixture.vectors[0],
+        )
+    assert result.retrieval is not None
+    assert result.assessment.status == "supported"
+    assert result.assessment.rules_version == "evidence-gate-v1"
+    assert result.assessment.candidate_ids
+    assert not hasattr(result.assessment, "citations")
+    assert all(
+        identity.file_id in fixture.file_ids
+        and identity.index_version_id == fixture.index_version_id
+        for identity in result.assessment.candidate_ids
+    )
+    assert all(signal.identity == identity for signal, identity in zip(
+        result.assessment.signals,
+        result.assessment.candidate_ids,
+        strict=True,
+    ))
+    with fixture.factory() as session:
+        version = session.get(IndexVersion, fixture.index_version_id)
+        knowledge_base = session.get(KnowledgeBase, fixture.knowledge_base_id)
+        assert version is not None and version.status == "BUILDING"
+        assert knowledge_base is not None and knowledge_base.active_index_version_id is None
+
+
+def test_assessment_keeps_missing_route_and_wrong_scope_out_of_insufficient(vector_fixture) -> None:
+    fixture: VectorFixture = vector_fixture
+    _prepare_fts_for_hybrid(fixture)
+    query = HybridCandidateQuery(fixture.store)
+
+    with fixture.factory() as session:
+        one_route = query.search_and_assess_with_status(
+            session,
+            knowledge_base_id=fixture.knowledge_base_id,
+            index_version_id=fixture.index_version_id,
+            query_text="固定向量测试文件 0",
+            query_vector=None,
+        )
+        wrong_scope = query.search_and_assess_with_status(
+            session,
+            knowledge_base_id=fixture.second_knowledge_base_id,
+            index_version_id=fixture.index_version_id,
+            query_text="固定向量测试文件 0",
+            query_vector=fixture.vectors[0],
+        )
+
+    assert one_route.assessment.status == "unavailable"
+    assert "VECTOR_ROUTE_NOT_REQUESTED" in one_route.assessment.reason_codes
+    assert one_route.assessment.candidate_ids
+    assert wrong_scope.assessment.status == "unavailable"
+    assert wrong_scope.retrieval_error_code == "INDEX_VERSION_NOT_AVAILABLE"
+    assert wrong_scope.assessment.local_message is None
+
+
 def test_hybrid_single_route_keeps_other_signal_empty(vector_fixture) -> None:
     fixture: VectorFixture = vector_fixture
     _prepare_fts_for_hybrid(fixture)
@@ -670,6 +733,43 @@ def test_hybrid_scope_change_between_routes_fails_closed(vector_fixture) -> None
             )
 
 
+def test_assessment_reports_scope_change_as_unavailable(vector_fixture) -> None:
+    fixture: VectorFixture = vector_fixture
+    _prepare_fts_for_hybrid(fixture)
+    actual = VectorTopKQuery(fixture.store)
+
+    class MutatingVectorQuery:
+        def search(self, session, **kwargs):
+            membership = session.scalar(
+                select(KnowledgeBaseFile).where(
+                    KnowledgeBaseFile.knowledge_base_id == fixture.knowledge_base_id,
+                    KnowledgeBaseFile.file_id == fixture.file_ids[0],
+                )
+            )
+            assert membership is not None
+            membership.membership_status = "REMOVED"
+            session.commit()
+            return actual.search(session, **kwargs)
+
+    with fixture.factory() as session:
+        result = HybridCandidateQuery(
+            fixture.store,
+            vector_query=MutatingVectorQuery(),
+        ).search_and_assess_with_status(
+            session,
+            knowledge_base_id=fixture.knowledge_base_id,
+            index_version_id=fixture.index_version_id,
+            query_text="固定向量测试文件",
+            query_vector=fixture.vectors[0],
+        )
+
+    assert result.retrieval is None
+    assert result.assessment.status == "unavailable"
+    assert result.retrieval_error_code == "RETRIEVAL_SCOPE_CHANGED"
+    assert result.assessment.reason_codes == ("RETRIEVAL_SCOPE_CHANGED",)
+    assert result.assessment.local_message is None
+
+
 def test_hybrid_vector_failure_is_explicit_and_optional_degrade(vector_fixture) -> None:
     fixture: VectorFixture = vector_fixture
     _prepare_fts_for_hybrid(fixture)
@@ -696,6 +796,14 @@ def test_hybrid_vector_failure_is_explicit_and_optional_degrade(vector_fixture) 
             query_vector=fixture.vectors[0],
             allow_degraded=True,
         )
+        assessed = query.search_and_assess_with_status(
+            session,
+            knowledge_base_id=fixture.knowledge_base_id,
+            index_version_id=fixture.index_version_id,
+            query_text="固定向量测试文件",
+            query_vector=fixture.vectors[0],
+            allow_degraded=True,
+        )
 
     assert degraded.degraded is True
     assert degraded.vector_error == "VECTOR_STORE_UNAVAILABLE"
@@ -704,6 +812,9 @@ def test_hybrid_vector_failure_is_explicit_and_optional_degrade(vector_fixture) 
     assert all(hit.degraded and hit.vector_error == "VECTOR_STORE_UNAVAILABLE" for hit in degraded.candidates)
     assert all("RRF_FTS" in hit.ranking_reasons for hit in degraded.candidates)
     assert all("RRF_VECTOR" not in hit.ranking_reasons for hit in degraded.candidates)
+    assert assessed.assessment.status == "unavailable"
+    assert "VECTOR_ERROR:VECTOR_STORE_UNAVAILABLE" in assessed.assessment.reason_codes
+    assert assessed.assessment.local_message is None
 
 
 def test_merge_candidates_has_stable_order_and_no_fake_scores(vector_fixture) -> None:
