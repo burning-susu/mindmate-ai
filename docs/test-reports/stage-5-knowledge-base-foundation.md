@@ -1,7 +1,7 @@
 # 阶段 5：知识库基础与成员准入测试报告
 
 > 阶段：`5`
-> 批次：`第八批 + 第九批 + 第十批 + 第十一批 + 第十二批 + 第十三批 + 第十四批 + 第十五批`
+> 批次：`第八批 + 第九批 + 第十批 + 第十一批 + 第十二批 + 第十三批 + 第十四批 + 第十五批 + 第十六批`
 > 验证日期：`2026-09-24`
 > 第八批结论：`PASS`
 > 第九批结论：`PASS`
@@ -11,6 +11,7 @@
 > 第十三批结论：`PASS`
 > 第十四批结论：`PASS`
 > 第十五批结论：`PASS`
+> 第十六批结论：`PASS`
 > 阶段 5 状态：`PARTIAL`
 > 分支：`feat/v1-bootstrap`
 > 起始提交：`75a0653877b7f627bc254a859232689c19872777`
@@ -23,9 +24,9 @@
 
 ## 结论
 
-第八批“空知识库创建、编辑、列表、详情、回收站与恢复”闭环通过；第九批“已导入文件批量加入/移出知识库、持久成员准入任务和前端真实状态”闭环通过；第十批“索引配置、迁移与可恢复输入预处理”闭环通过；第十一批“结构优先版本化 Chunk 与可恢复切片”闭环通过；第十二批“可信固定 ONNX 产物获取、校验与独立 CPU Embedding Adapter”通过；第十三批“持久 EmbeddingRecord、单并发可恢复 Worker 与真实 sqlite-vec 向量写入”通过；第十四批“按 IndexVersion 隔离的持久 FTS5 Chunk 投影与可恢复构建”通过；第十五批“内部 sqlite-vec Top-K 与范围过滤”通过。空库保持 `EMPTY`；Embedding、FTS 和内部 Top-K 完成的版本仍为 `BUILDING`，没有激活，不可作为用户检索。
+第八批“空知识库创建、编辑、列表、详情、回收站与恢复”闭环通过；第九批“已导入文件批量加入/移出知识库、持久成员准入任务和前端真实状态”闭环通过；第十批“索引配置、迁移与可恢复输入预处理”闭环通过；第十一批“结构优先版本化 Chunk 与可恢复切片”闭环通过；第十二批“可信固定 ONNX 产物获取、校验与独立 CPU Embedding Adapter”通过；第十三批“持久 EmbeddingRecord、单并发可恢复 Worker 与真实 sqlite-vec 向量写入”通过；第十四批“按 IndexVersion 隔离的持久 FTS5 Chunk 投影与可恢复构建”通过；第十五批“内部 sqlite-vec Top-K 与范围过滤”通过；第十六批“同一 IndexVersion 的 FTS5/向量 Top 30 双路候选合并去重”通过。空库保持 `EMPTY`；Embedding、FTS、内部 Top-K 和双路候选完成的版本仍为 `BUILDING`，没有激活，不可作为用户检索。
 
-第十批 `INDEX_PREPROCESS` 的 `COMPLETED` 只证明输入快照、配置指纹与逐项预处理结果已持久化。第十一批 `INDEX_CHUNK` 的 `COMPLETED` 只表示切片阶段结束。第十三批 `INDEX_EMBED` 的 `COMPLETED` 只表示向量与 `EmbeddingRecord` 已生成并持久化。第十四批 `INDEX_FTS` 的 `COMPLETED` 只表示 FTS5 投影已建立。第十五批内部 Top-K 只表示限定范围内的本地向量排序可用。以上都不表示索引就绪；`IndexVersion.status` 保持 `BUILDING`，`active_index_version_id` 不变，成员仍不可检索。阶段 5 仍为 `PARTIAL`：原子索引激活、混合检索、引用和 RAG 尚未实现。
+第十批 `INDEX_PREPROCESS` 的 `COMPLETED` 只证明输入快照、配置指纹与逐项预处理结果已持久化。第十一批 `INDEX_CHUNK` 的 `COMPLETED` 只表示切片阶段结束。第十三批 `INDEX_EMBED` 的 `COMPLETED` 只表示向量与 `EmbeddingRecord` 已生成并持久化。第十四批 `INDEX_FTS` 的 `COMPLETED` 只表示 FTS5 投影已建立。第十五批内部 Top-K 只表示限定范围内的本地向量排序可用。第十六批只建立双路候选收集和按 Chunk ID 去重，尚未执行 RRF、最终重排或公开检索。以上都不表示索引就绪；`IndexVersion.status` 保持 `BUILDING`，`active_index_version_id` 不变，成员仍不可检索。阶段 5 仍为 `PARTIAL`：原子索引激活、RRF/混合排序、引用和 RAG 尚未实现。
 
 ## 实现范围
 
@@ -364,4 +365,46 @@ repo> git diff --check
 
 本批未改数据库 schema、OpenAPI、前端或 Worker；没有真实模型下载、DeepSeek 请求、用户资料或付费接口调用。阶段 5 仍为 `PARTIAL`，内部 Top-K 不能等同知识库用户可用检索。
 
-本批结论：`PASS`。下一批唯一目标：实现同一 `IndexVersion` 内部 FTS5 与向量候选的合并去重，为后续 RRF 输入准备；不开放检索、不激活索引、不做引用或 RAG。
+第十五批结论：`PASS`。其后续目标已由第十六批完成；第十六批继续不开放检索、不激活索引、不做引用或 RAG。
+
+## 第十六批验收追踪：内部双路召回合并去重
+
+| ID | 验收项 | 证据 | 结论 |
+| --- | --- | --- | --- |
+| S5-B16-01 | 同一 `IndexVersion` 内 FTS5 与 sqlite-vec 各取 Top 30，范围过滤后再限额 | `HybridCandidateQuery` 调用真实 `Fts5Projection.match_version` 与 `VectorTopKQuery`；两路范围指纹和现有 Top-K 集成 | PASS |
+| S5-B16-02 | FTS5 查询规范化、安全 MATCH、真实 BM25、中文短词/英文/编号/特殊符号/空输入 | `test_fts5_is_versioned_chinese_short_query_bm25_and_rebuildable`；`normalize_query`/`match_expression`；未使用 `LIKE` | PASS |
+| S5-B16-03 | 双路按 `chunk_id` 去重并保留 FTS rank/BM25、向量 rank/距离/相似度、文件和版本 | `test_hybrid_search_uses_real_fts_and_vector_scopes_and_deduplicates`、`test_merge_candidates_has_stable_order_and_no_fake_scores` | PASS |
+| S5-B16-04 | FTS-only、Vector-only 单路命中不补造另一通道信号；相邻不同 Chunk 不误去重 | `test_hybrid_single_route_keeps_other_signal_empty`、稳定合并测试 | PASS |
+| S5-B16-05 | 成员/版本/文件/Chunk/EmbeddingRecord 在双路之间变化时失败关闭 | `test_hybrid_scope_change_between_routes_fails_closed`；前后范围指纹比较返回 `RETRIEVAL_SCOPE_CHANGED` | PASS |
+| S5-B16-06 | 单路故障不伪装双路成功，显式降级保留稳定错误码 | `test_hybrid_vector_failure_is_explicit_and_optional_degrade`；严格模式抛出 `VECTOR_STORE_UNAVAILABLE`，降级结果带 `vector_error` | PASS |
+| S5-B16-07 | 本批不开放用户检索，不做 RRF/最终 Top 8/多样性/引用/RAG，不改迁移/API/OpenAPI/前端 | Git diff、状态断言、无路由与 schema 变化 | PASS |
+
+### 第十六批实现与边界
+
+- `backend/src/mindmate/application/hybrid_search.py` 新增内部候选收集、范围快照、按 Chunk ID 合并和显式故障/降级结果；`HybridCandidateQuery.search` 默认严格失败，`search_with_status(..., allow_degraded=True)` 才允许单路降级。
+- `Fts5Projection.match_version` 保留旧调用兼容性，同时增加 NFKC/空白规范化、Top 30 上限、知识库范围条件、稳定 `chunk_id` 并列排序、`bm25` 别名和 `fts_rank`；未将用户文本直接交给 FTS5 解析器。
+- 两路结果在合并前后对版本状态、知识库、成员快照、文件、Chunk 和 EmbeddingRecord 生成确定性范围指纹；检测到中途变化立即停止，不把旧候选重新混入。
+- 向量 Top-K 仍使用第十五批现有全量 KNN 后范围过滤策略，查询成本为精确 O(N)；第十六批没有进行 10 万 Chunk 性能验收。
+
+### 第十六批实际验证
+
+~~~text
+backend> uv run --locked pytest
+117 passed
+
+backend> uv run --locked ruff check src tests
+All checks passed
+
+backend> uv run --locked pyright
+0 errors, 0 warnings, 0 informations
+
+backend> uv run --locked python -m compileall -q src tests migrations
+通过
+
+repo> git diff --check
+通过
+~~~
+
+本批没有调用 DeepSeek、真实 Provider、真实凭据或用户资料；没有新增数据库迁移、公开 API、OpenAPI、前端、索引激活、RRF、引用或 RAG。阶段 5 仍为 `PARTIAL`。
+
+本批结论：`PASS`。下一批唯一目标：实现候选集的 RRF 融合、精确命中奖励和确定性多样性排序；不激活索引、不开放用户检索、不做引用或 RAG。

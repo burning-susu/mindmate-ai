@@ -148,7 +148,7 @@ def test_fts5_is_versioned_chinese_short_query_bm25_and_rebuildable(fts_app) -> 
     file_id = _import_file(
         client,
         "mixed-language",
-        "人工智能知识检索使用SQLite索引，事务保证可恢复。人工智能可以匹配短词。",
+        "人工智能知识检索使用SQLite索引，编号 A-12，事务保证可恢复。人工智能可以匹配短词。",
     )
     _add_files(client, first_kb, [file_id], "version-a")
     first_version = _build_version(factory, settings, first_kb, "version-a")
@@ -163,6 +163,10 @@ def test_fts5_is_versioned_chinese_short_query_bm25_and_rebuildable(fts_app) -> 
     assert len(_query(factory, first_version, "人工")) == 1
     assert len(_query(factory, first_version, "能")) == 1
     assert len(_query(factory, first_version, "sqlite")) == 1
+    assert len(_query(factory, first_version, "A-12")) == 1
+    assert _query(factory, first_version, "!!!") == []
+    assert _query(factory, first_version, "   \t  ") == []
+    assert _query(factory, first_version, '" OR *') == []
     assert _query(factory, first_version, "不存在") == []
     assert _query(factory, second_version, "人工智能")[0]["file_id"] == file_id
     assert _query(factory, first_version, "人工智能")[0]["score"] < 0

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import unicodedata
 from typing import Any
 
 from sqlalchemy import bindparam, text
@@ -8,6 +9,8 @@ from sqlalchemy.orm import Session
 from mindmate.infrastructure.models import Chunk, FtsChunkMap
 
 FTS_TABLE = "index_chunk_fts"
+DEFAULT_FTS_TOP_K = 30
+MAX_FTS_TOP_K = 30
 
 
 class Fts5Error(RuntimeError):
@@ -56,8 +59,16 @@ def _quoted(value: str) -> str:
     return '"' + value.replace('"', '""') + '"'
 
 
+def normalize_query(query: str) -> str:
+    """Normalize user text without allowing it to become an FTS expression."""
+    if not isinstance(query, str):
+        return ""
+    return " ".join(unicodedata.normalize("NFKC", query).split())
+
+
 def match_expression(query: str) -> str:
     """Build safe FTS5 phrases, using overlapping Han bigrams for short Chinese terms."""
+    query = normalize_query(query)
     clauses: list[str] = []
     index = 0
     while index < len(query):
@@ -226,8 +237,20 @@ class Fts5Projection:
         return self.delete_version(session, index_version_id)
 
     def match_version(
-        self, session: Session, index_version_id: str, query: str, limit: int = 30
+        self,
+        session: Session,
+        index_version_id: str,
+        query: str,
+        limit: int = DEFAULT_FTS_TOP_K,
+        *,
+        knowledge_base_id: str | None = None,
     ) -> list[dict[str, Any]]:
+        if (
+            isinstance(limit, bool)
+            or not isinstance(limit, int)
+            or not 1 <= limit <= MAX_FTS_TOP_K
+        ):
+            raise Fts5Error("FTS_TOP_K_INVALID")
         expression = match_expression(query)
         if not expression:
             return []
@@ -235,8 +258,9 @@ class Fts5Projection:
             rows = session.execute(
                 text(
                     f"""
-                    SELECT m.chunk_id, m.file_id, m.parse_revision_id, m.chunking_config_id,
-                           m.content_hash, index_chunk_fts.content AS content,
+                    SELECT m.chunk_id, m.file_id, :version_id AS index_version_id,
+                           m.parse_revision_id, m.chunking_config_id, m.content_hash,
+                           index_chunk_fts.content AS content,
                            bm25(index_chunk_fts, 0.0, 1.0, 1.0, 1.0) AS score
                     FROM {FTS_TABLE} AS index_chunk_fts
                     JOIN fts_chunk_map AS m ON m.fts_row_id = index_chunk_fts.rowid
@@ -252,6 +276,7 @@ class Fts5Projection:
                     JOIN chunks AS c ON c.chunk_id = m.chunk_id
                     WHERE index_chunk_fts MATCH :query
                       AND m.index_version_id = :version_id
+                      AND (:knowledge_base_id IS NULL OR v.scope_id = :knowledge_base_id)
                       AND v.status = 'BUILDING'
                       AND v.fts_status IN ('COMPLETED', 'PARTIAL')
                       AND i.status = 'PREPARED' AND i.chunk_status = 'CHUNKED'
@@ -265,17 +290,28 @@ class Fts5Projection:
                       AND c.file_id = m.file_id AND c.parse_revision_id = m.parse_revision_id
                       AND c.chunking_config_id = m.chunking_config_id
                       AND m.chunking_config_id = v.chunking_config_id
-                    ORDER BY score
+                    ORDER BY score ASC, m.chunk_id ASC
                     LIMIT :limit
                     """
                 ),
-                {"query": expression, "version_id": index_version_id, "limit": max(1, min(100, limit))},
+                {
+                    "query": expression,
+                    "version_id": index_version_id,
+                    "knowledge_base_id": knowledge_base_id,
+                    "limit": limit,
+                },
             ).mappings()
         except Exception as error:
             if "fts5" in str(error).casefold() or "match" in str(error).casefold():
                 raise Fts5Error("FTS_QUERY_FAILED") from error
             raise
-        return [dict(row) for row in rows]
+        hits: list[dict[str, Any]] = []
+        for rank, row in enumerate(rows, 1):
+            hit = dict(row)
+            hit["bm25"] = float(hit["score"])
+            hit["fts_rank"] = rank
+            hits.append(hit)
+        return hits
 
     @staticmethod
     def count(session: Session, index_version_id: str) -> int:

@@ -6,7 +6,7 @@
 - 当前远程提交：以 `git ls-remote --heads origin feat/v1-bootstrap` 为准；本文件随本批次收口提交推送
 - 最后更新时间：`2026-09-24`
 - 当前开发阶段：阶段 5 开发中，状态 `PARTIAL`
-- 当前批次状态：第十五批“内部向量 Top-K 与范围过滤”结论 `PASS`；阶段 5 状态 `PARTIAL`
+- 当前批次状态：第十六批“内部双路召回合并去重”结论 `PASS`；阶段 5 状态 `PARTIAL`
 
 ## 已完成阶段
 
@@ -15,7 +15,7 @@
 - 阶段 2：安全本地应用壳，`0b19795`
 - 阶段 3：数据、任务和备份基础，`02a32b8`
 - 阶段 4：初始实现 `bc30e1f`，证据修订 `9e0174a`，收口修复 `3b29d22`，第四批交接 `0448d5b`；第五批完成数据模型、迁移、乐观锁、解析失败持久化与契约同步；第六批完成持久解析 Worker、原子领取/租约、重试恢复和 Windows Job Object；第七批补齐列表状态恢复并完成最终验收，状态 `PASS`
-- 阶段 5：第八批完成空知识库持久化基础；第九批完成成员加入/移出、多库共享、批量准入、持久任务、取消/恢复和前端真实状态闭环；第十批完成索引配置、不可变版本输入快照与可恢复预处理 Worker；第十一批完成可复用版本化 Chunk 与独立可恢复切片任务；第十二批完成固定 ONNX 产物来源、哈希验证与本地 CPU Adapter；第十三批完成持久 EmbeddingRecord、单并发 Worker 与 sqlite-vec 向量写入；第十四批完成按 IndexVersion 隔离的持久 FTS5 投影与逐输入恢复；阶段整体仍为 `PARTIAL`
+- 阶段 5：第八批完成空知识库持久化基础；第九批完成成员加入/移出、多库共享、批量准入、持久任务、取消/恢复和前端真实状态闭环；第十批完成索引配置、不可变版本输入快照与可恢复预处理 Worker；第十一批完成可复用版本化 Chunk 与独立可恢复切片任务；第十二批完成固定 ONNX 产物来源、哈希验证与本地 CPU Adapter；第十三批完成持久 EmbeddingRecord、单并发 Worker 与 sqlite-vec 向量写入；第十四批完成按 IndexVersion 隔离的持久 FTS5 投影与逐输入恢复；第十五批完成内部向量 Top-K 与范围过滤；第十六批完成同一 IndexVersion 的 FTS5/向量 Top 30 候选收集、稳定按 Chunk ID 去重与范围变更复核；阶段整体仍为 `PARTIAL`
 
 ## 当前已实现能力
 
@@ -36,16 +36,17 @@
 - 内部向量 Top-K：`SqliteVecAdapter.search` 校验 512 维单位查询向量和 `k<=30`，全量读取同版本 KNN 候选后先按业务范围过滤，再按距离与记录 ID 稳定排序；`VectorTopKQuery` 重新校验知识库、IndexVersion、成员加入时间、文件解析修订/回收站、Chunk 和 `EmbeddingRecord` 有效性，返回可追溯的 Chunk/File/Version/距离/相似度/rank。该查询只读，不激活索引，也没有公开 API。
 - 持久 FTS5：独立 `INDEX_FTS` Worker 只消费同版本有效的 `PREPARED + CHUNKED` 输入；以 `IndexVersion + Chunk` 映射隔离，逐文件 FTS5 行、映射、输入检查点和任务进度在同一主 SQLite 事务提交。支持租约接管、取消、幂等重建和显式失败重试，不修改 Chunk/Embedding 权威数据，也不激活版本。
 - 中文关键词投影：FTS5 仍使用 `unicode61` 和 BM25；中文按连续汉字生成重叠二元词及单字辅助列，支持中文短查询；拉丁词项大小写折叠。没有接入公开 MATCH API、RRF 或前端搜索；向量 Top-K 只存在于内部用例。
+- 内部双路候选：`HybridCandidateQuery` 在同一 `IndexVersion` 内分别获取 FTS5 BM25 Top 30 与 sqlite-vec Top 30，使用真实有效成员/文件/解析修订/Chunk/EmbeddingRecord 范围；按 `chunk_id` 合并并保留 `fts_rank`/`bm25`、`vector_rank`/距离/相似度、文件和版本 ID。路由间版本或成员范围变化会返回 `RETRIEVAL_SCOPE_CHANGED`；单路故障默认显式失败，显式降级时保留错误码，不伪造另一通道信号。
 
 ## 当前已知缺口
 
 - 阶段 4 无未解决功能、安全、数据一致性或迁移阻塞项；需求追踪详见 `docs/test-reports/stage-4-file-management.md`。
 - 发布候选保留：正式恶意文档集、真实资源耗尽边界、干净 Windows 安装/升级/卸载包，依据发布流程执行，不回填为阶段 4 已完成证据。
-- 阶段 5 缺口：增量/原子索引激活、混合检索、引用和 RAG 尚未实现；虽然 FTS5 投影与内部向量 Top-K 已建立，本批仍未开放检索，Embedding、FTS 和 Top-K 完成均不会使知识库可检索。
+- 阶段 5 缺口：增量/原子索引激活、RRF 融合、最终重排、引用和 RAG 尚未实现；虽然双路候选收集已建立，本批仍未开放检索，Embedding、FTS、Top-K 和候选合并完成均不会使知识库可检索。
 
 ## 测试状态
 
-- 后端测试：`112 passed`（含第十五批固定向量 Top-K、同分稳定排序、范围外近邻过滤、版本/配置隔离、成员移出重加、知识库/文件回收站、失效 Chunk/EmbeddingRecord、坏向量和向量库异常，以及前批 FTS/Embedding/解析和文件生命周期回归）
+- 后端测试：`117 passed`（含第十六批真实 SQLite FTS5/sqlite-vec 双路合并、单路信号留空、范围变更失败关闭、向量故障显式降级，以及第十五批固定向量 Top-K、同分稳定排序、范围外近邻过滤、版本/配置隔离、成员移出重加、知识库/文件回收站、失效 Chunk/EmbeddingRecord、坏向量和向量库异常）
 - 阶段 4 后端定向测试：`21 passed`
 - 后端静态检查：Ruff 通过；Pyright `0 errors`
 - 后端 compileall：通过
@@ -88,9 +89,20 @@
 - 性能边界：因现有向量表没有动态成员分区，Adapter 读取全量 KNN 行后在排序前过滤，保证召回正确但查询成本为 O(N)；本批没有做 10 万 Chunk 性能声明。
 - 验收：后端全量 `112 passed`；Ruff、Pyright、compileall、`git diff --check` 通过；未改前端、OpenAPI 或真实 Provider。
 
+## 第十六批交接
+
+- 本批状态：`PASS`；阶段 5 继续 `PARTIAL`，知识库仍不可检索。
+- 代码：新增 `HybridCandidateQuery`、`merge_candidates` 与 `query_hybrid_candidates` 内部用例；增强 FTS5 查询规范化、Top 30 限额、BM25/稳定 `fts_rank` 输出和知识库范围校验；不新增迁移、API/OpenAPI、前端或 Worker。
+- 双路范围：同一 `IndexVersion` 内 FTS5 和 sqlite-vec 各自先校验当前成员、加入时间、知识库/文件回收站、解析修订、内容哈希、Chunk 有效性；向量路另校验 EmbeddingConfig、EmbeddingRecord 和向量 hash，再各取 Top 30。范围外高排名候选不会挤占范围内名额。
+- 合并语义：按 `chunk_id` 去重，保留 `fts_rank`/`bm25` 与 `vector_rank`/距离/相似度，单路命中另一通道字段保持 `NULL`；保留文件 ID、IndexVersion ID 和来源通道，输出使用确定性排序，不执行 RRF、最终 Top 8 或多样性处理。
+- 安全边界：双路前后生成版本、成员、文件、Chunk 和 EmbeddingRecord 范围指纹；中途变化返回 `RETRIEVAL_SCOPE_CHANGED`。路由故障默认显式失败；明确允许降级时返回可用单路和错误码，不把故障伪装成双路成功。
+- 证据：`tests/test_stage5_vector_search.py` 使用真实 SQLite FTS5/sqlite-vec 夹具覆盖双路同 Chunk、FTS-only、Vector-only、成员中途移出、向量存储故障和稳定去重；FTS 测试覆盖中文短词、英文、编号、空输入和特殊符号。
+- 性能边界：向量查询仍是第十五批记录的精确 O(N) 过滤策略；本批只增加候选合并，没有 10 万 Chunk 性能声明。
+- 验收：后端全量 `117 passed`；Ruff、Pyright `0 errors`、compileall、`git diff --check` 通过；未改前端、OpenAPI、迁移或真实 Provider。
+
 ## 下一开发批次
 
-- 阶段 5 下一个唯一目标：实现同一 `IndexVersion` 内部 FTS5 与向量候选的合并去重，为后续 RRF 做输入准备；不开放检索、不激活索引、不做引用或 RAG。
+- 阶段 5 下一个唯一目标：实现候选集的 RRF 融合、精确命中奖励和确定性多样性排序；不激活索引、不开放用户检索、不做引用或 RAG。
 
 ## 交接说明
 

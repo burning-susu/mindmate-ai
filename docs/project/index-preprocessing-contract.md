@@ -109,3 +109,13 @@ Windows 11 x64 / Python 3.12.11 实际 CPU 验证使用 ONNX Runtime 1.30.0、to
 - sqlite-vec 当前虚表使用默认 L2 距离；在存储向量和查询向量均为单位范数时，应用结果的余弦距离固定为 `d_l2² / 2`，相似度为 `1 - cosine_distance`，距离升序与相似度降序等价。等分时按 `vector_store_record_id` 升序，返回 `chunk_id`、`file_id`、`index_version_id`、配置 ID、记录 ID、距离、相似度、原始 sqlite-vec 距离和稳定 rank。
 - 空库、没有向量或有效范围为空返回空结果；版本/知识库/配置不匹配、向量库文件不可用或 ID/hash/维度不一致返回明确内部错误。查询不写业务 SQLite 或向量库，不改变 `IndexVersion.status=BUILDING`、`active_index_version_id`、成员 `index_state` 或 `available_for_retrieval=false`。
 - 第十五批不新增 Alembic、API/OpenAPI、前端或 Worker；FTS5 投影、Embedding 生成和已有删除/清理语义保持不变。内部 Top-K 通过不等同知识库公开检索，不实现 FTS/向量融合、RRF、阈值、重排、引用、索引激活或 RAG。
+
+## 内部双路候选阶段（第十六批）
+
+- `Fts5Projection.match_version` 是内部关键词候选入口。查询先做 NFKC 和空白规范化，再将汉字连续串转换为重叠二元词/单字辅助字段，将非汉字字母和数字转换为大小写折叠词项；引号、布尔运算符、通配符等符号不会作为 FTS5 表达式执行。空输入或只含符号返回空结果，输入 `limit` 固定在 `1..30`。
+- FTS SQL 使用真实 `MATCH` 与 `bm25()`，先连接并校验 `IndexVersionInput`、成员、知识库、文件、Chunk 和投影映射，再按 BM25 升序及 `chunk_id` 稳定排序和 Top 30 截断。输出保留 `score`/`bm25`、`fts_rank`、`file_id`、`index_version_id`、解析修订和 Chunk 配置，不使用 `LIKE`。
+- `HybridCandidateQuery` 在同一 `knowledge_base_id + index_version_id` 下分别调用 FTS5 Top 30 与 `VectorTopKQuery` Top 30。两路都重新校验 ACTIVE 成员、快照加入时间、文件解析状态/回收站、内容 hash、解析修订和有效 Chunk；向量路另外校验固定 EmbeddingConfig、`EmbeddingRecord.READY`、配置指纹、向量 hash 和 sqlite-vec 记录一致性。每路先过滤再截断，范围外候选不会挤占名额。
+- `merge_candidates` 只按 `chunk_id` 合并，不按相邻位置或文件名去重；它保留两路原始 rank/分数、来源文件、IndexVersion 和来源通道。单路命中时另一组字段为 `NULL`，不写入零分、伪排名或补造向量；结果使用首个通道 rank、双路命中优先和 Chunk ID 的确定性顺序，仅作为下一批 RRF 输入。
+- 双路开始和合并前分别计算版本、成员、文件、Chunk 与 EmbeddingRecord 的范围指纹。若成员移出/重加、回收站、解析修订、Chunk/EmbeddingRecord 失效或版本状态在两路间变化，返回 `RETRIEVAL_SCOPE_CHANGED`，不发布旧候选。路由异常默认保留原错误语义并失败关闭；调用方显式允许降级时，结果带 `fts_error`/`vector_error`，不得伪装成完整双路成功。
+- 第十六批没有新增迁移、公开 API、OpenAPI、前端、索引激活、RRF、重排、引用或 RAG。向量路仍使用第十五批记录的精确 O(N) 范围过滤策略；本批没有 10 万 Chunk 性能验收。
+- 第十六批验证：后端 `117 passed`；真实 SQLite FTS5/sqlite-vec 夹具覆盖 FTS-only、Vector-only、双路同 Chunk、不同 Chunk、中文短词/英文/编号/特殊符号/空输入、范围外高排名、成员中途变化、版本/配置隔离和单路故障；Ruff、Pyright、compileall、`git diff --check` 通过。第十六批结论 `PASS`，阶段 5 仍为 `PARTIAL`。

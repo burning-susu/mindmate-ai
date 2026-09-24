@@ -11,15 +11,22 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from mindmate.application.hybrid_search import (
+    HybridCandidateQuery,
+    HybridQueryError,
+    merge_candidates,
+)
 from mindmate.application.index_preprocessing import (
     get_or_create_default_configs,
 )
 from mindmate.application.vector_search import (
     VectorQueryError,
+    VectorTopKHit,
     VectorTopKQuery,
     query_vector_top_k,
 )
 from mindmate.config import Settings
+from mindmate.infrastructure.fts5 import Fts5Projection
 from mindmate.infrastructure.models import (
     Chunk,
     ContentObject,
@@ -542,3 +549,178 @@ def test_query_propagates_vector_store_failure(vector_fixture, monkeypatch) -> N
                 index_version_id=fixture.index_version_id,
                 query_vector=fixture.vectors[0],
             )
+
+
+def _prepare_fts_for_hybrid(fixture: VectorFixture) -> None:
+    with fixture.factory() as session:
+        version = session.get(IndexVersion, fixture.index_version_id)
+        assert version is not None
+        version.fts_status = "COMPLETED"
+        for file_id, chunk_id in zip(fixture.file_ids, fixture.chunk_ids, strict=True):
+            chunk = session.get(Chunk, chunk_id)
+            item = session.scalar(
+                select(IndexVersionInput).where(
+                    IndexVersionInput.index_version_id == fixture.index_version_id,
+                    IndexVersionInput.file_id == file_id,
+                )
+            )
+            assert chunk is not None and item is not None
+            item.fts_status = "INDEXED"
+            Fts5Projection().replace_file(
+                session,
+                index_version_id=fixture.index_version_id,
+                file_id=file_id,
+                parse_revision_id=chunk.parse_revision_id,
+                chunking_config_id=chunk.chunking_config_id,
+                chunks=[chunk],
+            )
+        session.commit()
+
+
+def test_hybrid_search_uses_real_fts_and_vector_scopes_and_deduplicates(vector_fixture) -> None:
+    fixture: VectorFixture = vector_fixture
+    _prepare_fts_for_hybrid(fixture)
+
+    with fixture.factory() as session:
+        result = HybridCandidateQuery(fixture.store).search_with_status(
+            session,
+            knowledge_base_id=fixture.knowledge_base_id,
+            index_version_id=fixture.index_version_id,
+            query_text="固定向量测试文件",
+            query_vector=fixture.vectors[0],
+        )
+
+    assert result.degraded is False
+    assert len(result.candidates) == 3
+    assert all(candidate.fts_rank is not None for candidate in result.candidates)
+    assert all(candidate.vector_rank is not None for candidate in result.candidates)
+    assert all(candidate.sources == ("fts", "vector") for candidate in result.candidates)
+    assert len({candidate.chunk_id for candidate in result.candidates}) == 3
+    assert [candidate.fts_rank for candidate in result.candidates] == [1, 2, 3]
+    assert [candidate.vector_rank for candidate in result.candidates] == [1, 2, 3]
+
+
+def test_hybrid_single_route_keeps_other_signal_empty(vector_fixture) -> None:
+    fixture: VectorFixture = vector_fixture
+    _prepare_fts_for_hybrid(fixture)
+    with fixture.factory() as session:
+        fts_only = HybridCandidateQuery(fixture.store).search(
+            session,
+            knowledge_base_id=fixture.knowledge_base_id,
+            index_version_id=fixture.index_version_id,
+            query_text="固定向量测试文件",
+            query_vector=None,
+        )
+        vector_only = HybridCandidateQuery(fixture.store).search(
+            session,
+            knowledge_base_id=fixture.knowledge_base_id,
+            index_version_id=fixture.index_version_id,
+            query_text="完全不存在的词",
+            query_vector=fixture.vectors[0],
+        )
+
+    assert fts_only and all(hit.vector_rank is None and hit.vector_score is None for hit in fts_only)
+    assert vector_only and all(hit.fts_rank is None and hit.bm25 is None for hit in vector_only)
+
+
+def test_hybrid_scope_change_between_routes_fails_closed(vector_fixture) -> None:
+    fixture: VectorFixture = vector_fixture
+    _prepare_fts_for_hybrid(fixture)
+    actual = VectorTopKQuery(fixture.store)
+
+    class MutatingVectorQuery:
+        def search(self, session, **kwargs):
+            membership = session.scalar(
+                select(KnowledgeBaseFile).where(
+                    KnowledgeBaseFile.knowledge_base_id == fixture.knowledge_base_id,
+                    KnowledgeBaseFile.file_id == fixture.file_ids[0],
+                )
+            )
+            assert membership is not None
+            membership.membership_status = "REMOVED"
+            session.commit()
+            return actual.search(session, **kwargs)
+
+    with fixture.factory() as session:
+        query = HybridCandidateQuery(
+            fixture.store,
+            vector_query=MutatingVectorQuery(),
+        )
+        with pytest.raises(HybridQueryError, match="RETRIEVAL_SCOPE_CHANGED"):
+            query.search(
+                session,
+                knowledge_base_id=fixture.knowledge_base_id,
+                index_version_id=fixture.index_version_id,
+                query_text="固定向量测试文件",
+                query_vector=fixture.vectors[0],
+            )
+
+
+def test_hybrid_vector_failure_is_explicit_and_optional_degrade(vector_fixture) -> None:
+    fixture: VectorFixture = vector_fixture
+    _prepare_fts_for_hybrid(fixture)
+
+    class FailedVectorQuery:
+        def search(self, session, *, knowledge_base_id, index_version_id, query_vector, k):
+            raise VectorStoreError("VECTOR_STORE_UNAVAILABLE")
+
+    with fixture.factory() as session:
+        query = HybridCandidateQuery(fixture.store, vector_query=FailedVectorQuery())
+        with pytest.raises(HybridQueryError, match="VECTOR_STORE_UNAVAILABLE"):
+            query.search(
+                session,
+                knowledge_base_id=fixture.knowledge_base_id,
+                index_version_id=fixture.index_version_id,
+                query_text="固定向量测试文件",
+                query_vector=fixture.vectors[0],
+            )
+        degraded = query.search_with_status(
+            session,
+            knowledge_base_id=fixture.knowledge_base_id,
+            index_version_id=fixture.index_version_id,
+            query_text="固定向量测试文件",
+            query_vector=fixture.vectors[0],
+            allow_degraded=True,
+        )
+
+    assert degraded.degraded is True
+    assert degraded.vector_error == "VECTOR_STORE_UNAVAILABLE"
+    assert degraded.fts_error is None
+    assert degraded.candidates and all(hit.vector_rank is None for hit in degraded.candidates)
+
+
+def test_merge_candidates_has_stable_order_and_no_fake_scores(vector_fixture) -> None:
+    fixture: VectorFixture = vector_fixture
+    fts = [
+        {
+            "chunk_id": fixture.chunk_ids[1],
+            "file_id": fixture.file_ids[1],
+            "index_version_id": fixture.index_version_id,
+            "fts_rank": 1,
+            "bm25": -2.0,
+        },
+        {
+            "chunk_id": fixture.chunk_ids[0],
+            "file_id": fixture.file_ids[0],
+            "index_version_id": fixture.index_version_id,
+            "fts_rank": 2,
+            "bm25": -1.0,
+        },
+    ]
+    vectors = [
+        # The vector-only hit must not receive an FTS score or rank.
+        VectorTopKHit(
+            chunk_id=fixture.chunk_ids[2],
+            file_id=fixture.file_ids[2],
+            index_version_id=fixture.index_version_id,
+            embedding_config_id=fixture.embedding_config_id,
+            vector_store_record_id=fixture.record_ids[2],
+            distance=0.0,
+            score=1.0,
+            sqlite_distance=0.0,
+            rank=1,
+        )
+    ]
+    merged = merge_candidates(fts, vectors)
+    assert [hit.chunk_id for hit in merged] == [fixture.chunk_ids[1], fixture.chunk_ids[2], fixture.chunk_ids[0]]
+    assert merged[1].fts_rank is None and merged[1].bm25 is None
