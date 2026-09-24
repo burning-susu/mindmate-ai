@@ -160,6 +160,17 @@
 - 验收：新增 `tests/test_stage5_incremental_index.py` 覆盖新增文件、文件内容替换、成员移除、跨知识库兼容复用、Embedding 维度/配置不兼容全量重建、重复提交和完整候选原子激活。Embedding 调用计数 Mock 证明新增/变更文件外，未变文件不会再次推理；激活器对 Chunk、Embedding/向量与 FTS 全量复核通过后才切换。串行后端 `153 passed`；Ruff、Pyright、compileall、Alembic head `e4a7810c9b62`、`git diff --check` 通过。`ruff check .` 仍报告 14 条既有 Alembic migration lint。无真实 Provider、凭据、用户资料、UI E2E 或 OpenAPI 变更。
 - 下一开发批次唯一目标：为活动索引建立持久化的服务端来源快照，并校验来源仍属于该知识库的活动版本范围。
 
+### 第二十一批：服务端来源快照与范围校验
+
+- 状态：本批 `PASS`；阶段 5 继续 `PARTIAL`。本地/远端起始 SHA 均为 `767d2859b7f16090167e3d8569652a7a2010a131`；结束 SHA 以批次提交推送结果为准。
+- 数据：Alembic `6b3e91a0c4d7` 新增内部 `SourceSnapshot`，只允许 `UNBOUND`，保存知识库与 IndexVersion 快照、File/Chunk 可空关联、文件内容版本哈希、解析修订、真实 heading/page/slide/line 定位、最多 1200 Unicode 字符摘录、摘要/正文 SHA-256、创建时间和唯一幂等键。暂时没有真实消息或学习 owner，因此不造 Citation owner、消息或显示编号。
+- 创建校验：只有 `HybridAssessmentResult.assessment.status=supported` 且 retrieval/gate 候选身份一致才可进入创建。独立写事务的首条语句取得 SQLite 写锁，随后复核活动 READY 版本/指针、未删除知识库、当前 ACTIVE/READY 成员、文件 PARSED/未回收、内容哈希/解析修订、IndexVersionInput 成员快照、Chunk 正文哈希与配置、版本内 FTS 映射及有效 EmbeddingRecord/配置指纹。范围变化返回 `RETRIEVAL_SCOPE_CHANGED`，活动版本变化返回 `INDEX_VERSION_CHANGED`，来源失效返回 `SOURCE_INVALID`，源文件版本变化返回 `SOURCE_VERSION_CHANGED`。
+- 快照与读取：文件名、定位、内容和摘要均从数据库重读，不信任候选携带的名称、正文或任意 ID；同一知识库/版本/Chunk 的重复调用复用既有快照。读取动态计算可用、回收站、文件版本过期、范围退出和索引退役状态，不返回磁盘路径；重建索引不会改写历史快照的 IndexVersion/Chunk 身份。
+- 删除净化：文件永久删除的服务路径先清空摘录、正文/文件版本哈希、解析修订并断开 File/Chunk 关系，只保留文件名和定位；SQLite BEFORE DELETE trigger 覆盖绕过服务 helper 的直接文件删除。知识库永久删除同时清理没有 owner 的待绑定快照。软删除保留历史摘录，但读取标记为回收站且不可打开。
+- 验收：新增 `tests/test_stage5_source_snapshots.py` 10 项，覆盖真实内部 FTS5 + sqlite-vec→混合检索→证据门控→快照、应用重启读取、伪造文件名/Chunk、跨库、成员移除/重加、回收站、坏映射、活动指针/成员竞态、幂等、定位空值、重建后旧版本引用和永久删除净化。最终 `uv run pytest` 为 `164 passed`；`uv run ruff check src tests` 通过；Pyright `0 errors, 0 warnings, 0 informations`；compileall、Alembic heads（`6b3e91a0c4d7`）和 `git diff --check` 通过。
+- 范围：没有公开检索/Citation API、OpenAPI/前端类型、Chat/Learning owner、对话或生成式回答；未调用 DeepSeek、真实凭据或付费外部服务。本批不构成最终答案事实正确性、AC-KB-003、Recall@10 或质量/性能验收证据。
+- 下一开发批次唯一目标：定义并实现来源快照到真实 Chat/Learning owner 的服务端 Citation 绑定边界，暂不生成模型回答。
+
 ## 进度口径
 
 文件产出不等于测试通过；测试通过不等于 Spike 通过；Spike 通过不等于业务验收或发布完成。

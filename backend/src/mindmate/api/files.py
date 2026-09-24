@@ -41,6 +41,7 @@ from mindmate.application.files import (
     validate_managed_content_path,
     validate_upload_mime,
 )
+from mindmate.application.source_snapshots import purge_source_snapshots_for_files
 from mindmate.application.tasks import add_event, cancel_task, create_task
 from mindmate.config import Settings
 from mindmate.infrastructure.fts5 import Fts5Projection
@@ -2015,6 +2016,7 @@ def purge_trash(
         content = session.get(ContentObject, record.content_object_id)
         _delete_embedding_artifacts_for_files(session, settings, [object_id])
         _delete_unbuilt_index_snapshots_for_files(session, [object_id])
+        purge_source_snapshots_for_files(session, [object_id])
         session.execute(delete(Chunk).where(Chunk.file_id == object_id))
         session.execute(delete(FileTag).where(FileTag.file_id == object_id))
         session.execute(delete(KnowledgeBaseFile).where(KnowledgeBaseFile.file_id == object_id))
@@ -2055,6 +2057,7 @@ def purge_trash(
         _delete_unbuilt_index_snapshots_for_files(
             session, [record.file_id for record in records]
         )
+        purge_source_snapshots_for_files(session, [record.file_id for record in records])
         contents: dict[str, ContentObject] = {}
         for record in records:
             content = session.get(ContentObject, record.content_object_id)

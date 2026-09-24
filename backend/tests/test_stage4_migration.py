@@ -9,7 +9,7 @@ from sqlalchemy import create_engine, inspect, text
 from mindmate.config import Settings
 
 PREVIOUS_REVISION = "bc554b1b4366"
-CURRENT_REVISION = "e4a7810c9b62"
+CURRENT_REVISION = "6b3e91a0c4d7"
 
 
 def migration_config(data_dir: Path) -> tuple[Config, Settings]:

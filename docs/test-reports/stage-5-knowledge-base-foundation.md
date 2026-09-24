@@ -1,7 +1,7 @@
 # 阶段 5：知识库基础与成员准入测试报告
 
 > 阶段：`5`
-> 批次：`第八批 + 第九批 + 第十批 + 第十一批 + 第十二批 + 第十三批 + 第十四批 + 第十五批 + 第十六批 + 第十七批 + 第十八批`
+> 批次：`第八批至第二十一批`
 > 验证日期：`2026-09-24`
 > 第八批结论：`PASS`
 > 第九批结论：`PASS`
@@ -14,6 +14,8 @@
 > 第十六批结论：`PASS`
 > 第十七批结论：`PASS`
 > 第十八批结论：`PASS`
+> 第二十批结论：`PASS`
+> 第二十一批结论：`PASS`
 > 阶段 5 状态：`PARTIAL`
 > 分支：`feat/v1-bootstrap`
 > 起始提交：`75a0653877b7f627bc254a859232689c19872777`
@@ -28,7 +30,7 @@
 
 第八至第十六批完成知识库成员、索引预处理、Chunk、Embedding、FTS5、向量 Top-K 与双路候选基础；第十七批完成内部 RRF/多样性 Top 8；第十八批完成内部证据判定；第十九批完成产物完整性复核与原子激活；第二十批完成同一知识库增量构建。空库保持 `EMPTY`；内部检索/证据用例仍不是公开用户检索。
 
-第十批 `INDEX_PREPROCESS` 的 `COMPLETED` 只证明输入快照与预处理结果已持久化；第十一批 `INDEX_CHUNK` 只证明切片阶段结束；第十三批 `INDEX_EMBED` 只证明向量已持久化；第十四批 `INDEX_FTS` 只证明 FTS5 投影已建立。第十五至十八批提供内部召回、排序与证据判定；`supported` 只表示候选可进入后续来源绑定流程，不证明最终答案获事实支持。第十九批验证完整候选后才允许原子激活；第二十批增量候选沿用同一完整性复核。阶段 5 仍为 `PARTIAL`：服务端来源快照/引用绑定、公开检索、RAG、前端和质量验收仍未完成。
+第十批 `INDEX_PREPROCESS` 的 `COMPLETED` 只证明输入快照与预处理结果已持久化；第十一批 `INDEX_CHUNK` 只证明切片阶段结束；第十三批 `INDEX_EMBED` 只证明向量已持久化；第十四批 `INDEX_FTS` 只证明 FTS5 投影已建立。第十五至十八批提供内部召回、排序与证据判定；`supported` 只表示候选可进入后续来源绑定流程，不证明最终答案获事实支持。第十九批验证完整候选后才允许原子激活；第二十批增量候选沿用同一完整性复核；第二十一批从活动版本内部检索结果创建经服务端复核的未绑定来源快照。阶段 5 仍为 `PARTIAL`：真实消息/学习 owner 的 Citation 绑定、公开检索、RAG、前端和验收集质量评估仍未完成。
 
 ## 实现范围
 
@@ -595,4 +597,46 @@ repo> git diff --check
 通过
 ~~~
 
-第二十批结论 `PASS`；阶段 5 继续 `PARTIAL`。下一批唯一目标：为活动索引建立持久化的服务端来源快照，并校验来源仍属于该知识库的活动版本范围。
+第二十批结论 `PASS`；阶段 5 继续 `PARTIAL`。第二十一批来源快照与范围校验结果见下节。
+
+## 第二十一批验收追踪：服务端来源快照与范围校验
+
+| ID | 验收项 | 证据 | 结论 |
+| --- | --- | --- | --- |
+| S5-B21-01 | 当前活动 READY 索引的真实混合检索结果经 evidence gate 通过后，服务端创建持久快照并可在应用重启后读取 | `test_source_snapshot_uses_database_values_and_reloads_after_restart` | PASS |
+| S5-B21-02 | 快照正文、文件名、版本和位置来自数据库；摘录长度受控，缺失定位不造值，重复创建幂等 | `test_source_snapshot_uses_database_values_and_reloads_after_restart`、`test_repeated_creation_is_idempotent_and_missing_location_stays_empty` | PASS |
+| S5-B21-03 | 拒绝非 supported、任意 Chunk、错库、已移除成员、回收站文件和损坏 FTS 映射 | `test_non_supported_or_fabricated_candidate_cannot_create_snapshot`、`test_cross_scope_removed_member_trash_and_damaged_mapping_fail_closed` | PASS |
+| S5-B21-04 | 文件版本变化、活动 IndexVersion 切换和成员移除使用不同失败状态；持久化边界重查并串行化竞态 | `test_changed_file_and_index_versions_are_reported_separately`、`test_transaction_rechecks_membership_after_acquiring_write_lock`、`test_transaction_rechecks_active_version_after_concurrent_activation` | PASS |
+| S5-B21-05 | 重建索引后旧快照仍指向原版本；读取动态显示回收站/文件版本过期/索引退役、成员重加映射变化且不返回本地路径 | `test_read_marks_trash_stale_scope_and_preserves_original_index_identity`、`test_read_rejects_readded_member_mapping_for_an_older_active_snapshot` | PASS |
+| S5-B21-06 | 文件永久删除清除摘录/正文哈希并断开文件/Chunk，数据库直接删除触发器同样净化；知识库永久删除清理未绑定快照 | `test_permanent_file_delete_clears_body_and_historical_kb_purge_removes_unbound_rows`、`test_database_file_delete_trigger_sanitizes_snapshot_even_without_service_helper` | PASS |
+
+### 第二十一批数据与边界
+
+- Alembic revision `6b3e91a0c4d7` 建立只允许 `UNBOUND` 的内部 `SourceSnapshot`。没有 owner 字段、公开 Citation 编号、Chat/Learning 消息或伪造生成结果。
+- 创建只接受内部 `HybridAssessmentResult` 中受支持的 gate 候选，并在新的 SQLite 写事务中先取得写锁、再校验活动知识库/版本/成员/文件/IndexVersionInput/Chunk/FTS/EmbeddingRecord。范围、索引版本、文件源版本与来源失效分开报告。
+- 快照字段从数据库现读值构建，包含版本身份、文件和解析版本、真实标题/位置、受控摘录、hash、时间与幂等键；读取不暴露绝对路径。重建索引不改写旧快照，文件软删除保留摘录并报告回收站状态，永久删除清理正文并保留允许的名称和位置说明。
+- 本批没有公开 API/OpenAPI、前端、真实 Provider、真实凭据或付费请求。不代表最终回答事实正确，也未完成 AC-KB-003、Recall@10 或 10 万 Chunk 性能验收。
+
+### 第二十一批实际验证
+
+~~~text
+backend> uv run pytest
+164 passed, 131 warnings（串行运行；警告为既有依赖/Alembic 弃用提示）
+
+backend> uv run ruff check src tests
+All checks passed
+
+backend> uv run pyright src tests
+0 errors, 0 warnings, 0 informations
+
+backend> python -m compileall -q src tests migrations
+通过
+
+backend> uv run alembic heads
+6b3e91a0c4d7 (head)
+
+repo> git diff --check
+通过
+~~~
+
+没有前端/API/OpenAPI 改动，因此未重跑 UI E2E；未调用 DeepSeek、真实凭据、付费服务或真实用户资料。本批测试不覆盖 Citation owner 绑定或最终回答质量。

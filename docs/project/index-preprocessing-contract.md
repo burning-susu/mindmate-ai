@@ -165,3 +165,12 @@ Windows 11 x64 / Python 3.12.11 实际 CPU 验证使用 ONNX Runtime 1.30.0、to
 - 删除成员立即由当前知识库成员范围过滤从旧活动索引排除；新候选快照不含该成员。构建/校验期间旧活动指针与旧版本保持不变。移出一个成员不会删除源文件、被其他知识库引用的 Chunk/EmbeddingRecord、旧 IndexVersion 或旧 FTS/向量历史。候选切换仍复用第十九批唯一激活器和短事务 CAS。
 - 相同知识库当前输入快照与配置的重复提交返回现有任务/候选，不创建竞争版本。已有快照任务发现输入或配置变化时，允许创建新任务/候选；较旧候选通过最新版本/输入哈希复核后标记 `SUPERSEDED`，失败使用原 `PARTIAL/FAILED` 语义，不自动无限重试。Worker 重启仍依靠任务检查点、逐文件输入状态和现有租约恢复。
 - 第二十批无数据库迁移、公开检索/问答 API、OpenAPI、前端或 Provider 调用。离线回归覆盖增量新增、内容替换、移除成员即时过滤、跨知识库兼容缓存、Embedding 维度配置不兼容、重复任务、候选完整性审计及原子激活；ONNX 计数 Mock 证明未变文件不重复推理。后端串行 `153 passed`；Ruff、Pyright、compileall、Alembic head `e4a7810c9b62` 和 `git diff --check` 通过。`ruff check .` 仍有 14 条既有 Alembic migration lint。没有 10 万 Chunk 或最终 Recall@10 验收结论。
+
+## 服务端来源快照阶段（第二十一批）
+
+- 快照只由内部 `HybridAssessmentResult` 输入；要求 evidence gate 为 `supported`，且每个支持 signal 的 Chunk/File/IndexVersion 身份必须与同一 retrieval result 候选一致。客户端不能提交候选、文件名、摘录、路径、页码或任意 Chunk ID，没有 HTTP 路由。
+- 新建快照使用独立 SQLite Session/事务，以知识库 no-op UPDATE 作为首条语句取得 SQLite 写锁；随后再读活动指针、知识库/IndexVersion 状态、成员及加入时间、文件回收站/状态/hash/解析修订、IndexVersionInput、Chunk、FTS 映射、EmbeddingRecord 和 EmbeddingConfig 指纹。任何激活、成员移除或 purge 写入只能在该事务前或后提交，不能跨过检查与插入之间。
+- 新 Alembic revision `6b3e91a0c4d7` 的 `SourceSnapshot` 保持内部 `UNBOUND`，没有 `owner_type/owner_id`，不得创建 Chat/Learning owner、Citation 编号或模型消息。字段包括知识库/索引版本、可空文件/Chunk 关联、文件名、内容版本 hash/解析修订、heading path、页/幻灯片/行定位、最多 1200 Unicode 字符摘录、Chunk/摘录 SHA-256、幂等键和时间。相同知识库/IndexVersion/Chunk 只保存一次。
+- 创建只信数据库重新加载的 Chunk 正文、FileRecord 显示名和真实定位；候选携带正文/标题若与数据库不一致就拒绝。软删除读取为 `SOURCE_IN_TRASH` 且 `can_open_source=false`，但保留历史摘录；文件版本变化为 `SOURCE_VERSION_STALE`；成员退出为 `SOURCE_OUT_OF_SCOPE`；活动索引重建为 `INDEX_VERSION_RETIRED`，旧快照仍指向原版本。读取返回 typed view，不含本地绝对路径。
+- 文件永久删除 helper 与 `trg_source_snapshots_file_purge` SQLite BEFORE DELETE trigger 清空摘录、正文/文件版本 hash、解析修订及 File/Chunk 关系，同时保留文件名和定位说明；知识库永久删除清理无 owner 的 pending snapshots。文件永久删除后读取为 `SOURCE_DELETED`，不再提供正文。
+- 本批无公开 Citation/检索 API、OpenAPI、前端、Provider 请求或 owner 模型。`tests/test_stage5_source_snapshots.py` 用离线 FTS5/sqlite-vec 搜索和证据门控验证合法快照，并覆盖重启、伪造输入、跨库/版本/成员/文件错误、写事务竞态、幂等、定位空值、索引重建历史和删除净化。最终串行后端 `164 passed`，Ruff、Pyright、compileall、`git diff --check` 通过，Alembic head 为 `6b3e91a0c4d7`；未完成 Citation owner、AC-KB-003、Recall@10 或质量性能验收。

@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy import (
     JSON,
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
@@ -352,6 +353,45 @@ class EmbeddingRecord(Base):
     status: Mapped[str] = mapped_column(String(30), default="PENDING", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     invalidated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class SourceSnapshot(Base):
+    """Private, unbound source evidence captured from an active index result."""
+
+    __tablename__ = "source_snapshots"
+    __table_args__ = (
+        UniqueConstraint("idempotency_key", name="uq_source_snapshot_idempotency_key"),
+        CheckConstraint("length(excerpt) <= 1200", name="ck_source_snapshot_excerpt_length"),
+        CheckConstraint("binding_status = 'UNBOUND'", name="ck_source_snapshot_unbound"),
+        Index("ix_source_snapshots_scope", "knowledge_base_id", "index_version_id"),
+    )
+    source_snapshot_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    idempotency_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    binding_status: Mapped[str] = mapped_column(
+        String(20), default="UNBOUND", server_default=text("'UNBOUND'"), nullable=False
+    )
+    knowledge_base_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    index_version_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    file_id: Mapped[str | None] = mapped_column(
+        ForeignKey("files.file_id", ondelete="SET NULL")
+    )
+    file_name_snapshot: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_version_snapshot: Mapped[str | None] = mapped_column(String(64))
+    parse_revision_snapshot: Mapped[str | None] = mapped_column(String(36))
+    chunk_id: Mapped[str | None] = mapped_column(
+        ForeignKey("chunks.chunk_id", ondelete="SET NULL")
+    )
+    chunk_content_sha256: Mapped[str | None] = mapped_column(String(64))
+    heading_path_snapshot: Mapped[list[str] | None] = mapped_column(JSON)
+    page_start: Mapped[int | None] = mapped_column(Integer)
+    page_end: Mapped[int | None] = mapped_column(Integer)
+    slide_number: Mapped[int | None] = mapped_column(Integer)
+    line_start: Mapped[int | None] = mapped_column(Integer)
+    line_end: Mapped[int | None] = mapped_column(Integer)
+    excerpt: Mapped[str] = mapped_column(Text, nullable=False)
+    excerpt_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class BackgroundTask(Base):

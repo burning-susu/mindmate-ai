@@ -20,6 +20,7 @@ from mindmate.application.index_embedding import INDEX_EMBED_TASK
 from mindmate.application.index_fts import INDEX_FTS_TASK
 from mindmate.application.index_preprocessing import INDEX_PREPROCESS_TASK
 from mindmate.application.knowledge_membership_worker import KNOWLEDGE_MEMBERSHIP_TASK
+from mindmate.application.source_snapshots import purge_source_snapshots_for_knowledge_base
 from mindmate.application.tasks import cancel_task, create_task
 from mindmate.infrastructure.fts5 import Fts5Projection
 from mindmate.infrastructure.models import (
@@ -631,6 +632,7 @@ def purge_knowledge_base(
     projection = Fts5Projection()
     for version_id, _config_id in versions:
         projection.delete_version(session, version_id)
+    purge_source_snapshots_for_knowledge_base(session, knowledge_base_id)
     store = SqliteVecAdapter(request.app.state.settings.vectors_dir)
     try:
         for version_id, config_id in versions:
