@@ -171,6 +171,21 @@
 - 范围：没有公开检索/Citation API、OpenAPI/前端类型、Chat/Learning owner、对话或生成式回答；未调用 DeepSeek、真实凭据或付费外部服务。本批不构成最终答案事实正确性、AC-KB-003、Recall@10 或质量/性能验收证据。
 - 下一开发批次唯一目标：定义并实现来源快照到真实 Chat/Learning owner 的服务端 Citation 绑定边界，暂不生成模型回答。
 
+### 第二十二批：Citation 绑定依赖延期
+
+- 状态：`BLOCKED`；没有代码、文档、测试或提交变更。进场与离场本地/远端 SHA 均为 `e1766c3d173f4613e368bbb8988a343ca207738e`，工作区保持干净。
+- 阻塞事实：数据模型/迁移/源码没有真实持久化 Chat 或 Learning owner，也没有可核验的对应知识库范围快照；`TaskAttempt` 是后台任务尝试，不能充当学习 owner。为防止伪造 owner，Citation 绑定延期到阶段 6/7。
+- 延期不会阻止第二十三批实现独立的本地检索测试端点；Owner 建立后再恢复服务端 Citation 绑定。
+
+### 第二十三批：知识库本地测试检索 API
+
+- 状态：`PASS`；阶段 5 继续 `PARTIAL`。进场本地/远端 SHA 为 `e1766c3d173f4613e368bbb8988a343ca207738e`。
+- 新增只读 `POST /api/v1/knowledge-bases/{knowledge_base_id}/retrieval-tests`，仅接收 1–2000 字符问题并拒绝额外字段。后端根据路径知识库选择其当前活动 `READY` IndexVersion；调用方不能指定文件、索引版本、模型或路径，API 沿用 Host/Origin/LocalSession/Idempotency-Key 安全校验。
+- 本地 BGE query encoder 首次调用时才校验并加载既有模型，明确禁止下载。活动索引前检查 EmbeddingConfig；本地模型缺失/损坏、FTS/vector 通道故障与资料不足返回不同状态/错误码。混合检索采用既有双路 Top 30、确定性融合/重排 Top 8 与 `evidence-gate-v1`；查询开始前和检索期间复核索引/成员/文件/Chunk/Embedding 范围，变化时无候选返回 `unavailable/RETRIEVAL_SCOPE_CHANGED`。
+- 响应返回 gate 状态、索引/算法/规则版本、候选标识、数据库位置、受控摘录与双路排名/分数；最多 8 个候选、最多 1200 字符摘录、最大 JSON 体 64 KiB。不创建模型回答、对话、SourceSnapshot、Citation、后台任务或数据库写入，也不调用 Provider。
+- 真实 SQLite FTS5 + sqlite-vec API 用例覆盖可支持问题/资料不足、空索引、离线模型缺失、输入与额外字段校验、本地 Origin/Session、跨知识库隔离、当前活动版本与同库待索引成员过滤、回收站排除、索引/成员并发变化、FTS/vector 失败路由和零写入。串行后端最终全量 `176 passed, 143 warnings`；Ruff、Pyright、compileall、Alembic head `6b3e91a0c4d7` 与 `git diff --check` 通过。此前完整运行分别观察到既有 purge 用例一次 row-version `412`、Chunk 显式重试用例一次未恢复；两个用例单独重跑通过，最终完整串行运行通过，未修改它们。前端 API 生成、typecheck、lint、build 通过；未跑 UI E2E（没有页面改动）。
+- 第二十二批真实 owner/Citation 绑定仍待阶段 6/7；前端测试检索页面与验收集质量/性能校准仍未完成。下一批唯一目标：实现本地检索测试页面并调用该只读 API，不生成模型回答或 Citation。
+
 ## 进度口径
 
 文件产出不等于测试通过；测试通过不等于 Spike 通过；Spike 通过不等于业务验收或发布完成。

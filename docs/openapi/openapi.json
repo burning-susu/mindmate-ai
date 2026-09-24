@@ -783,6 +783,58 @@
         }
       }
     },
+    "/api/v1/knowledge-bases/{knowledge_base_id}/retrieval-tests": {
+      "post": {
+        "tags": [
+          "knowledge-bases"
+        ],
+        "summary": "Create Knowledge Base Retrieval Test",
+        "operationId": "create_knowledge_base_retrieval_test_api_v1_knowledge_bases__knowledge_base_id__retrieval_tests_post",
+        "parameters": [
+          {
+            "name": "knowledge_base_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Knowledge Base Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetrievalTestRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetrievalTestResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/file-imports": {
       "post": {
         "tags": [
@@ -3824,6 +3876,396 @@
           "file"
         ],
         "title": "ReprocessResponse"
+      },
+      "RetrievalTestCandidateResponse": {
+        "properties": {
+          "chunk_id": {
+            "type": "string",
+            "title": "Chunk Id"
+          },
+          "file_id": {
+            "type": "string",
+            "title": "File Id"
+          },
+          "file_name": {
+            "type": "string",
+            "maxLength": 255,
+            "title": "File Name"
+          },
+          "location": {
+            "$ref": "#/components/schemas/RetrievalTestLocation"
+          },
+          "excerpt": {
+            "type": "string",
+            "maxLength": 1200,
+            "title": "Excerpt"
+          },
+          "rank": {
+            "type": "integer",
+            "title": "Rank"
+          },
+          "fts_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fts Rank"
+          },
+          "bm25": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bm25"
+          },
+          "vector_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vector Rank"
+          },
+          "cosine_distance": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cosine Distance"
+          },
+          "cosine_similarity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cosine Similarity"
+          },
+          "rrf_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rrf Score"
+          },
+          "exact_match_bonus": {
+            "type": "number",
+            "title": "Exact Match Bonus"
+          },
+          "diversity_adjustment": {
+            "type": "number",
+            "title": "Diversity Adjustment"
+          },
+          "ranking_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ranking Score"
+          },
+          "exact_match_fields": {
+            "items": {
+              "type": "string",
+              "maxLength": 40
+            },
+            "type": "array",
+            "maxItems": 8,
+            "title": "Exact Match Fields"
+          },
+          "ranking_reasons": {
+            "items": {
+              "type": "string",
+              "maxLength": 80
+            },
+            "type": "array",
+            "maxItems": 8,
+            "title": "Ranking Reasons"
+          }
+        },
+        "type": "object",
+        "required": [
+          "chunk_id",
+          "file_id",
+          "file_name",
+          "location",
+          "excerpt",
+          "rank",
+          "exact_match_bonus",
+          "diversity_adjustment",
+          "exact_match_fields",
+          "ranking_reasons"
+        ],
+        "title": "RetrievalTestCandidateResponse"
+      },
+      "RetrievalTestLocation": {
+        "properties": {
+          "sequence_number": {
+            "type": "integer",
+            "title": "Sequence Number"
+          },
+          "heading_path": {
+            "items": {
+              "type": "string",
+              "maxLength": 160
+            },
+            "type": "array",
+            "maxItems": 8,
+            "title": "Heading Path"
+          },
+          "page_start": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Start"
+          },
+          "page_end": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page End"
+          },
+          "slide_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slide Number"
+          },
+          "line_start": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line Start"
+          },
+          "line_end": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line End"
+          },
+          "source_kind": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 30
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Kind"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sequence_number",
+          "heading_path"
+        ],
+        "title": "RetrievalTestLocation"
+      },
+      "RetrievalTestRequest": {
+        "properties": {
+          "question": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Question"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "question"
+        ],
+        "title": "RetrievalTestRequest"
+      },
+      "RetrievalTestResponse": {
+        "properties": {
+          "knowledge_base_id": {
+            "type": "string",
+            "title": "Knowledge Base Id"
+          },
+          "index_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Index Version Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "supported",
+              "insufficient",
+              "unavailable"
+            ],
+            "title": "Status"
+          },
+          "question_type": {
+            "type": "string",
+            "maxLength": 40,
+            "title": "Question Type"
+          },
+          "ranking_algorithm_version": {
+            "type": "string",
+            "maxLength": 80,
+            "title": "Ranking Algorithm Version"
+          },
+          "evidence_rules_version": {
+            "type": "string",
+            "maxLength": 80,
+            "title": "Evidence Rules Version"
+          },
+          "rank_constant": {
+            "type": "integer",
+            "title": "Rank Constant"
+          },
+          "final_candidate_limit": {
+            "type": "integer",
+            "title": "Final Candidate Limit"
+          },
+          "distinct_source_count": {
+            "type": "integer",
+            "title": "Distinct Source Count"
+          },
+          "reason_codes": {
+            "items": {
+              "type": "string",
+              "maxLength": 100
+            },
+            "type": "array",
+            "maxItems": 32,
+            "title": "Reason Codes"
+          },
+          "retrieval_error_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retrieval Error Code"
+          },
+          "retrieval_error_route": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "embedding",
+                  "scope",
+                  "fts",
+                  "vector"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retrieval Error Route"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/RetrievalTestCandidateResponse"
+            },
+            "type": "array",
+            "maxItems": 8,
+            "title": "Candidates"
+          },
+          "local_message": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Local Message"
+          },
+          "suggestions": {
+            "items": {
+              "type": "string",
+              "maxLength": 160
+            },
+            "type": "array",
+            "maxItems": 4,
+            "title": "Suggestions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "knowledge_base_id",
+          "index_version_id",
+          "status",
+          "question_type",
+          "ranking_algorithm_version",
+          "evidence_rules_version",
+          "rank_constant",
+          "final_candidate_limit",
+          "distinct_source_count",
+          "reason_codes",
+          "candidates",
+          "suggestions"
+        ],
+        "title": "RetrievalTestResponse"
       },
       "ServiceStatus": {
         "properties": {

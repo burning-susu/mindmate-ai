@@ -119,6 +119,12 @@ class HybridCandidate:
     sequence_number: int | None = None
     file_title: str | None = None
     heading_path: tuple[str, ...] = ()
+    page_start: int | None = None
+    page_end: int | None = None
+    slide_number: int | None = None
+    line_start: int | None = None
+    line_end: int | None = None
+    source_kind: str | None = None
     rrf_score: float | None = None
     exact_match_bonus: float = 0.0
     exact_match_terms: tuple[str, ...] = ()
@@ -636,12 +642,15 @@ class HybridCandidateQuery:
         query_vector: NDArray[Any] | list[float] | None,
         allow_degraded: bool = False,
         k: int = DEFAULT_CANDIDATE_TOP_K,
+        expected_scope_signature: tuple[Any, ...] | None = None,
     ) -> HybridAssessmentResult:
         """Run the internal Top 8 pipeline, then apply the evidence-only gate."""
         try:
             signature = self._fresh_scope_signature(
                 session, knowledge_base_id, index_version_id
             )
+            if expected_scope_signature is not None and signature != expected_scope_signature:
+                raise HybridQueryError("RETRIEVAL_SCOPE_CHANGED")
             if signature == (None,):
                 raise HybridQueryError("INDEX_VERSION_NOT_AVAILABLE")
             version = signature[0]
@@ -696,6 +705,15 @@ class HybridCandidateQuery:
     def _validate_version_scope(
         session: Session, knowledge_base_id: str, index_version_id: str
     ) -> None:
+        HybridCandidateQuery.capture_scope_signature(
+            session, knowledge_base_id, index_version_id
+        )
+
+    @staticmethod
+    def capture_scope_signature(
+        session: Session, knowledge_base_id: str, index_version_id: str
+    ) -> tuple[Any, ...]:
+        """Capture a current READY scope before potentially slow local query encoding."""
         signature = HybridCandidateQuery._fresh_scope_signature(
             session, knowledge_base_id, index_version_id
         )
@@ -710,6 +728,7 @@ class HybridCandidateQuery:
             or version[8] != index_version_id
         ):
             raise HybridQueryError("INDEX_VERSION_NOT_AVAILABLE")
+        return signature
 
     @staticmethod
     def _fresh_scope_signature(
@@ -849,6 +868,12 @@ def _attach_chunk_context(
                 Chunk.file_id,
                 Chunk.sequence_number,
                 Chunk.heading_path,
+                Chunk.page_start,
+                Chunk.page_end,
+                Chunk.slide_number,
+                Chunk.line_start,
+                Chunk.line_end,
+                Chunk.source_kind,
                 Chunk.content,
                 Chunk.invalidated_at,
                 FileRecord.display_name.label("file_title"),
@@ -874,6 +899,12 @@ def _attach_chunk_context(
                 heading_path=tuple(
                     item for item in (heading_path or ()) if isinstance(item, str)
                 ),
+                page_start=row["page_start"],
+                page_end=row["page_end"],
+                slide_number=row["slide_number"],
+                line_start=row["line_start"],
+                line_end=row["line_end"],
+                source_kind=row["source_kind"],
             )
         )
     return hydrated

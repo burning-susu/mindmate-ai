@@ -11,6 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import delete, event, func, select
 
+from mindmate.ai.embeddings.manifest import MODEL_DIRECTORY_NAME
 from mindmate.application.evidence_gate import assess_evidence
 from mindmate.application.hybrid_search import (
     HybridAssessmentResult,
@@ -19,6 +20,7 @@ from mindmate.application.hybrid_search import (
     HybridSearchResult,
 )
 from mindmate.application.index_preprocessing import get_or_create_default_configs
+from mindmate.application.retrieval_test_queries import RetrievalQueryEncoderError
 from mindmate.application.source_snapshots import (
     SourceSnapshotError,
     create_source_snapshots,
@@ -29,6 +31,7 @@ from mindmate.application.source_snapshots import (
 from mindmate.config import Settings
 from mindmate.infrastructure.fts5 import Fts5Projection
 from mindmate.infrastructure.models import (
+    BackgroundTask,
     Chunk,
     ContentObject,
     EmbeddingRecord,
@@ -41,7 +44,7 @@ from mindmate.infrastructure.models import (
     SourceSnapshot,
     new_id,
 )
-from mindmate.infrastructure.vector_store import SqliteVecAdapter
+from mindmate.infrastructure.vector_store import SqliteVecAdapter, VectorStoreError
 from mindmate.main import create_app
 
 
@@ -676,3 +679,397 @@ def test_database_file_delete_trigger_sanitizes_snapshot_even_without_service_he
         view = read_source_snapshot(session, snapshot.source_snapshot_id)
         assert view.source_status == "SOURCE_DELETED"
         assert view.excerpt is None
+
+
+class _FixedQueryEncoder:
+    def __init__(self, vector: list[float], on_embed=None, error_code: str | None = None) -> None:
+        self.vector = np.asarray(vector, dtype=np.float32)
+        self.on_embed = on_embed
+        self.error_code = error_code
+        self.calls = 0
+
+    def embed_query(self, _question: str) -> np.ndarray:
+        self.calls += 1
+        if self.on_embed is not None:
+            self.on_embed()
+        if self.error_code is not None:
+            raise RetrievalQueryEncoderError(self.error_code)
+        return self.vector
+
+
+@pytest.fixture
+def retrieval_test_runtime(tmp_path: Path):
+    settings = Settings(
+        data_dir=tmp_path,
+        env="test",
+        index_worker_poll_seconds=60,
+        index_chunk_worker_poll_seconds=60,
+        index_embedding_worker_poll_seconds=60,
+        index_fts_worker_poll_seconds=60,
+        index_activation_worker_poll_seconds=60,
+    )
+    with TestClient(create_app(settings), base_url="http://127.0.0.1") as client:
+        session_response = client.post(
+            "/api/v1/system/session", headers={"Origin": "http://127.0.0.1:5173"}
+        )
+        assert session_response.status_code == 200
+        factory = cast(Any, client.app).state.session_factory
+        data = _seed_active_index(factory, settings)
+        yield client, settings, factory, data
+
+
+def _retrieval_test_headers() -> dict[str, str]:
+    return {
+        "Origin": "http://127.0.0.1:5173",
+        "Idempotency-Key": f"retrieval-test-{new_id()}",
+    }
+
+
+def _post_retrieval_test(client: TestClient, knowledge_base_id: str, body: dict[str, Any]):
+    return client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/retrieval-tests",
+        headers=_retrieval_test_headers(),
+        json=body,
+    )
+
+
+def test_retrieval_test_returns_bounded_scoped_candidates_without_writes(
+    retrieval_test_runtime,
+) -> None:
+    client, settings, factory, data = retrieval_test_runtime
+    encoder = _FixedQueryEncoder(data.query_vector)
+    cast(Any, client.app).state.retrieval_query_encoder = encoder
+    writes: list[str] = []
+
+    def track_write(_connection, _cursor, statement, _parameters, _context, _executemany):
+        command = statement.lstrip().split(None, 1)[0].upper() if statement.strip() else ""
+        if command in {"INSERT", "UPDATE", "DELETE", "REPLACE"}:
+            writes.append(command)
+
+    event.listen(cast(Any, client.app).state.engine, "before_cursor_execute", track_write)
+    try:
+        response = _post_retrieval_test(
+            client,
+            data.knowledge_base_id,
+            {"question": "向量数据库是一种用于存储和检索向量数据的系统"},
+        )
+    finally:
+        event.remove(cast(Any, client.app).state.engine, "before_cursor_execute", track_write)
+
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["status"] == "supported", result
+    assert result["knowledge_base_id"] == data.knowledge_base_id
+    assert result["index_version_id"] == data.index_version_id
+    assert result["ranking_algorithm_version"] == "rrf-exact-diversity-v1"
+    assert result["evidence_rules_version"] == "evidence-gate-v1"
+    assert len(result["candidates"]) == 1
+    candidate = result["candidates"][0]
+    assert candidate["chunk_id"] == data.chunk_id
+    assert candidate["file_id"] == data.file_id
+    assert candidate["file_name"] == "vector-notes.txt"
+    assert candidate["location"]["page_start"] == 3
+    assert candidate["location"]["page_end"] == 4
+    assert candidate["location"]["heading_path"] == ["第一章", "向量数据库"]
+    assert candidate["fts_rank"] == 1
+    assert candidate["vector_rank"] == 1
+    assert len(candidate["excerpt"]) == 1200
+    assert len(response.content) <= 64 * 1024
+    assert "file_path" not in candidate
+    assert "answer" not in result and "citation_id" not in candidate
+    assert encoder.calls == 1
+    assert writes == []
+    with factory() as session:
+        assert session.scalar(select(func.count()).select_from(SourceSnapshot)) == 0
+        assert session.scalar(select(func.count()).select_from(BackgroundTask)) == 0
+    assert not hasattr(cast(Any, client.app).state, "provider")
+    assert settings.model_dir.exists()
+
+
+def test_retrieval_test_reports_insufficient_without_creating_answer(retrieval_test_runtime) -> None:
+    client, _settings, _factory, data = retrieval_test_runtime
+    cast(Any, client.app).state.retrieval_query_encoder = _FixedQueryEncoder(data.query_vector)
+
+    response = _post_retrieval_test(
+        client, data.knowledge_base_id, {"question": "量子计算在哪个星系？"}
+    )
+
+    assert response.status_code == 200
+    result = response.json()
+    assert result["status"] == "insufficient"
+    assert result["local_message"]
+    assert "answer" not in result
+    assert "citation_id" not in result
+
+
+def test_retrieval_test_without_active_index_is_unavailable_and_skips_model(
+    retrieval_test_runtime,
+) -> None:
+    client, _settings, factory, _data = retrieval_test_runtime
+    now = datetime.now(UTC)
+    empty_id = new_id()
+    with factory() as session:
+        session.add(
+            KnowledgeBase(
+                knowledge_base_id=empty_id,
+                name="空索引测试",
+                status="EMPTY",
+                active_index_version_id=None,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        session.commit()
+    encoder = _FixedQueryEncoder([1.0] + [0.0] * 511)
+    cast(Any, client.app).state.retrieval_query_encoder = encoder
+
+    response = _post_retrieval_test(client, empty_id, {"question": "什么是向量数据库？"})
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "unavailable"
+    assert response.json()["retrieval_error_code"] == "INDEX_VERSION_NOT_AVAILABLE"
+    assert response.json()["candidates"] == []
+    assert encoder.calls == 0
+
+
+def test_retrieval_test_missing_model_is_distinct_and_never_downloads(retrieval_test_runtime) -> None:
+    client, settings, _factory, data = retrieval_test_runtime
+
+    response = _post_retrieval_test(
+        client,
+        data.knowledge_base_id,
+        {"question": "向量数据库是一种用于存储和检索向量数据的系统"},
+    )
+
+    assert response.status_code == 200
+    result = response.json()
+    assert result["status"] == "unavailable"
+    assert result["retrieval_error_code"] == "MODEL_MISSING_OFFLINE"
+    assert result["retrieval_error_route"] == "embedding"
+    assert result["local_message"] is None
+    assert not (settings.model_dir / MODEL_DIRECTORY_NAME).exists()
+
+
+def test_retrieval_test_rejects_invalid_id_question_and_client_scope_inputs(
+    retrieval_test_runtime,
+) -> None:
+    client, _settings, _factory, data = retrieval_test_runtime
+    invalid_id = _post_retrieval_test(client, "not-a-uuid", {"question": "问题"})
+    blank = _post_retrieval_test(client, data.knowledge_base_id, {"question": "   "})
+    too_long = _post_retrieval_test(client, data.knowledge_base_id, {"question": "q" * 2001})
+    client_selected_scope = _post_retrieval_test(
+        client,
+        data.knowledge_base_id,
+        {
+            "question": "什么是向量数据库？",
+            "index_version_id": new_id(),
+            "file_ids": [data.file_id],
+            "embedding_model": "caller-controlled",
+        },
+    )
+
+    assert invalid_id.status_code == 404
+    assert blank.status_code == 422
+    assert too_long.status_code == 422
+    assert client_selected_scope.status_code == 422
+
+
+def test_retrieval_test_preserves_origin_and_session_guards(
+    retrieval_test_runtime,
+) -> None:
+    client, _settings, _factory, data = retrieval_test_runtime
+    route = f"/api/v1/knowledge-bases/{data.knowledge_base_id}/retrieval-tests"
+    rejected_origin = client.post(
+        route,
+        headers={"Origin": "https://attacker.example", "Idempotency-Key": "retrieval-origin"},
+        json={"question": "什么是向量数据库？"},
+    )
+    client.cookies.clear()
+    missing_session = client.post(
+        route,
+        headers={"Origin": "http://127.0.0.1:5173", "Idempotency-Key": "retrieval-session"},
+        json={"question": "什么是向量数据库？"},
+    )
+
+    assert rejected_origin.status_code == 403
+    assert rejected_origin.json()["code"] == "ORIGIN_NOT_ALLOWED"
+    assert missing_session.status_code == 401
+    assert missing_session.json()["code"] == "LOCAL_SESSION_REQUIRED"
+
+
+def test_retrieval_test_does_not_leak_similar_candidates_from_another_knowledge_base(
+    retrieval_test_runtime,
+) -> None:
+    client, settings, factory, data = retrieval_test_runtime
+    other = _seed_active_index(factory, settings)
+    cast(Any, client.app).state.retrieval_query_encoder = _FixedQueryEncoder(data.query_vector)
+
+    response = _post_retrieval_test(
+        client,
+        data.knowledge_base_id,
+        {"question": "向量数据库是一种用于存储和检索向量数据的系统"},
+    )
+
+    assert response.status_code == 200
+    result = response.json()
+    assert result["status"] == "supported", result
+    assert {item["file_id"] for item in result["candidates"]} == {data.file_id}
+    assert other.file_id not in {item["file_id"] for item in result["candidates"]}
+
+
+def test_retrieval_test_uses_only_current_ready_version_with_pending_member(
+    retrieval_test_runtime,
+) -> None:
+    client, settings, factory, data = retrieval_test_runtime
+    current = _seed_active_index(factory, settings)
+    with factory() as session:
+        old_version = session.get(IndexVersion, data.index_version_id)
+        current_version = session.get(IndexVersion, current.index_version_id)
+        knowledge_base = session.get(KnowledgeBase, data.knowledge_base_id)
+        other_knowledge_base = session.get(KnowledgeBase, current.knowledge_base_id)
+        pending_member = session.get(KnowledgeBaseFile, data.membership_id)
+        current_member = session.get(KnowledgeBaseFile, current.membership_id)
+        assert all(
+            item is not None
+            for item in (
+                old_version,
+                current_version,
+                knowledge_base,
+                other_knowledge_base,
+                pending_member,
+                current_member,
+            )
+        )
+        old_version.status = "RETIRED"
+        current_version.scope_id = data.knowledge_base_id
+        knowledge_base.active_index_version_id = current.index_version_id
+        knowledge_base.status = "PARTIAL"
+        pending_member.index_state = "PENDING"
+        current_member.knowledge_base_id = data.knowledge_base_id
+        other_knowledge_base.active_index_version_id = None
+        other_knowledge_base.status = "EMPTY"
+        session.commit()
+    cast(Any, client.app).state.retrieval_query_encoder = _FixedQueryEncoder(
+        current.query_vector
+    )
+
+    response = _post_retrieval_test(
+        client,
+        data.knowledge_base_id,
+        {"question": "向量数据库是一种用于存储和检索向量数据的系统"},
+    )
+
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["status"] == "supported", result
+    assert result["index_version_id"] == current.index_version_id
+    assert {item["file_id"] for item in result["candidates"]} == {current.file_id}
+    assert data.file_id not in {item["file_id"] for item in result["candidates"]}
+
+
+def test_retrieval_test_excludes_trashed_files_immediately(retrieval_test_runtime) -> None:
+    client, _settings, factory, data = retrieval_test_runtime
+    cast(Any, client.app).state.retrieval_query_encoder = _FixedQueryEncoder(data.query_vector)
+    with factory() as session:
+        file_record = session.get(FileRecord, data.file_id)
+        assert file_record is not None
+        file_record.deleted_at = datetime.now(UTC)
+        session.commit()
+
+    response = _post_retrieval_test(
+        client, data.knowledge_base_id, {"question": "什么是向量数据库？"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "insufficient"
+    assert response.json()["candidates"] == []
+
+
+def test_retrieval_test_fails_closed_if_member_scope_changes_during_encoding(
+    retrieval_test_runtime,
+) -> None:
+    client, _settings, factory, data = retrieval_test_runtime
+
+    def remove_member() -> None:
+        with factory() as session:
+            member = session.get(KnowledgeBaseFile, data.membership_id)
+            assert member is not None
+            member.membership_status = "REMOVED"
+            member.removed_at = datetime.now(UTC)
+            session.commit()
+
+    cast(Any, client.app).state.retrieval_query_encoder = _FixedQueryEncoder(
+        data.query_vector, on_embed=remove_member
+    )
+
+    response = _post_retrieval_test(
+        client, data.knowledge_base_id, {"question": "什么是向量数据库？"}
+    )
+
+    assert response.status_code == 200
+    result = response.json()
+    assert result["status"] == "unavailable"
+    assert result["retrieval_error_code"] == "RETRIEVAL_SCOPE_CHANGED"
+    assert result["candidates"] == []
+
+
+def test_retrieval_test_fails_closed_if_active_index_changes_during_encoding(
+    retrieval_test_runtime,
+) -> None:
+    client, _settings, factory, data = retrieval_test_runtime
+
+    def switch_index() -> None:
+        with factory() as session:
+            knowledge_base = session.get(KnowledgeBase, data.knowledge_base_id)
+            assert knowledge_base is not None
+            knowledge_base.active_index_version_id = new_id()
+            session.commit()
+
+    cast(Any, client.app).state.retrieval_query_encoder = _FixedQueryEncoder(
+        data.query_vector, on_embed=switch_index
+    )
+
+    response = _post_retrieval_test(
+        client, data.knowledge_base_id, {"question": "什么是向量数据库？"}
+    )
+
+    assert response.status_code == 200
+    result = response.json()
+    assert result["status"] == "unavailable"
+    assert result["retrieval_error_code"] == "RETRIEVAL_SCOPE_CHANGED"
+    assert result["candidates"] == []
+
+
+def test_retrieval_test_marks_fts_and_vector_failures_as_unavailable(
+    retrieval_test_runtime, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, _settings, _factory, data = retrieval_test_runtime
+    cast(Any, client.app).state.retrieval_query_encoder = _FixedQueryEncoder(data.query_vector)
+
+    def fail_fts(*_args, **_kwargs):
+        raise RuntimeError("injected fts failure")
+
+    monkeypatch.setattr(Fts5Projection, "match_version", fail_fts)
+    fts_response = _post_retrieval_test(
+        client, data.knowledge_base_id, {"question": "什么是向量数据库？"}
+    )
+    monkeypatch.undo()
+
+    def fail_vector(*_args, **_kwargs):
+        raise VectorStoreError("VECTOR_DATABASE_UNAVAILABLE")
+
+    monkeypatch.setattr(SqliteVecAdapter, "search", fail_vector)
+    vector_response = _post_retrieval_test(
+        client, data.knowledge_base_id, {"question": "什么是向量数据库？"}
+    )
+
+    assert fts_response.status_code == 200
+    assert fts_response.json()["status"] == "unavailable"
+    assert fts_response.json()["retrieval_error_route"] == "fts"
+    assert fts_response.json()["retrieval_error_code"] == "FTS_QUERY_FAILED"
+    assert fts_response.json()["candidates"] == []
+    assert vector_response.status_code == 200
+    assert vector_response.json()["status"] == "unavailable"
+    assert vector_response.json()["retrieval_error_route"] == "vector"
+    assert vector_response.json()["retrieval_error_code"] == "VECTOR_DATABASE_UNAVAILABLE"
+    assert vector_response.json()["candidates"] == []

@@ -826,6 +826,18 @@ PUT 关联操作天然幂等。
 
 retrieval-tests 只返回本地候选和分数，不调用 DeepSeek，适合质量调试。
 
+请求体只包含 `question`：
+
+~~~json
+{"question":"问题文本"}
+~~~
+
+- 首尾空白由服务端去除；有效长度为 1～2000 个字符；拒绝额外字段。
+- 知识库范围来自路径参数；客户端不得提交 `index_version_id`、文件集合、Embedding 模型或路径。
+- 仅使用知识库当前活动 `READY` 索引。无活动索引、范围变化、Embedding 模型不可用或检索通道故障以 `unavailable` 和稳定原因码/错误路由显式返回；通道故障不得伪装成完整双路结果。
+- 成功响应区分 `supported`、`insufficient`、`unavailable`，提供规则/排序版本、最多 8 个候选及 FTS/vector 两路排名/分数、文件与 Chunk 标识、真实结构定位和最多 1200 字符摘录。摘要响应体不超过 64 KiB。
+- 接口继承本地 Host、Origin、本地会话和 POST 幂等键约束。它只用于本地检索质量调试，不生成回答，不创建消息、来源快照或 Citation。
+
 ## 22. Scope API DTO
 
 AI 对话和学习共用 SourceScopeInput：

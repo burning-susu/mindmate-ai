@@ -1,7 +1,7 @@
 # 阶段 5：知识库基础与成员准入测试报告
 
 > 阶段：`5`
-> 批次：`第八批至第二十一批`
+> 批次：`第八批至第二十三批`
 > 验证日期：`2026-09-24`
 > 第八批结论：`PASS`
 > 第九批结论：`PASS`
@@ -16,6 +16,8 @@
 > 第十八批结论：`PASS`
 > 第二十批结论：`PASS`
 > 第二十一批结论：`PASS`
+> 第二十二批结论：`BLOCKED`（真实 Chat/Learning owner 前置缺失，延期到阶段 6/7）
+> 第二十三批结论：`PASS`
 > 阶段 5 状态：`PARTIAL`
 > 分支：`feat/v1-bootstrap`
 > 起始提交：`75a0653877b7f627bc254a859232689c19872777`
@@ -28,14 +30,15 @@
 
 ## 结论
 
-第八至第十六批完成知识库成员、索引预处理、Chunk、Embedding、FTS5、向量 Top-K 与双路候选基础；第十七批完成内部 RRF/多样性 Top 8；第十八批完成内部证据判定；第十九批完成产物完整性复核与原子激活；第二十批完成同一知识库增量构建。空库保持 `EMPTY`；内部检索/证据用例仍不是公开用户检索。
+第八至第十六批完成知识库成员、索引预处理、Chunk、Embedding、FTS5、向量 Top-K 与双路候选基础；第十七批完成内部 RRF/多样性 Top 8；第十八批完成内部证据判定；第十九批完成产物完整性复核与原子激活；第二十批完成同一知识库增量构建；第二十一批建立未绑定服务端来源快照；第二十三批增加受本地会话保护的本地测试检索 API。空库保持 `EMPTY`；此端点不提供聊天答案或 Citation。
 
-第十批 `INDEX_PREPROCESS` 的 `COMPLETED` 只证明输入快照与预处理结果已持久化；第十一批 `INDEX_CHUNK` 只证明切片阶段结束；第十三批 `INDEX_EMBED` 只证明向量已持久化；第十四批 `INDEX_FTS` 只证明 FTS5 投影已建立。第十五至十八批提供内部召回、排序与证据判定；`supported` 只表示候选可进入后续来源绑定流程，不证明最终答案获事实支持。第十九批验证完整候选后才允许原子激活；第二十批增量候选沿用同一完整性复核；第二十一批从活动版本内部检索结果创建经服务端复核的未绑定来源快照。阶段 5 仍为 `PARTIAL`：真实消息/学习 owner 的 Citation 绑定、公开检索、RAG、前端和验收集质量评估仍未完成。
+第十批 `INDEX_PREPROCESS` 的 `COMPLETED` 只证明输入快照与预处理结果已持久化；第十一批 `INDEX_CHUNK` 只证明切片阶段结束；第十三批 `INDEX_EMBED` 只证明向量已持久化；第十四批 `INDEX_FTS` 只证明 FTS5 投影已建立。第十五至十八批提供内部召回、排序与证据判定；`supported` 只表示候选可进入后续处理，不证明最终答案获事实支持。第十九批验证完整候选后才允许原子激活；第二十批增量候选沿用同一完整性复核；第二十一批从活动版本内部检索结果创建经服务端复核的未绑定来源快照。第二十二批因真实 owner 不存在而 `BLOCKED`，Citation 绑定延期至阶段 6/7；第二十三批只开放本地测试检索端点。阶段 5 仍为 `PARTIAL`：Citation 绑定、前端测试检索页面、聊天/RAG 与验收集质量评估仍未完成。
 
 ## 实现范围
 
 - 新增 `GET/POST /api/v1/knowledge-bases` 与 `GET/PATCH/DELETE /api/v1/knowledge-bases/{id}`。
 - 新增 `GET /api/v1/trash/knowledge-bases`、`POST /api/v1/trash/knowledge-base/{id}/restore` 与 `DELETE /api/v1/trash/knowledge-base/{id}`。
+- 新增 `POST /api/v1/knowledge-bases/{knowledge_base_id}/retrieval-tests`，仅用于受本地 Origin/Session 保护的只读检索调试。
 - 创建、列表和详情使用 SQLite 持久化；创建空知识库的状态固定为 `EMPTY`。
 - 名称支持 1～100 字符；描述最多 2000 字符；同名允许但响应提供 `duplicate_name` 提示。
 - 编辑名称、描述、图标与颜色；颜色只接受 `#RRGGBB`。
@@ -640,3 +643,68 @@ repo> git diff --check
 ~~~
 
 没有前端/API/OpenAPI 改动，因此未重跑 UI E2E；未调用 DeepSeek、真实凭据、付费服务或真实用户资料。本批测试不覆盖 Citation owner 绑定或最终回答质量。
+
+## 第二十二批：Citation 绑定依赖处理
+
+- 结论：`BLOCKED`；阶段 5 保持 `PARTIAL`。本批没有代码、文档、测试或提交改动；起止本地/远端 SHA 均为 `e1766c3d173f4613e368bbb8988a343ca207738e`。
+- 阻塞事实：ORM 模型、Alembic 迁移和后端实现都没有持久化 Chat/Learning owner 或其可验证知识库范围快照。`TaskAttempt` 属于后台 Worker，不能作为学习 owner；不能伪造测试 owner 或 Citation。
+- 决策：Citation 绑定延期到阶段 6/7 建立真实 owner 后继续。本阻塞不影响无 owner 依赖的本地检索测试 API。
+
+## 第二十三批验收追踪：知识库本地测试检索 API
+
+| ID | 验收项 | 证据 | 结论 |
+| --- | --- | --- | --- |
+| S5-B23-01 | 请求问题有界且只允许 question；客户端不能指定活动版本、文件集、模型或路径 | `test_retrieval_test_rejects_invalid_id_question_and_client_scope_inputs` | PASS |
+| S5-B23-02 | 只从当前活动 READY 版本返回真实 FTS5/sqlite-vec 候选；待索引成员与旧版本文件不进入结果 | `test_retrieval_test_uses_only_current_ready_version_with_pending_member` | PASS |
+| S5-B23-03 | 活动索引候选包含数据库位置、受控片段与双路分数/排序解释 | `test_retrieval_test_returns_bounded_scoped_candidates_without_writes` | PASS |
+| S5-B23-04 | 状态区分 `supported`、`insufficient` 与 `unavailable`；无活动索引/离线模型缺失不误报为资料不足 | `test_retrieval_test_reports_insufficient_without_creating_answer`、`test_retrieval_test_without_active_index_is_unavailable_and_skips_model`、`test_retrieval_test_missing_model_is_distinct_and_never_downloads` | PASS |
+| S5-B23-05 | 查询范围仅限请求知识库，回收站排除；索引/成员在本地编码期间变化时失败关闭；FTS/vector 错误路由不同且无部分结果 | `test_retrieval_test_does_not_leak_similar_candidates_from_another_knowledge_base`、`test_retrieval_test_excludes_trashed_files_immediately`、两项 `fails_closed_if_*_changes_during_encoding`、`test_retrieval_test_marks_fts_and_vector_failures_as_unavailable` | PASS |
+| S5-B23-06 | 继承 Origin/LocalSession 保护；检索路径不写库、不创建 SourceSnapshot/回答/Citation/后台任务 | `test_retrieval_test_preserves_origin_and_session_guards`、`test_retrieval_test_returns_bounded_scoped_candidates_without_writes` | PASS |
+| S5-B23-07 | OpenAPI 与生成的前端类型/客户端同步；问题、候选数、摘录和 JSON 响应体均受限 | `docs/openapi/openapi.json`、`frontend/src/api/generated/openapi.ts` 与 API 集成断言 | PASS |
+
+### 第二十三批接口与边界
+
+- 新增 `POST /api/v1/knowledge-bases/{knowledge_base_id}/retrieval-tests`。请求只接受 1–2000 字符的 `question`；不接受客户端提供的索引版本、文件集合、Embedding 模型或绝对路径。沿用本地 Host、Origin、LocalSession Cookie 与 POST 幂等键中间件。
+- 服务端先确认知识库未回收、当前活动 `IndexVersion` 为本库 `READY`、FTS/Embedding 阶段可读以及 EmbeddingConfig 符合冻结的本地模型配置。编码前捕获当前索引与成员/文件/Chunk/Embedding 范围签名，再交给既有混合查询复核；索引切换或范围变化显式返回 `unavailable/RETRIEVAL_SCOPE_CHANGED`，不返回陈旧候选。
+- 复用既有 FTS5 Top 30、sqlite-vec Top 30、去重、RRF/规则重排 Top 8 与 `evidence-gate-v1`。路由故障使用严格双路语义：没有部分候选，返回 `unavailable`、错误路由与错误码。模型缺失或校验失败同样显式 `unavailable`，但归于 `embedding`，与 `insufficient` 分开。
+- `LocalRetrievalQueryEncoder` 首次端点调用时才导入/初始化 ONNX Adapter；ModelManager 使用 `allow_download=false`。缺失模型不会建立 partial 安装目录，也不触网。无模型下载、DeepSeek/Provider 请求或真实用户资料。
+- 响应包含 gate 状态、活动版本 ID、算法/规则版本、Chunk/File ID、文件名、真实页/幻灯片/行/heading 定位、最多 1200 字符 excerpt 和 FTS/vector rank/score、RRF/final rank 解释；最多 8 个候选，JSON 总长不超过 64 KiB。返回字段没有绝对路径、答案、Citation 编号或引用绑定。
+- 本调用只读：不创建 `SourceSnapshot`、消息、Citation、后台任务或回答。没有页面变更；前端只增加 API 类型和请求 helper。
+
+### 第二十三批实际验证
+
+~~~text
+backend> uv run pytest
+176 passed, 143 warnings（最终串行全量；警告来自 Starlette/httpx、anyio 与 Alembic 弃用提示）
+
+backend> uv run ruff check src tests
+All checks passed
+
+backend> uv run pyright src tests
+0 errors, 0 warnings, 0 informations
+
+backend> uv run python -m compileall -q src tests migrations
+通过
+
+backend> uv run alembic heads
+6b3e91a0c4d7 (head)
+
+repo> .\scripts\generate-api.ps1
+OpenAPI 3.1.0；38 schemas / 51 operations
+
+frontend> npm run typecheck
+通过
+
+frontend> npm run lint
+通过
+
+frontend> npm run build
+通过
+
+repo> git diff --check
+通过
+~~~
+
+此前完整运行分别观察到未修改的既有知识库 purge 用例发生异步 row-version `412`、Chunk 显式重试用例未恢复；两个用例单独重跑均通过，最终串行全量为 `176 passed`。本批没有修改这两个用例。没有 UI 页面变更，因此未跑 Playwright E2E；未调用 DeepSeek、真实凭据、付费服务或外部模型。
+
+第二十三批结论：`PASS`；阶段 5 继续 `PARTIAL`。第二十二批 Citation owner 阻塞仍延期至阶段 6/7。下一批唯一目标：实现本地检索测试页面并调用本只读 API，不生成回答或 Citation。

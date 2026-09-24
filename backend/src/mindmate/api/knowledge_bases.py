@@ -6,25 +6,35 @@ import re
 from collections.abc import Iterator
 from datetime import datetime, timedelta
 from hashlib import sha256
-from typing import Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Query, Request
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 from mindmate.api.files import VERSION_CONFLICT_RESPONSES, FileApiError
 from mindmate.application.chunking import CHUNK_GENERATION_TASK
+from mindmate.application.evidence_gate import unavailable_assessment
 from mindmate.application.files import normalize_name, utc_now
-from mindmate.application.index_embedding import INDEX_EMBED_TASK
+from mindmate.application.hybrid_search import (
+    DEFAULT_HYBRID_RANKING_CONFIG,
+    RANKING_ALGORITHM_VERSION,
+    HybridCandidate,
+    HybridCandidateQuery,
+    HybridQueryError,
+)
+from mindmate.application.index_embedding import INDEX_EMBED_TASK, validate_embedding_config
 from mindmate.application.index_fts import INDEX_FTS_TASK
 from mindmate.application.index_preprocessing import INDEX_PREPROCESS_TASK
 from mindmate.application.knowledge_membership_worker import KNOWLEDGE_MEMBERSHIP_TASK
+from mindmate.application.retrieval_test_queries import RetrievalQueryEncoderError
 from mindmate.application.source_snapshots import purge_source_snapshots_for_knowledge_base
 from mindmate.application.tasks import cancel_task, create_task
 from mindmate.infrastructure.fts5 import Fts5Projection
 from mindmate.infrastructure.models import (
     BackgroundTask,
+    EmbeddingConfig,
     FileRecord,
     IndexVersion,
     IndexVersionInput,
@@ -37,6 +47,7 @@ from mindmate.infrastructure.vector_store import SqliteVecAdapter, VectorStoreEr
 router = APIRouter(prefix="/api/v1")
 
 COLOR_PATTERN = re.compile(r"^#[0-9a-fA-F]{6}$")
+MAX_RETRIEVAL_TEST_RESPONSE_BYTES = 64 * 1024
 
 
 class KnowledgeBaseCreate(BaseModel):
@@ -165,6 +176,73 @@ class KnowledgeMembershipTaskResponse(BaseModel):
     results: list[dict[str, Any]]
     summary: dict[str, Any] | None = None
     error: str | None = None
+
+
+class RetrievalTestRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    question: str = Field(min_length=1, max_length=2000)
+
+    @field_validator("question")
+    @classmethod
+    def normalize_question(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("检索问题不能为空。")
+        return normalized
+
+
+class RetrievalTestLocation(BaseModel):
+    sequence_number: int
+    heading_path: list[Annotated[str, Field(max_length=160)]] = Field(max_length=8)
+    page_start: int | None = None
+    page_end: int | None = None
+    slide_number: int | None = None
+    line_start: int | None = None
+    line_end: int | None = None
+    source_kind: str | None = Field(default=None, max_length=30)
+
+
+class RetrievalTestCandidateResponse(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False)
+
+    chunk_id: str
+    file_id: str
+    file_name: str = Field(max_length=255)
+    location: RetrievalTestLocation
+    excerpt: str = Field(max_length=1200)
+    rank: int
+    fts_rank: int | None = None
+    bm25: float | None = None
+    vector_rank: int | None = None
+    cosine_distance: float | None = None
+    cosine_similarity: float | None = None
+    rrf_score: float | None = None
+    exact_match_bonus: float
+    diversity_adjustment: float
+    ranking_score: float | None = None
+    exact_match_fields: list[Annotated[str, Field(max_length=40)]] = Field(max_length=8)
+    ranking_reasons: list[Annotated[str, Field(max_length=80)]] = Field(max_length=8)
+
+
+class RetrievalTestResponse(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False)
+
+    knowledge_base_id: str
+    index_version_id: str | None
+    status: Literal["supported", "insufficient", "unavailable"]
+    question_type: str = Field(max_length=40)
+    ranking_algorithm_version: str = Field(max_length=80)
+    evidence_rules_version: str = Field(max_length=80)
+    rank_constant: int
+    final_candidate_limit: int
+    distinct_source_count: int
+    reason_codes: list[Annotated[str, Field(max_length=100)]] = Field(max_length=32)
+    retrieval_error_code: str | None = Field(default=None, max_length=100)
+    retrieval_error_route: Literal["embedding", "scope", "fts", "vector"] | None = None
+    candidates: list[RetrievalTestCandidateResponse] = Field(max_length=8)
+    local_message: str | None = Field(default=None, max_length=300)
+    suggestions: list[Annotated[str, Field(max_length=160)]] = Field(max_length=4)
 
 
 def get_session(request: Request) -> Iterator[Session]:
@@ -667,3 +745,220 @@ def purge_knowledge_base(
     session.delete(record)
     session.commit()
     return {"knowledge_base_id": knowledge_base_id, "status": "PURGED"}
+
+
+def _retrieval_test_candidate(
+    candidate: HybridCandidate,
+) -> RetrievalTestCandidateResponse:
+    return RetrievalTestCandidateResponse(
+        chunk_id=candidate.chunk_id,
+        file_id=candidate.file_id,
+        file_name=(candidate.file_title or "")[:255],
+        location=RetrievalTestLocation(
+            sequence_number=(candidate.sequence_number or 0),
+            heading_path=[part[:160] for part in candidate.heading_path[:8]],
+            page_start=candidate.page_start,
+            page_end=candidate.page_end,
+            slide_number=candidate.slide_number,
+            line_start=candidate.line_start,
+            line_end=candidate.line_end,
+            source_kind=candidate.source_kind,
+        ),
+        excerpt=(candidate.content or "")[:1200],
+        rank=candidate.ranking_rank or 1,
+        fts_rank=candidate.fts_rank,
+        bm25=candidate.bm25,
+        vector_rank=candidate.vector_rank,
+        cosine_distance=candidate.vector_distance,
+        cosine_similarity=candidate.vector_score,
+        rrf_score=candidate.rrf_score,
+        exact_match_bonus=candidate.exact_match_bonus,
+        diversity_adjustment=candidate.diversity_adjustment,
+        ranking_score=candidate.ranking_score,
+        exact_match_fields=list(candidate.exact_match_fields[:8]),
+        ranking_reasons=list(candidate.ranking_reasons[:8]),
+    )
+
+
+def _retrieval_error_route(value: str | None) -> Literal["embedding", "scope", "fts", "vector"] | None:
+    if value == "embedding" or value == "scope" or value == "fts" or value == "vector":
+        return value
+    return None
+
+
+def _retrieval_test_response(
+    *,
+    knowledge_base_id: str,
+    index_version_id: str | None,
+    assessment: Any,
+    retrieval: Any = None,
+    retrieval_error_code: str | None = None,
+    retrieval_error_route: Literal["embedding", "scope", "fts", "vector"] | None = None,
+) -> RetrievalTestResponse:
+    ranking_config = retrieval.ranking_config if retrieval is not None else None
+    payload = RetrievalTestResponse(
+        knowledge_base_id=knowledge_base_id,
+        index_version_id=index_version_id,
+        status=assessment.status,
+        question_type=assessment.question_type,
+        ranking_algorithm_version=(
+            retrieval.ranking_algorithm if retrieval is not None else RANKING_ALGORITHM_VERSION
+        ),
+        evidence_rules_version=assessment.rules_version,
+        rank_constant=(
+            ranking_config.rank_constant
+            if ranking_config is not None
+            else DEFAULT_HYBRID_RANKING_CONFIG.rank_constant
+        ),
+        final_candidate_limit=(
+            ranking_config.final_top_k
+            if ranking_config is not None
+            else DEFAULT_HYBRID_RANKING_CONFIG.final_top_k
+        ),
+        distinct_source_count=assessment.distinct_source_count,
+        reason_codes=list(assessment.reason_codes[:32]),
+        retrieval_error_code=retrieval_error_code,
+        retrieval_error_route=retrieval_error_route,
+        candidates=(
+            [_retrieval_test_candidate(item) for item in retrieval.candidates[:8]]
+            if retrieval is not None
+            else []
+        ),
+        local_message=assessment.local_message,
+        suggestions=list(assessment.suggestions[:4]),
+    )
+    if len(payload.model_dump_json().encode("utf-8")) > MAX_RETRIEVAL_TEST_RESPONSE_BYTES:
+        raise FileApiError(
+            "RETRIEVAL_TEST_RESPONSE_TOO_LARGE",
+            "检索测试结果超过允许的响应大小。",
+            500,
+        )
+    return payload
+
+
+@router.post(
+    "/knowledge-bases/{knowledge_base_id}/retrieval-tests",
+    response_model=RetrievalTestResponse,
+    tags=["knowledge-bases"],
+)
+def create_knowledge_base_retrieval_test(
+    knowledge_base_id: str,
+    payload: RetrievalTestRequest,
+    request: Request,
+    session: Session = Depends(get_session),
+) -> RetrievalTestResponse:
+    knowledge_base = _get(session, knowledge_base_id)
+    index_version_id = knowledge_base.active_index_version_id
+    if index_version_id is None:
+        assessment = unavailable_assessment(
+            "INDEX_VERSION_NOT_AVAILABLE", query_text=payload.question
+        )
+        return _retrieval_test_response(
+            knowledge_base_id=knowledge_base_id,
+            index_version_id=None,
+            assessment=assessment,
+            retrieval_error_code="INDEX_VERSION_NOT_AVAILABLE",
+            retrieval_error_route="scope",
+        )
+
+    version = session.get(IndexVersion, index_version_id)
+    if (
+        version is None
+        or version.status != "READY"
+        or version.scope_type != "KNOWLEDGE_BASE"
+        or version.scope_id != knowledge_base_id
+        or version.vector_engine != "sqlite-vec"
+    ):
+        assessment = unavailable_assessment(
+            "INDEX_VERSION_NOT_AVAILABLE", query_text=payload.question, route="scope"
+        )
+        return _retrieval_test_response(
+            knowledge_base_id=knowledge_base_id,
+            index_version_id=index_version_id,
+            assessment=assessment,
+            retrieval_error_code="INDEX_VERSION_NOT_AVAILABLE",
+            retrieval_error_route="scope",
+        )
+    if version.fts_status not in {"COMPLETED", "PARTIAL"}:
+        assessment = unavailable_assessment(
+            "FTS_INDEX_NOT_READY", query_text=payload.question, route="fts"
+        )
+        return _retrieval_test_response(
+            knowledge_base_id=knowledge_base_id,
+            index_version_id=index_version_id,
+            assessment=assessment,
+            retrieval_error_code="FTS_INDEX_NOT_READY",
+            retrieval_error_route="fts",
+        )
+    if version.embedding_status not in {"COMPLETED", "PARTIAL"}:
+        assessment = unavailable_assessment(
+            "VECTOR_INDEX_NOT_READY", query_text=payload.question, route="vector"
+        )
+        return _retrieval_test_response(
+            knowledge_base_id=knowledge_base_id,
+            index_version_id=index_version_id,
+            assessment=assessment,
+            retrieval_error_code="VECTOR_INDEX_NOT_READY",
+            retrieval_error_route="vector",
+        )
+    config = session.get(EmbeddingConfig, version.embedding_config_id)
+    if config is None or not validate_embedding_config(config):
+        assessment = unavailable_assessment(
+            "EMBEDDING_CONFIG_UNVERIFIED", query_text=payload.question, route="embedding"
+        )
+        return _retrieval_test_response(
+            knowledge_base_id=knowledge_base_id,
+            index_version_id=index_version_id,
+            assessment=assessment,
+            retrieval_error_code="EMBEDDING_CONFIG_UNVERIFIED",
+            retrieval_error_route="embedding",
+        )
+
+    query = HybridCandidateQuery(SqliteVecAdapter(request.app.state.settings.vectors_dir))
+    try:
+        expected_scope_signature = query.capture_scope_signature(
+            session, knowledge_base_id, index_version_id
+        )
+    except HybridQueryError as error:
+        assessment = unavailable_assessment(
+            error.code, query_text=payload.question, route="scope"
+        )
+        return _retrieval_test_response(
+            knowledge_base_id=knowledge_base_id,
+            index_version_id=index_version_id,
+            assessment=assessment,
+            retrieval_error_code=error.code,
+            retrieval_error_route="scope",
+        )
+
+    try:
+        query_vector = request.app.state.retrieval_query_encoder.embed_query(payload.question)
+    except RetrievalQueryEncoderError as error:
+        assessment = unavailable_assessment(
+            error.code, query_text=payload.question, route="embedding"
+        )
+        return _retrieval_test_response(
+            knowledge_base_id=knowledge_base_id,
+            index_version_id=index_version_id,
+            assessment=assessment,
+            retrieval_error_code=error.code,
+            retrieval_error_route="embedding",
+        )
+
+    result = query.search_and_assess_with_status(
+        session,
+        knowledge_base_id=knowledge_base_id,
+        index_version_id=index_version_id,
+        query_text=payload.question,
+        query_vector=query_vector,
+        allow_degraded=False,
+        expected_scope_signature=expected_scope_signature,
+    )
+    return _retrieval_test_response(
+        knowledge_base_id=knowledge_base_id,
+        index_version_id=index_version_id,
+        assessment=result.assessment,
+        retrieval=result.retrieval,
+        retrieval_error_code=result.retrieval_error_code,
+        retrieval_error_route=_retrieval_error_route(result.retrieval_error_route),
+    )

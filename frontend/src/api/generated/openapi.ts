@@ -205,6 +205,55 @@ export interface components {
     "task_id": string;
     "file": components["FileItemResponse"]
   };
+  "RetrievalTestCandidateResponse": {
+    "chunk_id": string;
+    "file_id": string;
+    "file_name": string;
+    "location": components["RetrievalTestLocation"];
+    "excerpt": string;
+    "rank": number;
+    "fts_rank"?: number | null;
+    "bm25"?: number | null;
+    "vector_rank"?: number | null;
+    "cosine_distance"?: number | null;
+    "cosine_similarity"?: number | null;
+    "rrf_score"?: number | null;
+    "exact_match_bonus": number;
+    "diversity_adjustment": number;
+    "ranking_score"?: number | null;
+    "exact_match_fields": Array<string>;
+    "ranking_reasons": Array<string>
+  };
+  "RetrievalTestLocation": {
+    "sequence_number": number;
+    "heading_path": Array<string>;
+    "page_start"?: number | null;
+    "page_end"?: number | null;
+    "slide_number"?: number | null;
+    "line_start"?: number | null;
+    "line_end"?: number | null;
+    "source_kind"?: string | null
+  };
+  "RetrievalTestRequest": {
+    "question": string
+  };
+  "RetrievalTestResponse": {
+    "knowledge_base_id": string;
+    "index_version_id": string | null;
+    "status": "supported" | "insufficient" | "unavailable";
+    "question_type": string;
+    "ranking_algorithm_version": string;
+    "evidence_rules_version": string;
+    "rank_constant": number;
+    "final_candidate_limit": number;
+    "distinct_source_count": number;
+    "reason_codes": Array<string>;
+    "retrieval_error_code"?: string | null;
+    "retrieval_error_route"?: "embedding" | "scope" | "fts" | "vector" | null;
+    "candidates": Array<components["RetrievalTestCandidateResponse"]>;
+    "local_message"?: string | null;
+    "suggestions": Array<string>
+  };
   "ServiceStatus": {
     "status": string;
     "service": string;
@@ -315,6 +364,9 @@ export interface operations {
   };
   "DELETE /api/v1/trash/knowledge-base/{knowledge_base_id}": {
     operationId: "purge_knowledge_base_api_v1_trash_knowledge_base__knowledge_base_id__delete"
+  };
+  "POST /api/v1/knowledge-bases/{knowledge_base_id}/retrieval-tests": {
+    operationId: "create_knowledge_base_retrieval_test_api_v1_knowledge_bases__knowledge_base_id__retrieval_tests_post"
   };
   "POST /api/v1/file-imports": {
     operationId: "create_file_import_api_v1_file_imports_post"

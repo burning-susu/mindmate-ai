@@ -6,7 +6,7 @@
 - 当前远程提交：以 `git ls-remote --heads origin feat/v1-bootstrap` 为准；本文件随本批次收口提交推送
 - 最后更新时间：`2026-09-24`
 - 当前开发阶段：阶段 5 开发中，状态 `PARTIAL`
-- 当前批次状态：第二十一批“服务端来源快照与范围校验”结论 `PASS`；阶段 5 状态 `PARTIAL`
+- 当前批次状态：第二十二批 Citation 绑定因无真实 Chat/Learning owner 而 `BLOCKED` 并延期到阶段 6/7；第二十三批本地测试检索 API `PASS`；阶段 5 状态 `PARTIAL`
 
 ## 已完成阶段
 
@@ -33,11 +33,11 @@
 - Embedding 配置：新默认配置已保存 BAAI 基础 revision、ONNX revision 与 artifact fingerprint 的复合 `model_revision`；既有 `NULL` 行保留用于历史追溯，没有新增数据库结构。
 - 持久 Embedding：独立 `INDEX_EMBED` Worker 仅消费仍有效且已 `CHUNKED` 的版本输入；固定配置、模型与 tokenizer 指纹后懒加载现有本地 ONNX，文件级隔离失败、取消、租约续期和中断恢复；EmbeddingRecord 按 Chunk/EmbeddingConfig 跨库复用，sqlite-vec 物理向量按配置与 IndexVersion 隔离，ID/hash 幂等对账后才提交成功检查点。
 - 向量 Adapter：在 Windows 文件 SQLite 中校验 512 维、有限单位向量、持久存在性、hash 对账、幂等 upsert 和按 ID/版本删除；扩展加载权限仅在加载期间开启。永久删除知识库只清理其版本向量，保留仍可复用的 Chunk/EmbeddingRecord；永久删除文件清理其向量映射、记录和 Chunk。
-- 内部向量 Top-K：`SqliteVecAdapter.search` 校验 512 维单位查询向量和 `k<=30`，全量读取同版本 KNN 候选后先按业务范围过滤，再按距离与记录 ID 稳定排序；`VectorTopKQuery` 重新校验知识库、IndexVersion、成员加入时间、文件解析修订/回收站、Chunk 和 `EmbeddingRecord` 有效性，返回可追溯的 Chunk/File/Version/距离/相似度/rank。该查询只读，不激活索引，也没有公开 API。
+- 内部向量 Top-K：`SqliteVecAdapter.search` 校验 512 维单位查询向量和 `k<=30`，全量读取同版本 KNN 候选后先按业务范围过滤，再按距离与记录 ID 稳定排序；`VectorTopKQuery` 重新校验知识库、IndexVersion、成员加入时间、文件解析修订/回收站、Chunk 和 `EmbeddingRecord` 有效性，返回可追溯的 Chunk/File/Version/距离/相似度/rank。内部查询只读、不激活索引；第二十三批增加受本地会话保护的检索测试 API。
 - 持久 FTS5：独立 `INDEX_FTS` Worker 只消费同版本有效的 `PREPARED + CHUNKED` 输入；以 `IndexVersion + Chunk` 映射隔离，逐文件 FTS5 行、映射、输入检查点和任务进度在同一主 SQLite 事务提交。支持租约接管、取消、幂等重建和显式失败重试，不修改 Chunk/Embedding 权威数据，也不激活版本。
 - 中文关键词投影：FTS5 仍使用 `unicode61` 和 BM25；中文按连续汉字生成重叠二元词及单字辅助列，支持中文短查询；拉丁词项大小写折叠。没有公开 MATCH API 或前端搜索；向量 Top-K、RRF 和证据门控只存在于内部链路及用例。
-- 内部检索排序：双路 Top 30 按 `chunk_id` 合并后使用 RRF 常量 `60`，分数为各有效通道 `1/(60 + rank)` 之和；NFKC/大小写折叠后的完整查询短语和精确词项获得最高 `0.004` 的局部奖励；相同来源及相邻高重叠 Chunk 接受有界软惩罚，确定性输出最多 Top 8。结果保留原始双路信号、排序版本/参数、精确命中字段、调整原因和显式降级状态。应用层内部查询只读当前活动 `READY` 版本，`BUILDING` 候选不可进入检索；无公开检索/API。
-- 内部证据充分性判定：排序后最多 Top 8 使用版本化规则 `evidence-gate-v1`；要求有效双路排名、校验过的余弦相似度、正文精确术语/编号覆盖和靠前排名，记录问题类型、来源覆盖与触发原因。标题、RRF 奖励和多样性分不能单独放行；复合问题或明显冲突整体拒绝。`insufficient` 只产生固定本地提示与建议；索引/范围/通道故障返回 `unavailable`，不伪装成资料不足。`supported` 只表示可进入后续引用绑定/生成候选流程，不是事实证明。无公开 API、模型调用、引用编号或用户级检索。
+- 内部检索排序：双路 Top 30 按 `chunk_id` 合并后使用 RRF 常量 `60`，分数为各有效通道 `1/(60 + rank)` 之和；NFKC/大小写折叠后的完整查询短语和精确词项获得最高 `0.004` 的局部奖励；相同来源及相邻高重叠 Chunk 接受有界软惩罚，确定性输出最多 Top 8。结果保留原始双路信号、排序版本/参数、精确命中字段、调整原因和显式降级状态。只读取当前活动 `READY` 版本；`BUILDING` 候选不可进入检索。第二十三批仅通过本地检索测试 API 暴露调试结果。
+- 内部证据充分性判定：排序后最多 Top 8 使用版本化规则 `evidence-gate-v1`；要求有效双路排名、校验过的余弦相似度、正文精确术语/编号覆盖和靠前排名，记录问题类型、来源覆盖与触发原因。标题、RRF 奖励和多样性分不能单独放行；复合问题或明显冲突整体拒绝。`insufficient` 只产生固定本地提示与建议；索引/范围/通道故障返回 `unavailable`，不伪装成资料不足。`supported` 只表示候选可进入后续处理，不是事实证明。检索测试 API 不生成模型回答、Citation 或持久数据。
 - 索引激活：新候选只有在最新输入快照、Chunk、Embedding/向量及 FTS 映射/倒排结构对账通过，且任务检查点与配置一致后才能进入短事务切换。构建期间继续读取当前 `READY` 版本；失败不改活动指针，不清理旧版本产物。阶段失败、空库、部分失败和过期候选分别记录 `FAILED`、`EMPTY`、`PARTIAL`/`READY` 和 `SUPERSEDED` 语义。
 - 增量索引：预处理任务持久保存 `FULL/INCREMENTAL` 计划与新增、变更、未变、移除、待解析、失败和复用数量。复用要求内容哈希、解析修订、切片配置指纹、Embedding 模型/版本/维度/归一化/距离配置和向量引擎兼容；未变 Chunk 不再解析切片，已有 EmbeddingRecord/向量按版本复制且不会调用 ONNX，FTS 投影复用后仍接受候选全量完整性复核。配置不兼容进入完整重建；复用源失效则回退到既有计算阶段。
 - 服务端来源快照：只消费内部混合检索产生且证据门控为 `supported` 的候选身份；在 SQLite 写事务中先取得写锁，再重查活动 READY 索引、知识库成员、文件版本/解析修订、Chunk、FTS 映射和 EmbeddingRecord。快照只保存数据库来源名、真实定位、受控摘录与哈希，不接受请求侧路径/正文；按知识库/索引版本/Chunk 幂等。读取动态报告回收站、范围和旧索引状态，不返回磁盘路径；永久删除文件净化摘录/正文哈希并断开文件与 Chunk 关联。
@@ -46,7 +46,7 @@
 
 - 阶段 4 无未解决功能、安全、数据一致性或迁移阻塞项；需求追踪详见 `docs/test-reports/stage-4-file-management.md`。
 - 发布候选保留：正式恶意文档集、真实资源耗尽边界、干净 Windows 安装/升级/卸载包，依据发布流程执行，不回填为阶段 4 已完成证据。
-- 阶段 5 缺口：来源快照 owner/Citation 绑定、用户级严格拒答/RAG 流程、公开测试检索及面向验收集的证据阈值/质量校准仍未完成。第十八批门槛只供内部判断，不证明候选蕴含事实；原子激活与增量构建仍未开放用户检索。
+- 阶段 5 缺口：来源快照 owner/Citation 绑定（延期到阶段 6/7）、前端本地检索测试页面、用户级严格拒答/RAG 流程、面向验收集的证据阈值/质量校准与性能评估仍未完成。`supported` 不证明候选蕴含事实；本地调试端点不构成 AC-KB-003、Recall@10 或聊天验收。
 
 ## 第十八批交接
 
@@ -86,17 +86,34 @@
 - 本批没有公开检索/Citation API、OpenAPI、前端、消息/学习 owner、DeepSeek 或其他真实外部调用；不代表最终答案事实正确，也不构成 AC-KB-003、Recall@10 或质量性能验收。
 - 下一开发批次唯一目标：定义并实现来源快照到真实 Chat/Learning owner 的服务端 Citation 绑定边界，暂不生成模型回答。
 
+## 第二十二批依赖处理
+
+- 第二十二批 `BLOCKED`：当前没有持久化 Chat/Learning owner 与可验证知识库范围快照；不得用 `TaskAttempt` 冒充学习会话，也不得伪造 owner 或 Citation。
+- 当时工作区保持干净，起止本地/远端 SHA 均为 `e1766c3d173f4613e368bbb8988a343ca207738e`，没有代码、文档、测试或提交变化。
+- Citation 绑定依赖延期到阶段 6/7 建立真实 owner 后再做；不阻塞不依赖 owner 的第二十三批本地检索测试接口。
+
+## 第二十三批交接
+
+- 本批结论：`PASS`；阶段 5 继续 `PARTIAL`。起始本地/远端 SHA 均为 `e1766c3d173f4613e368bbb8988a343ca207738e`。
+- 新增 `POST /api/v1/knowledge-bases/{knowledge_base_id}/retrieval-tests`。请求只接受经长度验证的问题，不接受调用方指定索引、文件集合、Embedding 模型或路径；继承本地 Host、Origin、本地会话与幂等键保护。
+- 服务端固定读取当前活动 `READY` 索引，编码前捕获索引/成员/文件/Chunk/Embedding 范围指纹，并与检索阶段校验值比较。复用 FTS5/vector 双路 Top 30、RRF 与规则重排 Top 8、`evidence-gate-v1`；索引/范围变化与单路错误显式返回 `unavailable` 及原因码/路由。
+- 本地模型只在端点调用时懒加载，读取固定安装路径并调用 `allow_download=false`。缺失/损坏与资料不足分开报告；不调用 DeepSeek/Provider，不创建任务、消息、来源快照、Citation 或回答。
+- 候选输出文件/Chunk 身份、真实页/幻灯片/行/标题定位、受控片段和双路排名/分数；最多 8 个候选、每个摘录最多 1200 字符，完整响应不超过 64 KiB。同步 OpenAPI 3.1 与前端生成类型/客户端；没有新增页面或数据库迁移。
+- 后端 API 集成矩阵覆盖 `supported/insufficient/unavailable`、空库、离线缺失模型、坏输入/越权范围字段、本地 Origin/Session 保护、跨知识库、当前活动版本与待索引成员、回收站、索引/成员竞态、FTS/vector 故障与无数据库写入。串行全量 `176 passed`；`uv run ruff check src tests`、Pyright（0 errors）、compileall、Alembic head `6b3e91a0c4d7` 均通过。前端 API 类型生成、typecheck、lint、build 通过；没有页面改动，未跑 UI E2E。
+- 验收边界：第二十二批 owner/Citation 绑定仍延期到阶段 6/7；本地检索测试不是聊天/答案 API，也不代表 `AC-KB-003`、最终 Recall@10、阈值校准或性能验收通过。
+
 ## 测试状态
 
-- 后端测试：`164 passed`（包含第二十一批 10 项服务端来源快照测试，覆盖内部混合检索与 gate、重启读取、范围/版本变化、竞态、幂等、定位和删除净化）
+- 后端测试：`176 passed, 143 warnings`（最终串行全量，含第二十一批来源快照用例与第二十三批只读检索 API 集成矩阵）
 - 阶段 4 后端定向测试：`21 passed`
-- 后端静态检查：`uv run ruff check src tests` 通过；Pyright `0 errors, 0 warnings, 0 informations`。`ruff check .` 的额外全目录扫描发现既有 migrations lint 项，本批未改。
+- 后端静态检查：本批 `uv run ruff check src tests` 与 `uv run pyright src tests` 通过（Pyright `0 errors, 0 warnings, 0 informations`）。本批未运行 `ruff check .`；历史全目录扫描的既有 Alembic lint 项未修改。
 - 后端 compileall：通过
 - 前端测试：`13 passed`
 - 前端类型检查：通过
+- 前端 lint：通过
 - 前端构建：通过
 - 浏览器 E2E：最近一次历史证据为阶段 4 文件回归与阶段 5 知识库共 `2 passed`（各 1 项），由隔离 SQLite、真实本地 FastAPI + Vite 代理运行；第十九批无前端/API 改动，未重跑 UI E2E
-- OpenAPI 同步：OpenAPI 3.1，`34 schemas / 50 operations`；任务详情包含 `task_type` 和 `index_version_id`
+- OpenAPI 同步：OpenAPI 3.1，`38 schemas / 51 operations`；新增本地检索测试请求/响应类型与操作
 - 数据库迁移：最新 revision `6b3e91a0c4d7`；空库升级/降级/重升级及阶段 5 既有数据迁移回归通过。
 
 ## 第十三批交接
@@ -144,7 +161,7 @@
 
 ## 下一开发批次
 
-- 阶段 5 下一个唯一目标：定义并实现来源快照到真实 Chat/Learning owner 的服务端 Citation 绑定边界，暂不生成模型回答。
+- 阶段 5 下一个唯一目标：实现本地检索测试页面并调用已完成的只读检索 API，不生成回答或绑定 Citation。
 
 ## 交接说明
 

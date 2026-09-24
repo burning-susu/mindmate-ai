@@ -27,6 +27,7 @@ from mindmate.application.index_fts_worker import IndexFtsWorker
 from mindmate.application.index_preprocessing_worker import IndexPreprocessingWorker
 from mindmate.application.knowledge_membership_worker import KnowledgeMembershipWorker
 from mindmate.application.parse_worker_service import ParsingWorker
+from mindmate.application.retrieval_test_queries import LocalRetrievalQueryEncoder
 from mindmate.config import Settings, get_settings
 from mindmate.infrastructure.db import create_session_factory, create_sqlite_engine, quick_check
 from mindmate.security.instance import SingleInstanceLock
@@ -148,6 +149,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     app.state.settings = app_settings
+    app.state.retrieval_query_encoder = LocalRetrievalQueryEncoder(app_settings.model_dir)
 
     app.add_middleware(
         CORSMiddleware,

@@ -174,3 +174,11 @@ Windows 11 x64 / Python 3.12.11 实际 CPU 验证使用 ONNX Runtime 1.30.0、to
 - 创建只信数据库重新加载的 Chunk 正文、FileRecord 显示名和真实定位；候选携带正文/标题若与数据库不一致就拒绝。软删除读取为 `SOURCE_IN_TRASH` 且 `can_open_source=false`，但保留历史摘录；文件版本变化为 `SOURCE_VERSION_STALE`；成员退出为 `SOURCE_OUT_OF_SCOPE`；活动索引重建为 `INDEX_VERSION_RETIRED`，旧快照仍指向原版本。读取返回 typed view，不含本地绝对路径。
 - 文件永久删除 helper 与 `trg_source_snapshots_file_purge` SQLite BEFORE DELETE trigger 清空摘录、正文/文件版本 hash、解析修订及 File/Chunk 关系，同时保留文件名和定位说明；知识库永久删除清理无 owner 的 pending snapshots。文件永久删除后读取为 `SOURCE_DELETED`，不再提供正文。
 - 本批无公开 Citation/检索 API、OpenAPI、前端、Provider 请求或 owner 模型。`tests/test_stage5_source_snapshots.py` 用离线 FTS5/sqlite-vec 搜索和证据门控验证合法快照，并覆盖重启、伪造输入、跨库/版本/成员/文件错误、写事务竞态、幂等、定位空值、索引重建历史和删除净化。最终串行后端 `164 passed`，Ruff、Pyright、compileall、`git diff --check` 通过，Alembic head 为 `6b3e91a0c4d7`；未完成 Citation owner、AC-KB-003、Recall@10 或质量性能验收。
+
+## 本地测试检索 API 阶段（第二十三批）
+
+- `POST /api/v1/knowledge-bases/{knowledge_base_id}/retrieval-tests` 只接受 JSON `question`，去除首尾空白后长度为 1–2000 字符；额外字段一律拒绝。客户端不能指定 `index_version_id`、文件集合、Embedding 模型或系统路径。路由沿用全局本地 Host、Origin、会话 Cookie 和 POST 幂等键校验。
+- 服务端只读取路径知识库当前活动的 `READY` `IndexVersion`，并检查知识库未回收、索引范围/向量引擎、FTS/Embedding 状态和固定 `LOCAL_ONNX` Embedding 配置。无活动索引或无可用本地模型返回显式 `unavailable` 状态及稳定错误码；查询模型只校验已安装的固定 BGE ONNX 产物并使用 `allow_download=false`，此端点不下载模型。
+- 双路行为复用既有 FTS5 Top 30、sqlite-vec Top 30、Chunk 去重、`rrf-exact-diversity-v1` Top 8 和 `evidence-gate-v1`。开始本地问题向量计算前捕获活动索引/成员/文件/Chunk/Embedding 范围指纹，计算和检索期间再次核对；索引或范围变化返回 `unavailable`/`RETRIEVAL_SCOPE_CHANGED`，不返回部分旧结果。FTS 或向量单路故障采用严格失败语义，并返回 `unavailable`、错误路由和原因码，不伪装成完整双路结果。
+- 响应包含 `supported`/`insufficient`/`unavailable`、索引与算法/证据规则版本、候选 Chunk/File ID、文件名、数据库真实页/幻灯片/行/标题定位、最多 1200 字符摘录、FTS/vector 双路 rank/score 与融合解释；最多 8 个候选，完整 JSON 响应限制为 64 KiB。不得把调试候选转换为 Citation 编号或 `[1]`。
+- 接口只读：不创建消息、Chat/Learning owner、来源快照、Citation、后台任务或回答，不调用 DeepSeek/Provider，也不把问题写入敏感日志。此本地测试端点不等同公开聊天检索、AC-KB-003、Recall@10 或质量/性能验收；前端检索测试页面仍待后续实现。
