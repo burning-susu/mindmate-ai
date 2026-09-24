@@ -4,9 +4,9 @@
 
 - 当前开发分支：`feat/v1-bootstrap`
 - 当前远程提交：以 `git ls-remote --heads origin feat/v1-bootstrap` 为准；本文件随本批次收口提交推送
-- 最后更新时间：`2026-09-24`
+- 最后更新时间：`2026-09-25`
 - 当前开发阶段：阶段 5 开发中，状态 `PARTIAL`
-- 当前批次状态：第二十二批 Citation 绑定因无真实 Chat/Learning owner 而 `BLOCKED` 并延期到阶段 6/7；第二十三批本地测试检索 API、第二十四批知识库详情测试检索页面、第二十五批固定 READY 资料与真实浏览器候选验证均为 `PASS`；阶段 5 状态 `PARTIAL`
+- 当前批次状态：第二十二批 Citation 绑定因无真实 Chat/Learning owner 而 `BLOCKED` 并延期到阶段 6/7；第二十三批本地测试检索 API、第二十四批知识库详情测试检索页面、第二十五批固定 READY 资料与真实浏览器候选验证、第二十六批真实 ONNX 证据门控基线评测均为 `PASS`；阶段 5 状态 `PARTIAL`
 
 ## 已完成阶段
 
@@ -137,6 +137,17 @@
 - 验收：后端串行 `uv run pytest` 为 `176 passed, 143 warnings`；`uv run ruff check src tests scripts`、`uv run pyright src tests scripts/prepare_stage5_fixed_ready.py`（0 errors）、`uv run python -m compileall -q src tests migrations scripts`、`uv run alembic heads`（`6b3e91a0c4d7`）通过。前端 `npm run typecheck`、`npm run lint`、`npm test -- --run`（21 passed）、`npm run build` 通过；真实 Chromium Playwright `2 passed`；`git diff --check` 通过。浏览器截图保存在 `%TEMP%\mindmate-ai-stage5-fixed-ready\evidence\`。
 - 未验证范围：固定样本只证明当前本地运行闭环，不替代 Recall@10、10 万 Chunk 性能、阈值校准或 AC-KB-* 全量验收。未调用 DeepSeek、真实凭据、付费服务或个人资料；Citation owner 仍延期到阶段 6/7。
 
+## 第二十六批交接
+
+- 本批状态：`PASS`；阶段 5 继续 `PARTIAL`。起始本地与远端 SHA 均为 `3ef9a33adcdae5adb06e6a6835d44fdbbf84ed3d`。
+- 评测集：31 条核心人工标注查询与 2 条 `needs_review`；标注独立于检索输出，覆盖直问、改写、编号/近似编号、错误数值、无答案、短词干扰、跨库、回收站、复合问题和显式冲突。评测语料仅为合成资料，隔离数据根为 `%TEMP%\mindmate-ai-stage5-evidence-gate-v1`。
+- 真实检索结果：门控混淆表 TP `0`、FN `16`、FP `0`、TN `15`。16 个假阴性均在 Top 8 含标注支持文件；顶层原因 11 个 `VECTOR_SIMILARITY_BELOW_THRESHOLD`、3 个 `NUMERIC_ANSWER_VALUE_NOT_FOUND`、2 个复合问题拒绝。无召回缺失型假阴性、无假阳性、无跨范围候选。全部 33 次检索均 `insufficient`，没有 `unavailable`。
+- 排名与分数：首轮 Top 8 共 101 条候选，Vector 命中 101、FTS 命中 2（均为双路命中），99 条 Vector-only、0 条 FTS-only；两条 FTS 命中来自短词拒答项。最终/原始排名和余弦一致性检查均通过。相似度 min/median/max 为 `0.3356/0.4835/0.7127`；16/16 可回答查询的人工标注文件出现在 Top 8。
+- 规则敏感性：只在已观察 Top 8 候选上模拟 `0.65/0.70/0.75/0.82/0.85`，混淆表没有变化；未改生产 `evidence-gate-v1` 配置或 `0.82` 门槛。单独调低余弦下限不足以解决当前误拒。
+- 复跑：最终脚本两次独立运行，每次 `--repeat 2`，每次内部签名稳定；两次独立报告签名均为 `c5d216439163910865464f3130edc1eafd18a445978c2d3ca42cafb0aabd4931`。查询前后计数均为 9 files / 4 knowledge bases / 24 tasks，没有评测写入。报告位于隔离根的 `stage5-evidence-gate-v1-report.json`。
+- 验收：串行 `uv run pytest` `179 passed, 143 warnings`（2:22）；Ruff 全目录通过；Pyright `0 errors, 0 warnings, 0 informations`；compileall、Alembic head `6b3e91a0c4d7`、`git diff --check` 通过。未改前端，未运行前端门禁。
+- 下一开发批次唯一目标：以固定人工查询集测量中文自然问句的 FTS5 命中与 hard-negative 分布，先定位 FTS 候选召回问题，不调整证据门槛。
+
 ## 第十三批交接
 
 - 本批状态：`PASS`；阶段 5 仍为 `PARTIAL`。
@@ -182,7 +193,7 @@
 
 ## 下一开发批次
 
-- 阶段 5 下一个唯一目标：用固定真实 ONNX 中文查询样本评估 `evidence-gate-v1` 当前门槛下的 supported/insufficient 判定分布，先建立证据与校准结论，不在未治理前调整阈值或绑定 Citation。
+- 阶段 5 下一个唯一目标：用固定人工查询集测量中文自然问句的 FTS5 命中与 hard-negative 分布，定位双路候选召回问题；不调整证据门槛。
 
 ## 交接说明
 

@@ -821,3 +821,55 @@ repo> git diff --check
 ~~~
 
 没有数据库迁移、公开 API/OpenAPI schema 或 Provider 改动；没有 DeepSeek、真实凭据、付费外部服务或个人资料。固定样本不等于 Recall@10、10 万 Chunk 性能、门控阈值校准或 AC-KB-* 全量验收。第二十五批 `PASS`；阶段 5 继续 `PARTIAL`；Citation owner 仍待阶段 6/7。下一批唯一目标：用固定真实 ONNX 中文查询样本评估现有 `evidence-gate-v1` 判定分布，不先调整阈值。
+
+## 第二十六批评测追踪：真实 ONNX 证据门控基线
+
+| 项目 | 证据与结果 |
+| --- | --- |
+| 批次/阶段状态 | 第二十六批 `PASS`；阶段 5 继续 `PARTIAL`。起始本地/远端 SHA 均为 `3ef9a33adcdae5adb06e6a6835d44fdbbf84ed3d`。 |
+| 固定样本 | 31 条核心人工标注、2 条 `needs_review`；覆盖直问、改写、实体/编号、近似编号、错误数值、无答案、短词干扰、跨知识库、回收站、复合问题和显式冲突。真值在查询前写入 `docs/test-data/stage5-fixed-ready/evidence-gate-v1-queries.json`，不从 gate 输出反推。 |
+| 真实模型与索引 | BAAI `7999e1d3359715c523056ef9478215996d62a620` + Xenova ONNX `75c43b069aac4d136ba6bc1122f995fedcfd2781`，manifest fingerprint `4d07bfc3eefa75de01924a4350eef08182c163b0060228410c3d882c9f07c6a5`。三个 READY 库使用实际 FTS5、sqlite-vec 和本地 ONNX；DeepSeek 未调用。 |
+| 混淆表 | 核心样本 31：TP `0`、FN `16`、FP `0`、TN `15`；全部 33 个请求为 `insufficient`，`unavailable` 为 0。16 个 FN 均在 Top 8 找到标注支持文件，召回缺失型 FN `0`；假阳性为 0，跨范围候选为 0。 |
+| FN 顶层原因 | `VECTOR_SIMILARITY_BELOW_THRESHOLD` 11 条；`NUMERIC_ANSWER_VALUE_NOT_FOUND` 3 条；`COMPOSITE_OR_OPEN_LIST_QUESTION` 2 条。冲突、无答案、错误编号、短词不足、跨库和回收站用例均正确拒答。 |
+| Top 8 排名信号 | 共 101 条候选：Vector 101、FTS 2（全部同时命中 Vector）、Vector-only 99、FTS-only 0。两条 FTS 命中来自 `API?` / `ID?` 短词拒答。最终 rank、FTS/Vector 原始 rank、BM25 与余弦距离/相似度校验全部通过。 |
+| 相似度 | Top 8 cosine similarity min/median/max：`0.3356 / 0.4835 / 0.7127`；可回答查询的标注证据 Top 8 覆盖 `16/16`。该 Top 8 指标不代表 Recall@10。 |
+| 离线门槛敏感性 | 已观察 Top 8 候选上模拟 `0.65/0.70/0.75/0.82/0.85`，所有混淆表仍为 TP `0`、FN `16`、FP `0`、TN `15`。没有更改运行时 `0.82` 或其他 gate 参数；单独调低余弦阈值没有证据支持。 |
+| 稳定性与写入 | 最终版本两次独立运行各含两次内部复跑；每次内部结果签名稳定，跨运行 SHA-256 签名同为 `c5d216439163910865464f3130edc1eafd18a445978c2d3ca42cafb0aabd4931`。检索前后均为 9 files / 4 knowledge bases / 24 tasks；查询没有写入数据。 |
+| 隔离和报告 | 原 `%TEMP%\\mindmate-ai-stage5-fixed-ready` 正被本地浏览器验收服务使用；本批使用新所有权标记目录 `%TEMP%\\mindmate-ai-stage5-evidence-gate-v1`。真实 JSON 输出保存在隔离根 `stage5-evidence-gate-v1-report.json`，模型文件和临时数据库不进 Git。 |
+| 下一步 | 单一最小目标：用人工查询集测量中文自然问句的 FTS5 命中与 hard-negative 分布，定位双路候选召回问题；不调整证据门槛。 |
+
+### 第二十六批实际验证命令
+
+~~~text
+backend> uv run python scripts/evaluate_stage5_evidence_gate.py --data-dir "$env:TEMP\\mindmate-ai-stage5-evidence-gate-v1" --repeat 2
+两次独立运行均 COMPLETED；每次 31 core + 2 needs_review；内部签名 stable=True
+
+backend> uv run pytest tests/test_stage5_evidence_gate_eval.py
+3 passed
+
+backend> uv run pytest
+179 passed, 143 warnings (串行全量，2:22)
+
+backend> uv run ruff check scripts/prepare_stage5_fixed_ready.py scripts/evaluate_stage5_evidence_gate.py tests/test_stage5_evidence_gate_eval.py
+All checks passed
+
+backend> uv run pyright scripts/evaluate_stage5_evidence_gate.py scripts/prepare_stage5_fixed_ready.py tests/test_stage5_evidence_gate_eval.py
+0 errors, 0 warnings, 0 informations
+
+backend> uv run ruff check src tests scripts
+All checks passed
+
+backend> uv run pyright src tests scripts/prepare_stage5_fixed_ready.py scripts/evaluate_stage5_evidence_gate.py
+0 errors, 0 warnings, 0 informations
+
+backend> uv run python -m compileall -q src tests migrations scripts
+通过
+
+backend> uv run alembic heads
+6b3e91a0c4d7 (head)
+
+repo> git diff --check
+通过
+~~~
+
+这套小样本用于诊断现有证据门控，不宣称达到发布门槛 Recall@10 `>=0.85`、引用定位正确率、资料不足拒答召回率或最终回答质量。没有调整检索规则、索引架构或 Citation；没有 DeepSeek、真实凭据、付费 API 或个人资料。

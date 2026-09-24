@@ -9,8 +9,17 @@
 | `服务超时策略.txt` | `第二十五批·固定资料主库` | `30 秒`；源文件第 3 行，解析定位为第 1-12 行段落 | READY 后可检索 |
 | `相似服务超时策略.txt` | `第二十五批·相似干扰库` | `47 秒`；源文件第 3 行，解析定位为本文件段落 | 仅在相似干扰库可检索，主库不可见 |
 | `回收站范围验证.txt` | 主库，索引 READY 后移入回收站 | `TRASH-9274`；源文件第 3 行 | 移入回收站后不可检索 |
+| `阶段5评测_参数记录.txt` | `第二十六批·证据门控评测库` | `OPS-R7-204`、`17 秒`、每批 `6` 个文件 | READY 后可检索 |
+| `阶段5评测_组件记录.txt` | 同上 | `CACHE-PROXY-K3`、诊断窗口 `12 分钟` | READY 后可检索 |
+| `阶段5评测_冲突甲.txt` / `阶段5评测_冲突乙.txt` | 同上 | 审计记录分别为 `12 天` / `18 天` | READY 后共同构成显式冲突 |
+| `阶段5评测_短词干扰.txt` | 同上 | AI、RAG、KB、API、ID | READY 后可检索 |
+| `阶段5评测_回收站.txt` | 评测库，索引 READY 后移入回收站 | `S5-TRASH-6142` | 移入回收站后不可检索 |
 
 主库问题：`API 单次请求超时时间是多少秒？`。资料外问题：`南极冰芯中氮同位素的具体丰度百分比是多少？`。
+
+## 第二十六批门控评测
+
+人工标注保存在 `evidence-gate-v1-queries.json`，与机器检索输出分开。核心样本覆盖直问、改写、编号、错误数值、无答案、短词干扰、跨知识库、回收站、复合问题和冲突；`needs_review` 项会实际查询并展示，但不进入混淆表分母。答案充分性和允许支持文件由标注者按固定原文填写，不从门控结果反推。
 
 准备脚本还保留一个无成员、无活动索引的诊断知识库，用于每轮验证 API 明确返回 `unavailable / INDEX_VERSION_NOT_AVAILABLE`；它不含资料，也不会参加索引任务。
 
@@ -23,11 +32,20 @@ $data = Join-Path $env:TEMP 'mindmate-ai-stage5-fixed-ready'
 uv run python scripts/prepare_stage5_fixed_ready.py --data-dir $data
 ```
 
-脚本会在该目录创建所有权标记；已有非空目录若没有该标记会拒绝使用。重复运行会复用固定文件、三个知识库、成员、任务和活动索引，并在第二轮检查记录数不变。脚本只通过文件导入 API、知识库 API、成员任务和各阶段索引入队/激活服务创建数据；数据库读取仅用于状态和产物核验。脚本不清理目录。
+脚本会在该目录创建所有权标记；已有非空目录若没有该标记会拒绝使用。重复运行会复用固定文件、三个 READY 知识库、一个未就绪诊断知识库、成员、任务和活动索引，并在第二轮检查记录数不变。脚本只通过文件导入 API、知识库 API、成员任务和各阶段索引入队/激活服务创建数据；数据库读取仅用于状态和产物核验。脚本不清理目录。
 
 固定模型来自 Git 忽略的 `backend/model-cache/manager-validation`。脚本先用项目 `ModelManager` 按 manifest 文件大小、SHA-256 和配置离线复验，再复制到临时数据根目录的 `models` 并再次验证。已验证时不联网、不下载；源缓存只读，模型文件不会进入 Git。缺失或校验失败时脚本明确终止，不会用 Mock 向量继续。
 
 准备期间启动的 `TestClient` 使用与本地应用相同的持久 Worker 和服务链路。脚本会验证解析、`INDEX_PREPROCESS`、`INDEX_CHUNK`、`INDEX_EMBED`、`INDEX_FTS` 检查点、激活后的 Chunk/Embedding/向量/FTS 产物，以及真实只读检索 API。验证摘要写入数据根目录的 `stage5-fixed-ready-report.json`。
+
+原固定 READY 数据根当前可由本地浏览器验收服务使用。为避免并发触碰该目录，评测使用同样带所有权标记的独立数据根 `%TEMP%\mindmate-ai-stage5-evidence-gate-v1`。从 `backend` 目录运行评测。评测命令会复用上述准备流程，确认隔离数据、manifest 校验模型和 READY 产物后，通过本地只读检索 API 连续运行两轮：
+
+```powershell
+$evalData = Join-Path $env:TEMP 'mindmate-ai-stage5-evidence-gate-v1'
+uv run python scripts/evaluate_stage5_evidence_gate.py --data-dir $evalData --repeat 2
+```
+
+报告写入 `%TEMP%\mindmate-ai-stage5-evidence-gate-v1\stage5-evidence-gate-v1-report.json`。任何样本返回 `unavailable`、模型离线校验失败、索引不 READY、标注范围不符或复跑不稳定都会以非零状态退出，不会计为严格拒答。报告包含模型/切片/索引/规则版本与参数、Top 8 双路排名和分数、混淆表、按类型计数、误判原因、跨范围候选和相似度分布。另含只在已观察 Top 8 候选上离线模拟不同余弦下限的敏感性分析，不改动应用中的 `0.82` 规则参数。该 Top 8 指标不等于发布要求的 Recall@10、引用正确率或最终回答指标。
 
 准备完成后，可启动真实 FastAPI 与 Vite，再运行实际 Chromium 浏览器检查：
 

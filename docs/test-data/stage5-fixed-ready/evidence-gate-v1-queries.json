@@ -1,0 +1,392 @@
+{
+  "schema_version": 1,
+  "dataset_id": "stage5-evidence-gate-v1",
+  "annotation_policy": "Labels were authored from the fixed source documents before retrieval results were collected. They are independent of gate output.",
+  "knowledge_bases": {
+    "primary": {
+      "expected_scope_files": ["服务超时策略.txt"],
+      "note": "Uses the existing primary READY library; its TRASH sample is excluded from active scope."
+    },
+    "decoy": {
+      "expected_scope_files": ["相似服务超时策略.txt"],
+      "note": "Uses the existing isolated similar-content library."
+    },
+    "evaluation": {
+      "expected_scope_files": [
+        "阶段5评测_参数记录.txt",
+        "阶段5评测_组件记录.txt",
+        "阶段5评测_冲突甲.txt",
+        "阶段5评测_冲突乙.txt",
+        "阶段5评测_短词干扰.txt"
+      ],
+      "note": "Synthetic-only evaluation library; the indexed S5-TRASH-6142 file is moved to trash before queries."
+    }
+  },
+  "items": [
+    {
+      "id": "S5-EG-001",
+      "category": "direct_question",
+      "knowledge_base": "primary",
+      "question": "API 单次请求超时时间是多少秒？",
+      "expected_sufficient": true,
+      "expected_fact": "普通 API 请求时限为 30 秒。",
+      "allowed_support_files": ["服务超时策略.txt"],
+      "rejection_reason": null,
+      "review_status": "core"
+    },
+    {
+      "id": "S5-EG-002",
+      "category": "synonym_rewrite",
+      "knowledge_base": "primary",
+      "question": "浏览器发起的一般查询最多等多久会超时？",
+      "expected_sufficient": true,
+      "expected_fact": "普通查询请求的时限为 30 秒。",
+      "allowed_support_files": ["服务超时策略.txt"],
+      "rejection_reason": null,
+      "review_status": "core"
+    },
+    {
+      "id": "S5-EG-003",
+      "category": "paraphrase",
+      "knowledge_base": "primary",
+      "question": "普通服务请求超过多长时间后会记录超时？",
+      "expected_sufficient": true,
+      "expected_fact": "请求超过 30 秒后，调用方记录超时。",
+      "allowed_support_files": ["服务超时策略.txt"],
+      "rejection_reason": null,
+      "review_status": "core"
+    },
+    {
+      "id": "S5-EG-004",
+      "category": "numeric_near_miss",
+      "knowledge_base": "primary",
+      "question": "普通 API 单次请求的超时上限是 31 秒吗？",
+      "expected_sufficient": false,
+      "expected_fact": null,
+      "allowed_support_files": [],
+      "rejection_reason": "提问中的数值与资料记录的 30 秒不一致。",
+      "review_status": "core"
+    },
+    {
+      "id": "S5-EG-005",
+      "category": "explicit_exclusion",
+      "knowledge_base": "primary",
+      "question": "索引构建后台任务是否也使用普通请求的 30 秒超时？",
+      "expected_sufficient": true,
+      "expected_fact": "否；持久后台任务不使用普通请求超时值。",
+      "allowed_support_files": ["服务超时策略.txt"],
+      "rejection_reason": null,
+      "review_status": "core"
+    },
+    {
+      "id": "S5-EG-006",
+      "category": "trashed_source",
+      "knowledge_base": "primary",
+      "question": "回收站专属校验编号 TRASH-9274 是什么？",
+      "expected_sufficient": false,
+      "expected_fact": null,
+      "allowed_support_files": [],
+      "rejection_reason": "包含该编号的文件已移入回收站，不属于活动检索范围。",
+      "review_status": "core"
+    },
+    {
+      "id": "S5-EG-007",
+      "category": "cross_kb_scope",
+      "knowledge_base": "primary",
+      "question": "演练系统的 API 超时时间是不是 47 秒？",
+      "expected_sufficient": false,
+      "expected_fact": null,
+      "allowed_support_files": [],
+      "rejection_reason": "47 秒只记录在另一个知识库，当前主库没有这项证据。",
+      "review_status": "core"
+    },
+    {
+      "id": "S5-EG-008",
+      "category": "no_answer",
+      "knowledge_base": "primary",
+      "question": "南极冰芯中氮同位素的具体丰度百分比是多少？",
+      "expected_sufficient": false,
+      "expected_fact": null,
+      "allowed_support_files": [],
+      "rejection_reason": "当前资料没有冰芯或氮同位素数据。",
+      "review_status": "core"
+    },
+    {
+      "id": "S5-EG-009",
+      "category": "short_term",
+      "knowledge_base": "primary",
+      "question": "API？",
+      "expected_sufficient": false,
+      "expected_fact": null,
+      "allowed_support_files": [],
+      "rejection_reason": "单独缩写不能确定问题所需的知识点。",
+      "review_status": "core"
+    },
+    {
+      "id": "S5-EG-010",
+      "category": "composite_question",
+      "knowledge_base": "primary",
+      "question": "普通 API 请求的超时是多少秒，以及后台任务是否共用该时限？",
+      "expected_sufficient": true,
+      "expected_fact": "资料分别给出 30 秒普通请求时限和后台任务不使用该值的规则。",
+      "allowed_support_files": ["服务超时策略.txt"],
+      "rejection_reason": null,
+      "review_status": "core"
+    },
+    {
+      "id": "S5-EG-011",
+      "category": "paraphrase",
+      "knowledge_base": "primary",
+      "question": "调用端遇到普通请求超时后应做什么？",
+      "expected_sufficient": true,
+      "expected_fact": "记录超时并展示可重试状态。",
+      "allowed_support_files": ["服务超时策略.txt"],
+      "rejection_reason": null,
+      "review_status": "core"
+    },
+    {
+      "id": "S5-EG-012",
+      "category": "direct_question",
+      "knowledge_base": "primary",
+      "question": "固定验收资料会发送到外部模型吗？",
+      "expected_sufficient": true,
+      "expected_fact": "不会；固定资料仅用于离线验收，不发送到外部模型。",
+      "allowed_support_files": ["服务超时策略.txt"],
+      "rejection_reason": null,
+      "review_status": "core"
+    },
+    {
+      "id": "S5-EG-013",
+      "category": "direct_question",
+      "knowledge_base": "decoy",
+      "question": "演练系统 API 单次请求超时时间是多少秒？",
+      "expected_sufficient": true,
+      "expected_fact": "演练系统 API 单次请求超时时间为 47 秒。",
+      "allowed_support_files": ["相似服务超时策略.txt"],
+      "rejection_reason": null,
+      "review_status": "core"
+    },
+    {
+      "id": "S5-EG-014",
+      "category": "synonym_rewrite",
+      "knowledge_base": "decoy",
+      "question": "演练环境的一般 API 调用上限是多少秒？",
+      "expected_sufficient": true,
+      "expected_fact": "演练环境 API 调用上限为 47 秒。",
+      "allowed_support_files": ["相似服务超时策略.txt"],
+      "rejection_reason": null,
+      "review_status": "core"
+    },
+    {
+      "id": "S5-EG-015",
+      "category": "cross_kb_scope",
+      "knowledge_base": "decoy",
+      "question": "本地服务普通请求的超时上限是 30 秒吗？",
+      "expected_sufficient": false,
+      "expected_fact": null,
+      "allowed_support_files": [],
+      "rejection_reason": "30 秒只记录在另一个知识库，当前演练库没有这项证据。",
+      "review_status": "core"
+    },
+    {
+      "id": "S5-EG-016",
+      "category": "entity_identifier",
+      "knowledge_base": "evaluation",
+      "question": "演示作业的编号是什么？",
+      "expected_sufficient": true,
+      "expected_fact": "演示作业编号为 OPS-R7-204。",
+      "allowed_support_files": ["阶段5评测_参数记录.txt"],
+      "rejection_reason": null,
+      "review_status": "core"
+    },
+    {
+      "id": "S5-EG-017",
+      "category": "identifier_near_miss",
+      "knowledge_base": "evaluation",
+      "question": "OPS-R7-240 对应哪个演示作业？",
+      "expected_sufficient": false,
+      "expected_fact": null,
+      "allowed_support_files": [],
+      "rejection_reason": "资料只有 OPS-R7-204，未定义 OPS-R7-240。",
+      "review_status": "core"
+    },
+    {
+      "id": "S5-EG-018",
+      "category": "direct_question",
+      "knowledge_base": "evaluation",
+      "question": "演示作业的普通 API 查询时限是多少秒？",
+      "expected_sufficient": true,
+      "expected_fact": "演示作业普通 API 查询时限为 17 秒。",
+      "allowed_support_files": ["阶段5评测_参数记录.txt"],
+      "rejection_reason": null,
+      "review_status": "core"
+    },
+    {
+      "id": "S5-EG-019",
+      "category": "numeric_near_miss",
+      "knowledge_base": "evaluation",
+      "question": "演示作业普通 API 查询时限是不是 18 秒？",
+      "expected_sufficient": false,
+      "expected_fact": null,
+      "allowed_support_files": [],
+      "rejection_reason": "资料记录为 17 秒，不支持 18 秒这一数值。",
+      "review_status": "core"
+    },
+    {
+      "id": "S5-EG-020",
+      "category": "numeric_fact",
+      "knowledge_base": "evaluation",
+      "question": "资料整理批次最多接收几个文件？",
+      "expected_sufficient": true,
+      "expected_fact": "每批最多接收 6 个文件。",
+      "allowed_support_files": ["阶段5评测_参数记录.txt"],
+      "rejection_reason": null,
+      "review_status": "core"
+    },
+    {
+      "id": "S5-EG-021",
+      "category": "entity_identifier",
+      "knowledge_base": "evaluation",
+      "question": "CACHE-PROXY-K3 指什么组件？",
+      "expected_sufficient": true,
+      "expected_fact": "CACHE-PROXY-K3 是青栎缓存代理。",
+      "allowed_support_files": ["阶段5评测_组件记录.txt"],
+      "rejection_reason": null,
+      "review_status": "core"
+    },
+    {
+      "id": "S5-EG-022",
+      "category": "numeric_fact",
+      "knowledge_base": "evaluation",
+      "question": "青栎缓存代理的诊断窗口有多长？",
+      "expected_sufficient": true,
+      "expected_fact": "诊断窗口长度为 12 分钟。",
+      "allowed_support_files": ["阶段5评测_组件记录.txt"],
+      "rejection_reason": null,
+      "review_status": "core"
+    },
+    {
+      "id": "S5-EG-023",
+      "category": "explicit_conflict",
+      "knowledge_base": "evaluation",
+      "question": "示例模块的审计记录保留期限是多少天？",
+      "expected_sufficient": false,
+      "expected_fact": null,
+      "allowed_support_files": [],
+      "rejection_reason": "两份并存资料分别记录 12 天和 18 天，存在显式冲突。",
+      "review_status": "core"
+    },
+    {
+      "id": "S5-EG-024",
+      "category": "explicit_conflict",
+      "knowledge_base": "evaluation",
+      "question": "审计记录应该保留 12 天还是 18 天？",
+      "expected_sufficient": false,
+      "expected_fact": null,
+      "allowed_support_files": [],
+      "rejection_reason": "两份并存资料给出相互矛盾的期限。",
+      "review_status": "core"
+    },
+    {
+      "id": "S5-EG-025",
+      "category": "trashed_source",
+      "knowledge_base": "evaluation",
+      "question": "S5-TRASH-6142 对应的样本值是多少项？",
+      "expected_sufficient": false,
+      "expected_fact": null,
+      "allowed_support_files": [],
+      "rejection_reason": "唯一含该标识符的资料已移入回收站。",
+      "review_status": "core"
+    },
+    {
+      "id": "S5-EG-026",
+      "category": "no_answer",
+      "knowledge_base": "evaluation",
+      "question": "M-9 疫苗应在多少摄氏度保存？",
+      "expected_sufficient": false,
+      "expected_fact": null,
+      "allowed_support_files": [],
+      "rejection_reason": "合成评测库没有该疫苗的保存要求。",
+      "review_status": "core"
+    },
+    {
+      "id": "S5-EG-027",
+      "category": "short_term",
+      "knowledge_base": "evaluation",
+      "question": "ID？",
+      "expected_sufficient": false,
+      "expected_fact": null,
+      "allowed_support_files": [],
+      "rejection_reason": "单独缩写未指明要查找的编号或对象。",
+      "review_status": "core"
+    },
+    {
+      "id": "S5-EG-028",
+      "category": "short_term_interference",
+      "knowledge_base": "evaluation",
+      "question": "短词干扰文件是否说明 API 请求时限？",
+      "expected_sufficient": true,
+      "expected_fact": "该文件明确说明它不定义 API 请求时限。",
+      "allowed_support_files": ["阶段5评测_短词干扰.txt"],
+      "rejection_reason": null,
+      "review_status": "core"
+    },
+    {
+      "id": "S5-EG-029",
+      "category": "composite_question",
+      "knowledge_base": "evaluation",
+      "question": "普通 API 查询时限是多少秒，并且每批最多接收几个文件？",
+      "expected_sufficient": true,
+      "expected_fact": "同一资料给出 17 秒查询时限和每批最多 6 个文件。",
+      "allowed_support_files": ["阶段5评测_参数记录.txt"],
+      "rejection_reason": null,
+      "review_status": "core"
+    },
+    {
+      "id": "S5-EG-030",
+      "category": "no_answer",
+      "knowledge_base": "evaluation",
+      "question": "轨道传感器的信号延迟上限是多少毫秒？",
+      "expected_sufficient": false,
+      "expected_fact": null,
+      "allowed_support_files": [],
+      "rejection_reason": "合成评测库没有轨道传感器的信号时延数据。",
+      "review_status": "core"
+    },
+    {
+      "id": "S5-EG-031",
+      "category": "cross_kb_scope",
+      "knowledge_base": "primary",
+      "question": "主库是否说明青栎缓存代理的诊断窗口为 12 分钟？",
+      "expected_sufficient": false,
+      "expected_fact": null,
+      "allowed_support_files": [],
+      "rejection_reason": "组件诊断窗口只在独立评测知识库中，不在主库范围内。",
+      "review_status": "core"
+    },
+    {
+      "id": "S5-EG-032",
+      "category": "ambiguous",
+      "knowledge_base": "evaluation",
+      "question": "超时时间是多少？",
+      "expected_sufficient": null,
+      "expected_fact": null,
+      "allowed_support_files": [],
+      "rejection_reason": null,
+      "review_status": "needs_review",
+      "review_reason": "未说明查询超时还是诊断窗口，目标概念不唯一。"
+    },
+    {
+      "id": "S5-EG-033",
+      "category": "ambiguous",
+      "knowledge_base": "evaluation",
+      "question": "编号是什么？",
+      "expected_sufficient": null,
+      "expected_fact": null,
+      "allowed_support_files": [],
+      "rejection_reason": null,
+      "review_status": "needs_review",
+      "review_reason": "评测库存在多个不同对象编号，问题未指定对象。"
+    }
+  ]
+}

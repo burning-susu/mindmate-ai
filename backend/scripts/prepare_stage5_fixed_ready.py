@@ -26,10 +26,27 @@ EXPECTED_FILES = {
     "服务超时策略.txt": SAMPLE_ROOT / "服务超时策略.txt",
     "相似服务超时策略.txt": SAMPLE_ROOT / "相似服务超时策略.txt",
     "回收站范围验证.txt": SAMPLE_ROOT / "回收站范围验证.txt",
+    "阶段5评测_参数记录.txt": SAMPLE_ROOT / "阶段5评测_参数记录.txt",
+    "阶段5评测_组件记录.txt": SAMPLE_ROOT / "阶段5评测_组件记录.txt",
+    "阶段5评测_冲突甲.txt": SAMPLE_ROOT / "阶段5评测_冲突甲.txt",
+    "阶段5评测_冲突乙.txt": SAMPLE_ROOT / "阶段5评测_冲突乙.txt",
+    "阶段5评测_短词干扰.txt": SAMPLE_ROOT / "阶段5评测_短词干扰.txt",
+    "阶段5评测_回收站.txt": SAMPLE_ROOT / "阶段5评测_回收站.txt",
 }
 KNOWLEDGE_BASES = {
     "primary": ("第二十五批·固定资料主库", ["服务超时策略.txt", "回收站范围验证.txt"]),
     "decoy": ("第二十五批·相似干扰库", ["相似服务超时策略.txt"]),
+    "evaluation": (
+        "第二十六批·证据门控评测库",
+        [
+            "阶段5评测_参数记录.txt",
+            "阶段5评测_组件记录.txt",
+            "阶段5评测_冲突甲.txt",
+            "阶段5评测_冲突乙.txt",
+            "阶段5评测_短词干扰.txt",
+            "阶段5评测_回收站.txt",
+        ],
+    ),
     "not_ready_probe": ("第二十五批·未就绪诊断库", []),
 }
 PRIMARY_QUESTION = "API 单次请求超时时间是多少秒？"
@@ -826,6 +843,7 @@ def run(data_dir: Path, model_cache: Path) -> dict[str, Any]:
         dataset = _ensure_dataset(client, app)
         primary_id = str(dataset["knowledge_bases"]["primary"]["knowledge_base_id"])
         decoy_id = str(dataset["knowledge_bases"]["decoy"]["knowledge_base_id"])
+        evaluation_id = str(dataset["knowledge_bases"]["evaluation"]["knowledge_base_id"])
         not_ready_id = str(dataset["knowledge_bases"]["not_ready_probe"]["knowledge_base_id"])
         not_ready_check = _query(client, not_ready_id, PRIMARY_QUESTION, "not-ready")
         _assert_no_answer_or_citation(not_ready_check)
@@ -836,24 +854,27 @@ def run(data_dir: Path, model_cache: Path) -> dict[str, Any]:
             f"未就绪索引未明确失败：{not_ready_check}",
         )
 
-        for key in ("primary", "decoy"):
+        for key in ("primary", "decoy", "evaluation"):
             kb_id = str(dataset["knowledge_bases"][key]["knowledge_base_id"])
             _ensure_index_ready(app, kb_id)
 
         artifacts = {
             key: _verify_artifacts(app, str(dataset["knowledge_bases"][key]["knowledge_base_id"]))
-            for key in ("primary", "decoy")
+            for key in ("primary", "decoy", "evaluation")
         }
         trash_id = str(dataset["files"]["回收站范围验证.txt"]["file_id"])
         _ensure_trashed(client, app, trash_id, "回收站范围验证.txt")
+        evaluation_trash_id = str(dataset["files"]["阶段5评测_回收站.txt"]["file_id"])
+        _ensure_trashed(client, app, evaluation_trash_id, "阶段5评测_回收站.txt")
 
         counts_after_first_pass = _resource_counts(app)
         dataset_second_pass = _ensure_dataset(client, app)
-        for key in ("primary", "decoy"):
+        for key in ("primary", "decoy", "evaluation"):
             _ensure_index_ready(
                 app, str(dataset_second_pass["knowledge_bases"][key]["knowledge_base_id"])
             )
         _ensure_trashed(client, app, trash_id, "回收站范围验证.txt")
+        _ensure_trashed(client, app, evaluation_trash_id, "阶段5评测_回收站.txt")
         counts_after_second_pass = _resource_counts(app)
         _require(
             counts_after_second_pass == counts_after_first_pass,
@@ -863,7 +884,7 @@ def run(data_dir: Path, model_cache: Path) -> dict[str, Any]:
             all(
                 str(dataset_second_pass["knowledge_bases"][key]["knowledge_base_id"])
                 == str(dataset["knowledge_bases"][key]["knowledge_base_id"])
-                for key in ("primary", "decoy")
+                for key in ("primary", "decoy", "evaluation")
             ),
             "重复运行创建了新知识库。",
         )
@@ -938,7 +959,7 @@ def run(data_dir: Path, model_cache: Path) -> dict[str, Any]:
 
         final_kbs = {
             key: _index_state(app, str(dataset["knowledge_bases"][key]["knowledge_base_id"]))
-            for key in ("primary", "decoy")
+            for key in ("primary", "decoy", "evaluation")
         }
         _require(
             all(
@@ -964,6 +985,13 @@ def run(data_dir: Path, model_cache: Path) -> dict[str, Any]:
                         "version_status": final_kbs["decoy"]["version_status"],
                         "verified_artifacts": artifacts["decoy"],
                     },
+                    "evaluation": {
+                        "knowledge_base_id": evaluation_id,
+                        "index_version_id": artifacts["evaluation"]["index_version_id"],
+                        "status": final_kbs["evaluation"]["status"],
+                        "version_status": final_kbs["evaluation"]["version_status"],
+                        "verified_artifacts": artifacts["evaluation"],
+                    },
                     "not_ready_probe": {
                         "knowledge_base_id": not_ready_id,
                         "status": "EMPTY",
@@ -974,7 +1002,8 @@ def run(data_dir: Path, model_cache: Path) -> dict[str, Any]:
                     name: {
                         "file_id": dataset["files"][name]["file_id"],
                         "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-                        "trashed": name == "回收站范围验证.txt",
+                        "trashed": name
+                        in {"回收站范围验证.txt", "阶段5评测_回收站.txt"},
                     }
                     for name, path in EXPECTED_FILES.items()
                 },
