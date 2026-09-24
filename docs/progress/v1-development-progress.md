@@ -186,6 +186,16 @@
 - 真实 SQLite FTS5 + sqlite-vec API 用例覆盖可支持问题/资料不足、空索引、离线模型缺失、输入与额外字段校验、本地 Origin/Session、跨知识库隔离、当前活动版本与同库待索引成员过滤、回收站排除、索引/成员并发变化、FTS/vector 失败路由和零写入。串行后端最终全量 `176 passed, 143 warnings`；Ruff、Pyright、compileall、Alembic head `6b3e91a0c4d7` 与 `git diff --check` 通过。此前完整运行分别观察到既有 purge 用例一次 row-version `412`、Chunk 显式重试用例一次未恢复；两个用例单独重跑通过，最终完整串行运行通过，未修改它们。前端 API 生成、typecheck、lint、build 通过；未跑 UI E2E（没有页面改动）。
 - 第二十二批真实 owner/Citation 绑定仍待阶段 6/7；前端测试检索页面与验收集质量/性能校准仍未完成。下一批唯一目标：实现本地检索测试页面并调用该只读 API，不生成模型回答或 Citation。
 
+### 第二十四批：知识库详情本地测试检索页面
+
+- 状态：`PASS`；阶段 5 继续 `PARTIAL`。起始本地/远端 SHA 均为 `2ffe354b3efaa72e10c4d71a9978001750c35019`。
+- 页面：在 `/knowledge-bases/:id` 详情页增加辅助“测试检索”区域，保持知识库标题、文件数和索引状态；输入遵守 1–2000 字符契约，空/纯空白不提交，提交中显示加载状态并防重复点击。
+- API：复用现有生成类型和 `runKnowledgeBaseRetrievalTest`，只发送路径知识库 ID 与 `{ question }`；不写浏览器持久存储，不触发模型下载、Provider、索引任务、回答、SourceSnapshot 或 Citation。
+- 展示：分别呈现 `supported`（找到可能支持的资料）、`insufficient`（资料不足）和 `unavailable`（检索暂不可用）；区分空结果、无活动索引、模型不可用、通道故障和范围变化。候选最多 8 条，显示纯文本文件名、受控摘录、真实标题/页/幻灯片/行定位、原始 rank/分数、RRF/排序说明和缺失信号“无”，不渲染回答或引用编号。
+- 稳定性与安全：请求支持 AbortController、序列号和按知识库 ID 卸载，旧响应不会覆盖当前问题或知识库；错误保留输入并提供重试；摘录、文件名和定位均由 React 文本节点安全渲染，未使用 `dangerouslySetInnerHTML`。
+- 验收：新增 `frontend/src/test/stage5-retrieval-test.test.tsx`，覆盖 Top 8/空结果、三种状态、无活动索引/模型、错误重试、防重复、问题/知识库切换竞态、无持久历史和 HTML 片段安全。前端 Vitest `21 passed`；typecheck、lint、build、`git diff --check` 通过。真实本地 FastAPI + Vite 浏览器验证空知识库键盘提交，返回 `unavailable / INDEX_VERSION_NOT_AVAILABLE`；没有固定 READY 资料，不把 Mock 候选显示写成真实检索证据。
+- 本批无后端、迁移或 OpenAPI schema 变更；Citation owner 继续延期到阶段 6/7。下一开发批次唯一目标：准备固定本地验收资料并建立可复现 READY 索引，为该页面补充真实浏览器候选显示证据。
+
 ## 进度口径
 
 文件产出不等于测试通过；测试通过不等于 Spike 通过；Spike 通过不等于业务验收或发布完成。

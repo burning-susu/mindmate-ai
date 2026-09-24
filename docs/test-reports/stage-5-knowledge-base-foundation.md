@@ -1,7 +1,7 @@
 # 阶段 5：知识库基础与成员准入测试报告
 
 > 阶段：`5`
-> 批次：`第八批至第二十三批`
+> 批次：`第八批至第二十四批`
 > 验证日期：`2026-09-24`
 > 第八批结论：`PASS`
 > 第九批结论：`PASS`
@@ -18,6 +18,7 @@
 > 第二十一批结论：`PASS`
 > 第二十二批结论：`BLOCKED`（真实 Chat/Learning owner 前置缺失，延期到阶段 6/7）
 > 第二十三批结论：`PASS`
+> 第二十四批结论：`PASS`
 > 阶段 5 状态：`PARTIAL`
 > 分支：`feat/v1-bootstrap`
 > 起始提交：`75a0653877b7f627bc254a859232689c19872777`
@@ -30,9 +31,9 @@
 
 ## 结论
 
-第八至第十六批完成知识库成员、索引预处理、Chunk、Embedding、FTS5、向量 Top-K 与双路候选基础；第十七批完成内部 RRF/多样性 Top 8；第十八批完成内部证据判定；第十九批完成产物完整性复核与原子激活；第二十批完成同一知识库增量构建；第二十一批建立未绑定服务端来源快照；第二十三批增加受本地会话保护的本地测试检索 API。空库保持 `EMPTY`；此端点不提供聊天答案或 Citation。
+第八至第十六批完成知识库成员、索引预处理、Chunk、Embedding、FTS5、向量 Top-K 与双路候选基础；第十七批完成内部 RRF/多样性 Top 8；第十八批完成内部证据判定；第十九批完成产物完整性复核与原子激活；第二十批完成同一知识库增量构建；第二十一批建立未绑定服务端来源快照；第二十三批增加受本地会话保护的本地测试检索 API；第二十四批将该 API 接入知识库详情页高级诊断区域。空库保持 `EMPTY`；此端点和页面不提供聊天答案或 Citation。
 
-第十批 `INDEX_PREPROCESS` 的 `COMPLETED` 只证明输入快照与预处理结果已持久化；第十一批 `INDEX_CHUNK` 只证明切片阶段结束；第十三批 `INDEX_EMBED` 只证明向量已持久化；第十四批 `INDEX_FTS` 只证明 FTS5 投影已建立。第十五至十八批提供内部召回、排序与证据判定；`supported` 只表示候选可进入后续处理，不证明最终答案获事实支持。第十九批验证完整候选后才允许原子激活；第二十批增量候选沿用同一完整性复核；第二十一批从活动版本内部检索结果创建经服务端复核的未绑定来源快照。第二十二批因真实 owner 不存在而 `BLOCKED`，Citation 绑定延期至阶段 6/7；第二十三批只开放本地测试检索端点。阶段 5 仍为 `PARTIAL`：Citation 绑定、前端测试检索页面、聊天/RAG 与验收集质量评估仍未完成。
+第十批 `INDEX_PREPROCESS` 的 `COMPLETED` 只证明输入快照与预处理结果已持久化；第十一批 `INDEX_CHUNK` 只证明切片阶段结束；第十三批 `INDEX_EMBED` 只证明向量已持久化；第十四批 `INDEX_FTS` 只证明 FTS5 投影已建立。第十五至十八批提供内部召回、排序与证据判定；`supported` 只表示候选可进入后续处理，不证明最终答案获事实支持。第十九批验证完整候选后才允许原子激活；第二十批增量候选沿用同一完整性复核；第二十一批从活动版本内部检索结果创建经服务端复核的未绑定来源快照。第二十二批因真实 owner 不存在而 `BLOCKED`，Citation 绑定延期至阶段 6/7；第二十三批只开放本地测试检索端点，第二十四批完成详情页诊断界面。阶段 5 仍为 `PARTIAL`：Citation 绑定、聊天/RAG 与验收集质量评估仍未完成。
 
 ## 实现范围
 
@@ -708,3 +709,47 @@ repo> git diff --check
 此前完整运行分别观察到未修改的既有知识库 purge 用例发生异步 row-version `412`、Chunk 显式重试用例未恢复；两个用例单独重跑均通过，最终串行全量为 `176 passed`。本批没有修改这两个用例。没有 UI 页面变更，因此未跑 Playwright E2E；未调用 DeepSeek、真实凭据、付费服务或外部模型。
 
 第二十三批结论：`PASS`；阶段 5 继续 `PARTIAL`。第二十二批 Citation owner 阻塞仍延期至阶段 6/7。下一批唯一目标：实现本地检索测试页面并调用本只读 API，不生成回答或 Citation。
+
+## 第二十四批验收追踪：知识库详情本地测试检索页面
+
+| ID | 验收项 | 证据 | 结论 |
+| --- | --- | --- | --- |
+| S5-B24-01 | 知识库详情页提供辅助测试检索入口，并持续显示标题、文件数和索引状态 | `KnowledgeBaseDetailPage` + `KnowledgeBaseRetrievalPanel`；真实浏览器打开 `/knowledge-bases/:id` | PASS |
+| S5-B24-02 | 问题输入遵守 2000 字符上限，空/纯空白不提交，提交中防重复并显示加载状态 | `stage5-retrieval-test.test.tsx`：输入、加载和重复点击用例 | PASS |
+| S5-B24-03 | 只通过现有客户端发送 `{ question }` 与路径知识库 ID，不持久化结果或触发其他任务 | 客户端请求断言、页面实现；无后端/迁移/OpenAPI schema 改动 | PASS |
+| S5-B24-04 | 界面区分 `supported`、`insufficient`、`unavailable`，并区分空结果、无活动索引和模型不可用 | `stage5-retrieval-test.test.tsx` 状态矩阵；真实浏览器 `INDEX_VERSION_NOT_AVAILABLE` | PASS |
+| S5-B24-05 | Top 8 候选显示真实定位、摘录、通道 rank/分数和排序解释，缺失信号显示“无” | 8 候选确定性 UI Mock；React 文本节点安全渲染断言 | PASS |
+| S5-B24-06 | 错误重试保留输入；连续请求、切换问题、切换知识库和卸载时旧响应不覆盖当前结果 | `stage5-retrieval-test.test.tsx`：错误重试、问题/知识库 ID 竞态用例 | PASS |
+| S5-B24-07 | 浏览器键盘流程和窄屏页面状态可感知 | 真实本地 FastAPI + Vite，`127.0.0.1:5173`；Tab/Enter 提交，`390x844` 无障碍树检查 | PASS |
+
+### 第二十四批实现边界
+
+- 页面入口为知识库详情 `/knowledge-bases/:id` 的辅助“测试检索”区域。面板展示知识库范围摘要、当前索引状态、问题输入、长度计数、加载/错误/重试状态和 API 返回的诊断结果。
+- `supported` 只表示找到可能支持的候选资料；`insufficient` 只表示资料不足或空结果；`unavailable` 显示本地服务/索引/模型/通道/范围错误。页面不生成回答、不显示 `[1]` 引用编号、不创建 Citation 或来源快照。
+- 文件名、标题路径和摘录作为不可信纯文本渲染；没有绝对路径、密钥、`dangerouslySetInnerHTML` 或浏览器持久历史。AbortController、序列号和知识库 ID 组件 key 处理旧响应竞态。
+
+### 第二十四批实际验证
+
+~~~text
+frontend> npm test
+Test Files 6 passed (6)
+Tests 21 passed (21)
+
+frontend> npm run typecheck
+通过
+
+frontend> npm run lint
+通过
+
+frontend> npm run build
+通过（Vite production build）
+
+repo> git diff --check
+通过
+~~~
+
+真实浏览器使用本地 FastAPI + Vite，允许来源为 `http://127.0.0.1:5173`。创建本地空知识库并进入详情页后，测试检索入口、索引状态、问题输入和 2000 字符计数可见；用键盘 Tab/Enter 提交，真实 API 返回 `unavailable / INDEX_VERSION_NOT_AVAILABLE`，结果没有被显示为“资料不足”。在 `390x844` 窄屏视口读取无障碍树，输入、按钮和结果状态仍可感知。当前本地环境没有固定 READY 索引和可复现候选资料，Top 8、HTML 片段安全、连续请求和错误重试使用确定性 UI Mock 验证，未写成真实检索验收；截图接口不可用，因此没有记录截图证据。
+
+本批未修改后端、数据库迁移或 OpenAPI schema，因此未重跑后端全量；第二十三批后端 API 证据仍为 `176 passed, 143 warnings`。未调用 DeepSeek、真实凭据、付费接口或私人资料。
+
+第二十四批结论：`PASS`；阶段 5 继续 `PARTIAL`。第二十二批 Citation owner 绑定仍延期至阶段 6/7。下一批唯一目标：准备固定本地验收资料并建立可复现 READY 索引，为本地测试检索页面补充真实浏览器候选显示证据。

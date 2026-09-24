@@ -6,7 +6,7 @@
 - 当前远程提交：以 `git ls-remote --heads origin feat/v1-bootstrap` 为准；本文件随本批次收口提交推送
 - 最后更新时间：`2026-09-24`
 - 当前开发阶段：阶段 5 开发中，状态 `PARTIAL`
-- 当前批次状态：第二十二批 Citation 绑定因无真实 Chat/Learning owner 而 `BLOCKED` 并延期到阶段 6/7；第二十三批本地测试检索 API `PASS`；阶段 5 状态 `PARTIAL`
+- 当前批次状态：第二十二批 Citation 绑定因无真实 Chat/Learning owner 而 `BLOCKED` 并延期到阶段 6/7；第二十三批本地测试检索 API、第二十四批知识库详情测试检索页面均为 `PASS`；阶段 5 状态 `PARTIAL`
 
 ## 已完成阶段
 
@@ -21,9 +21,9 @@
 
 - 后端：5 类文件导入、托管复制、哈希去重、持久解析 Worker、隔离解析、搜索筛选、文件/文件夹/标签、批量操作、受控内容读取、回收站和永久删除；Folder/Tag 修改、删除与恢复使用数据库原子 `row_version` 乐观锁。
 - 任务与资源安全：复用 `BackgroundTask` 实现文件导入/重新处理及知识库成员准入；解析 Worker 与成员 Worker 按任务类型隔离领取，均使用原子领取、租约、过期恢复、关闭中断与取消状态；Windows 解析子进程使用 Job Object 的 `KILL_ON_JOB_CLOSE` 与进程内存上限，默认 `512 MiB`。
-- 前端：真实 API 文件工作台、嵌套目录、筛选排序、导入与重复决策、详情编辑/预览、文件和文件夹回收站操作；列表查询参数、详情返回后的筛选/排序/滚动恢复；返回前刷新列表避免旧 `row_version` 竞态；版本冲突提示并引导重新加载，不自动覆盖。
+- 前端：真实 API 文件工作台、嵌套目录、筛选排序、导入与重复决策、详情编辑/预览、文件和文件夹回收站操作；列表查询参数、详情返回后的筛选/排序/滚动恢复；返回前刷新列表避免旧 `row_version` 竞态；版本冲突提示并引导重新加载，不自动覆盖；第二十四批在知识库详情页增加高级“测试检索”区域，调用现有只读 API，展示三种判定、候选定位与排序信号。
 - 数据库：SQLite/Alembic 核心实体、持久任务、内容对象引用计数和软删除字段；revision `d91f4a6b2c30` 增加 ChunkingConfig、EmbeddingConfig、IndexVersion 与逐文件输入快照；revision `f2c7a1d8e904` 增加文件级 Chunk 与切片检查点；revision `a81f3c6d2e90` 增加 EmbeddingRecord、逐输入 Embedding 检查点及 INDEX_EMBED 单运行租约约束；revision `d60f2e8a7c31` 增加逐输入 FTS 状态、映射表、FTS5 虚表和 INDEX_FTS 单运行租约约束；revision `e4a7810c9b62` 增加索引激活失败原因码；revision `6b3e91a0c4d7` 增加内部未绑定来源快照和文件永久删除净化触发器。
-- 测试与工程：第二十一批新增 10 项服务端快照生命周期/范围/删除用例；完整串行测试与门禁结果见下方测试状态。前端既有 13 tests 和阶段 4/5 Playwright 生命周期证据见测试状态。
+- 测试与工程：第二十一批新增 10 项服务端快照生命周期/范围/删除用例；第二十四批补充知识库测试检索页面交互回归；完整串行测试与门禁结果见下方测试状态。前端 21 tests 和阶段 4/5 浏览器生命周期证据见测试状态。
 - 知识库：空库创建保持 `EMPTY`；名称/描述/颜色/图标编辑；回收站生命周期；已导入文件批量加入/移出、多库共享、幂等重加与逐项结果；成员准入完成后保持 `index_state=PENDING` 和知识库 `PREPARING`，不伪造可检索状态。
 - 索引预处理：独立 `INDEX_PREPROCESS` Worker 在请求生命周期外冻结活动成员、内容哈希、解析修订、配置指纹与集合指纹；逐文件记录 `PREPARED/SKIPPED/FAILED`，支持幂等、租约接管、检查点续跑、取消和完成前版本复核。预处理后 `IndexVersion.status=BUILDING`，不会写入 `active_index_version_id`。
 - 版本化切片：独立 `INDEX_CHUNK` Worker 仅消费同版本 `PREPARED` 快照；Chunk 按文件/解析修订/切片配置复用，不与知识库绑定；文件级 Chunk 集、切片检查点和任务进度原子提交，支持取消、租约接管、关闭续跑、显式失败重试、多库复用与旧解析/配置版本共存。完成后仍为 `BUILDING` 且不可检索。
@@ -46,7 +46,7 @@
 
 - 阶段 4 无未解决功能、安全、数据一致性或迁移阻塞项；需求追踪详见 `docs/test-reports/stage-4-file-management.md`。
 - 发布候选保留：正式恶意文档集、真实资源耗尽边界、干净 Windows 安装/升级/卸载包，依据发布流程执行，不回填为阶段 4 已完成证据。
-- 阶段 5 缺口：来源快照 owner/Citation 绑定（延期到阶段 6/7）、前端本地检索测试页面、用户级严格拒答/RAG 流程、面向验收集的证据阈值/质量校准与性能评估仍未完成。`supported` 不证明候选蕴含事实；本地调试端点不构成 AC-KB-003、Recall@10 或聊天验收。
+- 阶段 5 缺口：来源快照 owner/Citation 绑定（延期到阶段 6/7）、用户级严格拒答/RAG 流程、面向验收集的证据阈值/质量校准与性能评估仍未完成。`supported` 不证明候选蕴含事实；本地调试端点和本批页面不构成 AC-KB-003、Recall@10 或聊天验收。
 
 ## 第十八批交接
 
@@ -108,13 +108,24 @@
 - 阶段 4 后端定向测试：`21 passed`
 - 后端静态检查：本批 `uv run ruff check src tests` 与 `uv run pyright src tests` 通过（Pyright `0 errors, 0 warnings, 0 informations`）。本批未运行 `ruff check .`；历史全目录扫描的既有 Alembic lint 项未修改。
 - 后端 compileall：通过
-- 前端测试：`13 passed`
+- 前端测试：`13 passed`（第二十三批）
+- 第二十四批前端测试：`21 passed`（6 个 Vitest 文件）
 - 前端类型检查：通过
 - 前端 lint：通过
 - 前端构建：通过
 - 浏览器 E2E：最近一次历史证据为阶段 4 文件回归与阶段 5 知识库共 `2 passed`（各 1 项），由隔离 SQLite、真实本地 FastAPI + Vite 代理运行；第十九批无前端/API 改动，未重跑 UI E2E
+- 第二十四批浏览器证据：真实本地 FastAPI + Vite（允许来源 `127.0.0.1:5173`）创建空知识库后打开 `/knowledge-bases/:id`，页面显示测试检索入口、长度限制和“索引待开放”；用键盘 Tab/Enter 提交后真实 API 返回 `unavailable / INDEX_VERSION_NOT_AVAILABLE`，未误报为资料不足；`390x844` 窄屏无障碍树仍能读到输入、按钮和结果状态。没有可用 READY 固定资料，因此没有把 Vitest Mock 候选显示写成真实检索浏览器验收。
 - OpenAPI 同步：OpenAPI 3.1，`38 schemas / 51 operations`；新增本地检索测试请求/响应类型与操作
 - 数据库迁移：最新 revision `6b3e91a0c4d7`；空库升级/降级/重升级及阶段 5 既有数据迁移回归通过。
+
+## 第二十四批交接
+
+- 本批结论：`PASS`；阶段 5 继续 `PARTIAL`。起始本地/远端 SHA 均为 `2ffe354b3efaa72e10c4d71a9978001750c35019`。
+- 页面入口：`/knowledge-bases/:id` 详情页底部的高级“测试检索”区域；知识库名称、文件数和当前索引状态仍在详情头部显示。问题框限制 2000 字符，空/纯空白问题不提交，提交中禁用按钮并提供可感知的加载状态。
+- API 边界：通过现有 `runKnowledgeBaseRetrievalTest` 客户端只发送 `{ question }` 和路径中的知识库 ID；不保存问题或结果，不触发索引、模型下载、Provider、任务或 Citation。响应最多展示 8 个候选，使用纯文本渲染文件名、摘录、标题/页/幻灯片/行定位、通道 rank/分数和排序说明；缺失信号显示“无”，不显示引用编号或回答。
+- 状态与竞态：分别呈现 `supported`、`insufficient`、`unavailable`；无活动索引、模型缺失、通道错误、范围变化和空结果保持不同文案；请求错误保留输入并可重试。AbortController、序列号和按知识库 ID 的组件卸载保证连续请求、切换问题、切换知识库和卸载后的旧响应不会覆盖当前结果。
+- 验收证据：前端 Vitest `21 passed`；`npm run typecheck`、`npm run lint`、`npm run build`、`git diff --check` 均通过。真实浏览器仅验证空知识库和无活动索引状态，候选 Top 8/HTML 片段安全/错误重试等使用确定性 UI Mock 回归，不冒充真实索引验收。
+- 本批没有后端改动、数据库迁移或 OpenAPI schema 变化；未为凑数重跑后端全量。第二十二批 Citation owner 绑定继续延期到阶段 6/7。
 
 ## 第十三批交接
 
@@ -161,7 +172,7 @@
 
 ## 下一开发批次
 
-- 阶段 5 下一个唯一目标：实现本地检索测试页面并调用已完成的只读检索 API，不生成回答或绑定 Citation。
+- 阶段 5 下一个唯一目标：准备固定本地验收资料并建立可复现的 READY 索引，为本地测试检索页面补充一条真实浏览器候选显示证据；继续不生成回答或绑定 Citation。
 
 ## 交接说明
 

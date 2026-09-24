@@ -5,6 +5,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import { apiRequest } from '../api/client'
 import { isVersionConflict, type FileListResponse } from '../api/files'
+import KnowledgeBaseRetrievalPanel from '../components/KnowledgeBaseRetrievalPanel'
 import {
   addKnowledgeBaseMembers,
   getKnowledgeMembershipTask,
@@ -21,6 +22,25 @@ const fileStatusLabels: Record<string, string> = {
   PARSING: '正在解析',
   PARSE_FAILED: '解析失败',
   IN_TRASH: '回收站',
+}
+
+function knowledgeBaseStatusLabel(status: string) {
+  if (status === 'EMPTY') return '空知识库'
+  if (status === 'PREPARING') return '成员待索引'
+  if (status === 'PARTIAL') return '部分资料可用'
+  if (status === 'READY') return '索引就绪'
+  return status
+}
+
+function knowledgeBaseStatusClass(status: string) {
+  if (status === 'READY' || status === 'PARTIAL') return 'file-status--ready'
+  return 'file-status--queued'
+}
+
+function knowledgeBaseMemberDescription(status: string) {
+  if (status === 'READY') return '当前知识库已有活动索引，可查看本地候选检索结果。'
+  if (status === 'PARTIAL') return '部分成员已进入活动索引，其余文件仍会保留真实不可用状态。'
+  return '成员加入后仍需建立索引；当前知识库问答不可用。'
 }
 
 function taskResultText(result: Record<string, unknown>) {
@@ -81,7 +101,7 @@ function MemberManager({ item }: { item: KnowledgeBaseItem }) {
   const taskRunning = Boolean(activeTask && !['COMPLETED', 'FAILED', 'CANCELLED'].includes(activeTask.status))
   const results = (activeTask?.results ?? []) as Array<Record<string, unknown>>
 
-  return <section className="detail-section knowledge-members"><div className="section-heading"><div><h2>资料成员</h2><p>成员加入后仍需建立索引；当前知识库问答不可用。</p></div><span className="file-status file-status--queued">索引待开放</span></div>
+  return <section className="detail-section knowledge-members"><div className="section-heading"><div><h2>资料成员</h2><p>{knowledgeBaseMemberDescription(item.status)}</p></div><span className={`file-status ${knowledgeBaseStatusClass(item.status)}`}>{knowledgeBaseStatusLabel(item.status)}</span></div>
     {membersQuery.isLoading && <div className="detail-empty"><RefreshCw size={20} aria-hidden="true" />正在加载成员</div>}
     {membersQuery.isError && <div className="inline-error" role="alert">成员加载失败。<button className="quiet-button" type="button" onClick={() => void membersQuery.refetch()}>重试</button></div>}
     {(membersQuery.data?.items?.length ?? 0) === 0 && !membersQuery.isLoading && <div className="detail-empty"><BookOpen size={22} aria-hidden="true" /><span>尚未加入任何文件。</span></div>}
@@ -117,7 +137,7 @@ function DetailForm({ item }: { item: KnowledgeBaseItem }) {
     onError: (error) => setConflict(isVersionConflict(error)),
   })
   const submit = (event: FormEvent) => { event.preventDefault(); setConflict(false); updateMutation.mutate() }
-  return <><div className="detail-heading"><div className="knowledge-title"><div className="knowledge-mark knowledge-mark--large" style={{ backgroundColor: color }}><BookOpen size={24} aria-hidden="true" /></div><div><span className="eyebrow">{item.status === 'EMPTY' ? '空知识库' : item.status === 'PREPARING' ? '成员待索引' : item.status}</span><h1>{item.name}</h1><p>{item.file_count} 个文件 · 版本 {item.row_version}</p></div></div><button className="danger-button" type="button" onClick={() => { if (window.confirm(`将知识库“${item.name}”移入回收站？原始文件不会被删除。`)) trashMutation.mutate() }}><Trash2 size={16} aria-hidden="true" />移入回收站</button></div>{conflict && <div className="inline-error" role="alert"><span>知识库已被其他操作修改，请重新加载后再试。</span><button className="quiet-button" type="button" onClick={() => window.location.reload()}>重新加载</button></div>}<div className="detail-grid"><form className="knowledge-form detail-section" onSubmit={submit}><h2>基本信息</h2><label>名称<input aria-label="知识库名称" required maxLength={100} value={name} onChange={(event) => setName(event.target.value)} /></label><label>描述<textarea aria-label="知识库描述" maxLength={2000} rows={5} value={description} onChange={(event) => setDescription(event.target.value)} /></label><label>颜色<input aria-label="知识库颜色" type="color" value={color} onChange={(event) => setColor(event.target.value)} /></label>{updateMutation.isError && !conflict && <div className="inline-error" role="alert">{updateMutation.error instanceof Error ? updateMutation.error.message : '保存失败。'}</div>}<button className="primary-button" type="submit" disabled={updateMutation.isPending}><Save size={16} aria-hidden="true" />{updateMutation.isPending ? '正在保存' : '保存更改'}</button></form><MemberManager item={item} /></div></>
+  return <><div className="detail-heading"><div className="knowledge-title"><div className="knowledge-mark knowledge-mark--large" style={{ backgroundColor: color }}><BookOpen size={24} aria-hidden="true" /></div><div><span className="eyebrow">{knowledgeBaseStatusLabel(item.status)}</span><h1>{item.name}</h1><p>{item.file_count} 个文件 · 版本 {item.row_version}</p></div></div><button className="danger-button" type="button" onClick={() => { if (window.confirm(`将知识库“${item.name}”移入回收站？原始文件不会被删除。`)) trashMutation.mutate() }}><Trash2 size={16} aria-hidden="true" />移入回收站</button></div>{conflict && <div className="inline-error" role="alert"><span>知识库已被其他操作修改，请重新加载后再试。</span><button className="quiet-button" type="button" onClick={() => window.location.reload()}>重新加载</button></div>}<div className="detail-grid"><form className="knowledge-form detail-section" onSubmit={submit}><h2>基本信息</h2><label>名称<input aria-label="知识库名称" required maxLength={100} value={name} onChange={(event) => setName(event.target.value)} /></label><label>描述<textarea aria-label="知识库描述" maxLength={2000} rows={5} value={description} onChange={(event) => setDescription(event.target.value)} /></label><label>颜色<input aria-label="知识库颜色" type="color" value={color} onChange={(event) => setColor(event.target.value)} /></label>{updateMutation.isError && !conflict && <div className="inline-error" role="alert">{updateMutation.error instanceof Error ? updateMutation.error.message : '保存失败。'}</div>}<button className="primary-button" type="submit" disabled={updateMutation.isPending}><Save size={16} aria-hidden="true" />{updateMutation.isPending ? '正在保存' : '保存更改'}</button></form><MemberManager item={item} /></div><KnowledgeBaseRetrievalPanel key={item.knowledge_base_id} item={item} /></>
 }
 
 export default function KnowledgeBaseDetailPage() {

@@ -9,6 +9,8 @@ export type KnowledgeBaseMemberList = components['KnowledgeBaseMemberListRespons
 export type KnowledgeMembershipTask = components['KnowledgeMembershipTaskResponse']
 export type RetrievalTestRequest = components['RetrievalTestRequest']
 export type RetrievalTestResponse = components['RetrievalTestResponse']
+export type RetrievalTestCandidate = components['RetrievalTestCandidateResponse']
+export type RetrievalTestLocation = components['RetrievalTestLocation']
 
 export function createKnowledgeBase(payload: KnowledgeBaseCreate): Promise<KnowledgeBaseItem> {
   return apiRequest('/api/v1/knowledge-bases', {
@@ -84,9 +86,11 @@ export function getKnowledgeMembershipTask(taskId: string): Promise<KnowledgeMem
 export function runKnowledgeBaseRetrievalTest(
   knowledgeBaseId: string,
   payload: RetrievalTestRequest,
+  signal?: AbortSignal,
 ): Promise<RetrievalTestResponse> {
   return apiRequest(`/api/v1/knowledge-bases/${knowledgeBaseId}/retrieval-tests`, {
     method: 'POST',
     body: JSON.stringify(payload),
+    signal,
   })
 }
