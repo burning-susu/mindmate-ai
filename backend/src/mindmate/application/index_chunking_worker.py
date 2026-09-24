@@ -3,6 +3,7 @@ from __future__ import annotations
 import threading
 from collections.abc import Callable
 from datetime import UTC, datetime
+from hashlib import sha256
 
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
@@ -17,6 +18,7 @@ from mindmate.application.chunking import (
     config_values,
 )
 from mindmate.application.files import read_parsed_text
+from mindmate.application.index_preprocessing import reuse_source_version_id
 from mindmate.application.tasks import (
     add_event,
     checkpoint_task,
@@ -138,6 +140,14 @@ class IndexChunkingWorker:
                 if item is None:
                     self._complete(session, task, version)
                     return
+                if reuse_source_version_id(item.reason_code) is not None:
+                    item_id = item.index_version_input_id
+                    # A valid source cache is copied by reference to the new
+                    # immutable version. If it is unavailable, fall through to
+                    # the normal parser/chunker path and rebuild this file.
+                    session.commit()
+                    if self._reuse_item(task_id, index_version_id, item_id):
+                        continue
                 item.chunk_status = "RUNNING"
                 item.chunk_reason_code = None
                 session.commit()
@@ -189,6 +199,73 @@ class IndexChunkingWorker:
                 continue
             if not self._publish_item(task_id, index_version_id, item_id, drafts):
                 return
+
+    def _reuse_item(self, task_id: str, index_version_id: str, input_id: str) -> bool:
+        """Mark a reusable file as chunked without reading or splitting it again."""
+        with self._session_factory() as session:
+            task = session.get(BackgroundTask, task_id)
+            item = session.get(IndexVersionInput, input_id)
+            version = session.get(IndexVersion, index_version_id)
+            if task is None or item is None or version is None or not self._task_can_continue(
+                session, task_id
+            ):
+                return False
+            source_id = reuse_source_version_id(item.reason_code)
+            if source_id is None:
+                return False
+            source = session.get(IndexVersion, source_id)
+            source_item = session.scalar(
+                select(IndexVersionInput).where(
+                    IndexVersionInput.index_version_id == source_id,
+                    IndexVersionInput.file_id == item.file_id,
+                    IndexVersionInput.content_hash == item.content_hash,
+                    IndexVersionInput.parse_revision_id == item.parse_revision_id,
+                    IndexVersionInput.status == "PREPARED",
+                    IndexVersionInput.chunk_status == "CHUNKED",
+                    IndexVersionInput.embedding_status == "EMBEDDED",
+                    IndexVersionInput.fts_status == "INDEXED",
+                )
+            )
+            valid, _reason, record = self._validate_item(session, item, version)
+            if (
+                source is None
+                or source.status not in {"READY", "RETIRED"}
+                or source.chunking_config_id != version.chunking_config_id
+                or source.embedding_config_id != version.embedding_config_id
+                or source_item is None
+                or not valid
+                or record is None
+            ):
+                return False
+            chunks = list(
+                session.scalars(
+                    select(Chunk)
+                    .where(
+                        Chunk.file_id == item.file_id,
+                        Chunk.parse_revision_id == item.parse_revision_id,
+                        Chunk.chunking_config_id == version.chunking_config_id,
+                        Chunk.invalidated_at.is_(None),
+                    )
+                    .order_by(Chunk.sequence_number)
+                )
+            )
+            if (
+                not chunks
+                or len(chunks) != source_item.chunk_count
+                or [chunk.sequence_number for chunk in chunks] != list(range(len(chunks)))
+                or any(
+                    chunk.content_hash != sha256(chunk.content.encode("utf-8")).hexdigest()
+                    for chunk in chunks
+                )
+            ):
+                return False
+            item.chunk_status = "CHUNKED"
+            item.chunk_reason_code = "REUSED"
+            item.chunk_count = len(chunks)
+            item.chunked_at = datetime.now(UTC)
+            self._checkpoint_item(session, task, item, "CHUNKED", len(chunks))
+            session.commit()
+            return True
 
     def _prepare_task(self, task_id: str) -> str | None:
         with self._session_factory() as session:

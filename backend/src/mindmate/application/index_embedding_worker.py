@@ -528,6 +528,7 @@ class IndexEmbeddingWorker:
                         IndexVersionInput.parse_revision_id == chunk.parse_revision_id,
                         IndexVersionInput.status == "PREPARED",
                         IndexVersionInput.chunk_status == "CHUNKED",
+                        IndexVersionInput.embedding_status == "EMBEDDED",
                     )
                     .order_by(IndexVersion.created_at)
                 )

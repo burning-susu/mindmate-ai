@@ -150,6 +150,16 @@
 - 验收：串行 `uv run pytest` 为 `147 passed`；`uv run ruff check src tests` 全过；Pyright `0 errors, 0 warnings, 0 informations`；`uv run python -m compileall -q src tests migrations`、`uv run alembic heads`（`e4a7810c9b62`）和 `git diff --check` 通过。`uv run ruff check .` 仍报 14 条既有 Alembic migration lint，未改旧迁移；没有 UI E2E、DeepSeek、真实凭据、付费服务或真实用户资料。
 - 下一开发批次唯一目标：实现同一知识库的增量索引构建策略，保留本批快照校验与原子激活边界。
 
+### 第二十批：同一知识库的增量索引构建
+
+- 状态：本批 `PASS`；阶段 5 继续 `PARTIAL`。没有新增迁移或公开契约。
+- 增量判定：`INDEX_PREPROCESS` 检查活动版本、当前成员快照、文件内容哈希、解析修订以及切片/Embedding 实际配置字段指纹。计划按 `NEW/CHANGED/UNCHANGED/REMOVED/PENDING/FAILED` 分类，并记录 `FULL/INCREMENTAL` 模式、复用来源和数量。成员加入时间仍参与目标快照校验，但不作为文件级 Chunk/Embedding 的复用键。
+- 复用规则：只有来源输入阶段均完整，且 `file_id + content_hash + parse_revision_id`、ChunkingConfig、EmbeddingConfig（模型 revision、维度、归一化、距离等）与向量引擎兼容时才复用。已有 Chunk 直接引用；EmbeddingRecord 的向量从兼容 IndexVersion 的 sqlite-vec 空间按 ID/hash 对账并复制到新版本，不运行 ONNX；FTS 投影复制到新版本映射。缓存不存在、配置或产物对账不通过时回退到原 Chunk/Embedding/FTS 阶段。配置关键字段不兼容时对整个知识库执行完整重建，不复用旧向量。
+- 范围与生命周期：候选仍冻结完整的当前成员快照；移出成员在当前查询的实时成员过滤中立即排除，候选中不包含已移出的成员。移除或切换不删除原文件、其他知识库共享的 EmbeddingRecord/Chunk 或历史版本 FTS/向量。构建期间旧活动版本保持可读；第十九批激活器继续完整核验候选并以原子事务切换。
+- 幂等与竞态：重复提交相同知识库、输入快照和配置返回现有候选；快照变化可建立新候选，较旧候选由激活器标记 `SUPERSEDED`，不自动无限重试。Worker 重试及预处理恢复沿用持久任务/检查点；源缓存变化时清除复用标记并走正常阶段计算。
+- 验收：新增 `tests/test_stage5_incremental_index.py` 覆盖新增文件、文件内容替换、成员移除、跨知识库兼容复用、Embedding 维度/配置不兼容全量重建、重复提交和完整候选原子激活。Embedding 调用计数 Mock 证明新增/变更文件外，未变文件不会再次推理；激活器对 Chunk、Embedding/向量与 FTS 全量复核通过后才切换。串行后端 `153 passed`；Ruff、Pyright、compileall、Alembic head `e4a7810c9b62`、`git diff --check` 通过。`ruff check .` 仍报告 14 条既有 Alembic migration lint。无真实 Provider、凭据、用户资料、UI E2E 或 OpenAPI 变更。
+- 下一开发批次唯一目标：为活动索引建立持久化的服务端来源快照，并校验来源仍属于该知识库的活动版本范围。
+
 ## 进度口径
 
 文件产出不等于测试通过；测试通过不等于 Spike 通过；Spike 通过不等于业务验收或发布完成。

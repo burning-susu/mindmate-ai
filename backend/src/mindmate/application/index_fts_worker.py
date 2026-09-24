@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from uuid6 import uuid7
 
 from mindmate.application.index_fts import INDEX_FTS_TASK, fts_summary
+from mindmate.application.index_preprocessing import reuse_source_version_id
 from mindmate.application.tasks import (
     add_event,
     checkpoint_task,
@@ -273,14 +274,30 @@ class IndexFtsWorker:
             ):
                 return "FAILED", "CHUNK_SET_UNAVAILABLE", 0
 
-            self._projection.replace_file(
-                session,
-                index_version_id=version_id,
-                file_id=item.file_id,
-                parse_revision_id=str(item.parse_revision_id),
-                chunking_config_id=version.chunking_config_id,
-                chunks=chunks,
-            )
+            source_version_id = reuse_source_version_id(item.reason_code)
+            copied = 0
+            if source_version_id is not None:
+                source = session.get(IndexVersion, source_version_id)
+                if (
+                    source is not None
+                    and source.status in {"READY", "RETIRED"}
+                    and source.chunking_config_id == version.chunking_config_id
+                ):
+                    copied = self._projection.copy_file(
+                        session,
+                        source_index_version_id=source_version_id,
+                        index_version_id=version_id,
+                        file_id=item.file_id,
+                    )
+            if copied != len(chunks):
+                self._projection.replace_file(
+                    session,
+                    index_version_id=version_id,
+                    file_id=item.file_id,
+                    parse_revision_id=str(item.parse_revision_id),
+                    chunking_config_id=version.chunking_config_id,
+                    chunks=chunks,
+                )
             if not self._owns_task(task):
                 return "CANCELLED", None, 0
             item.fts_status = "INDEXED"

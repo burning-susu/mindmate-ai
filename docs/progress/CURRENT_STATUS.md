@@ -6,7 +6,7 @@
 - 当前远程提交：以 `git ls-remote --heads origin feat/v1-bootstrap` 为准；本文件随本批次收口提交推送
 - 最后更新时间：`2026-09-24`
 - 当前开发阶段：阶段 5 开发中，状态 `PARTIAL`
-- 当前批次状态：第十九批“索引产物完整性复核与原子激活”结论 `PASS`；阶段 5 状态 `PARTIAL`
+- 当前批次状态：第二十批“同一知识库的增量索引构建”结论 `PASS`；阶段 5 状态 `PARTIAL`
 
 ## 已完成阶段
 
@@ -15,7 +15,7 @@
 - 阶段 2：安全本地应用壳，`0b19795`
 - 阶段 3：数据、任务和备份基础，`02a32b8`
 - 阶段 4：初始实现 `bc30e1f`，证据修订 `9e0174a`，收口修复 `3b29d22`，第四批交接 `0448d5b`；第五批完成数据模型、迁移、乐观锁、解析失败持久化与契约同步；第六批完成持久解析 Worker、原子领取/租约、重试恢复和 Windows Job Object；第七批补齐列表状态恢复并完成最终验收，状态 `PASS`
-- 阶段 5：第八批完成空知识库持久化基础；第九批完成成员加入/移出、多库共享、批量准入、持久任务、取消/恢复和前端真实状态闭环；第十批完成索引配置、不可变版本输入快照与可恢复预处理 Worker；第十一批完成可复用版本化 Chunk 与独立可恢复切片任务；第十二批完成固定 ONNX 产物来源、哈希验证与本地 CPU Adapter；第十三批完成持久 EmbeddingRecord、单并发 Worker 与 sqlite-vec 向量写入；第十四批完成按 IndexVersion 隔离的持久 FTS5 投影与逐输入恢复；第十五批完成内部向量 Top-K 与范围过滤；第十六批完成双路 Top 30 候选收集、稳定按 Chunk ID 去重与范围变化复核；第十七批完成内部 RRF、精确命中奖励和确定性多样性 Top 8；第十八批完成内部证据门控与结构化严格拒答；第十九批完成产物完整性复核、失败回退与 `READY` 版本原子激活；阶段整体仍为 `PARTIAL`
+- 阶段 5：第八批完成空知识库持久化基础；第九批完成成员加入/移出、多库共享、批量准入、持久任务、取消/恢复和前端真实状态闭环；第十批完成索引配置、不可变版本输入快照与可恢复预处理 Worker；第十一批完成可复用版本化 Chunk 与独立可恢复切片任务；第十二批完成固定 ONNX 产物来源、哈希验证与本地 CPU Adapter；第十三批完成持久 EmbeddingRecord、单并发 Worker 与 sqlite-vec 向量写入；第十四批完成按 IndexVersion 隔离的持久 FTS5 投影与逐输入恢复；第十五批完成内部向量 Top-K 与范围过滤；第十六批完成双路 Top 30 候选收集、稳定按 Chunk ID 去重与范围变化复核；第十七批完成内部 RRF、精确命中奖励和确定性多样性 Top 8；第十八批完成内部证据门控与结构化严格拒答；第十九批完成产物完整性复核与原子激活；第二十批完成同一知识库的增量差异计划、Chunk/Embedding/FTS 兼容复用并沿用原子激活；阶段整体仍为 `PARTIAL`
 
 ## 当前已实现能力
 
@@ -23,7 +23,7 @@
 - 任务与资源安全：复用 `BackgroundTask` 实现文件导入/重新处理及知识库成员准入；解析 Worker 与成员 Worker 按任务类型隔离领取，均使用原子领取、租约、过期恢复、关闭中断与取消状态；Windows 解析子进程使用 Job Object 的 `KILL_ON_JOB_CLOSE` 与进程内存上限，默认 `512 MiB`。
 - 前端：真实 API 文件工作台、嵌套目录、筛选排序、导入与重复决策、详情编辑/预览、文件和文件夹回收站操作；列表查询参数、详情返回后的筛选/排序/滚动恢复；返回前刷新列表避免旧 `row_version` 竞态；版本冲突提示并引导重新加载，不自动覆盖。
 - 数据库：SQLite/Alembic 核心实体、持久任务、内容对象引用计数和软删除字段；revision `d91f4a6b2c30` 增加 ChunkingConfig、EmbeddingConfig、IndexVersion 与逐文件输入快照；revision `f2c7a1d8e904` 增加文件级 Chunk 与切片检查点；revision `a81f3c6d2e90` 增加 EmbeddingRecord、逐输入 Embedding 检查点及 INDEX_EMBED 单运行租约约束；revision `d60f2e8a7c31` 增加逐输入 FTS 状态、映射表、FTS5 虚表和 INDEX_FTS 单运行租约约束；revision `e4a7810c9b62` 增加索引激活失败原因码。
-- 测试与工程：第十九批后端全量 `147 passed`；Ruff（`src`/`tests`）、Pyright、compileall、Alembic head 与 `git diff --check` 通过；全目录 Ruff 仍报告 14 条既有 Alembic migration lint 项。前端既有 13 tests 和阶段 4/5 Playwright 生命周期证据见测试状态。
+- 测试与工程：第二十批后端全量串行 `153 passed`；Ruff（`src`/`tests`）、Pyright、compileall、Alembic head 与 `git diff --check` 通过；全目录 Ruff 仍报告 14 条既有 Alembic migration lint 项。前端既有 13 tests 和阶段 4/5 Playwright 生命周期证据见测试状态。
 - 知识库：空库创建保持 `EMPTY`；名称/描述/颜色/图标编辑；回收站生命周期；已导入文件批量加入/移出、多库共享、幂等重加与逐项结果；成员准入完成后保持 `index_state=PENDING` 和知识库 `PREPARING`，不伪造可检索状态。
 - 索引预处理：独立 `INDEX_PREPROCESS` Worker 在请求生命周期外冻结活动成员、内容哈希、解析修订、配置指纹与集合指纹；逐文件记录 `PREPARED/SKIPPED/FAILED`，支持幂等、租约接管、检查点续跑、取消和完成前版本复核。预处理后 `IndexVersion.status=BUILDING`，不会写入 `active_index_version_id`。
 - 版本化切片：独立 `INDEX_CHUNK` Worker 仅消费同版本 `PREPARED` 快照；Chunk 按文件/解析修订/切片配置复用，不与知识库绑定；文件级 Chunk 集、切片检查点和任务进度原子提交，支持取消、租约接管、关闭续跑、显式失败重试、多库复用与旧解析/配置版本共存。完成后仍为 `BUILDING` 且不可检索。
@@ -39,12 +39,13 @@
 - 内部检索排序：双路 Top 30 按 `chunk_id` 合并后使用 RRF 常量 `60`，分数为各有效通道 `1/(60 + rank)` 之和；NFKC/大小写折叠后的完整查询短语和精确词项获得最高 `0.004` 的局部奖励；相同来源及相邻高重叠 Chunk 接受有界软惩罚，确定性输出最多 Top 8。结果保留原始双路信号、排序版本/参数、精确命中字段、调整原因和显式降级状态。应用层内部查询只读当前活动 `READY` 版本，`BUILDING` 候选不可进入检索；无公开检索/API。
 - 内部证据充分性判定：排序后最多 Top 8 使用版本化规则 `evidence-gate-v1`；要求有效双路排名、校验过的余弦相似度、正文精确术语/编号覆盖和靠前排名，记录问题类型、来源覆盖与触发原因。标题、RRF 奖励和多样性分不能单独放行；复合问题或明显冲突整体拒绝。`insufficient` 只产生固定本地提示与建议；索引/范围/通道故障返回 `unavailable`，不伪装成资料不足。`supported` 只表示可进入后续引用绑定/生成候选流程，不是事实证明。无公开 API、模型调用、引用编号或用户级检索。
 - 索引激活：新候选只有在最新输入快照、Chunk、Embedding/向量及 FTS 映射/倒排结构对账通过，且任务检查点与配置一致后才能进入短事务切换。构建期间继续读取当前 `READY` 版本；失败不改活动指针，不清理旧版本产物。阶段失败、空库、部分失败和过期候选分别记录 `FAILED`、`EMPTY`、`PARTIAL`/`READY` 和 `SUPERSEDED` 语义。
+- 增量索引：预处理任务持久保存 `FULL/INCREMENTAL` 计划与新增、变更、未变、移除、待解析、失败和复用数量。复用要求内容哈希、解析修订、切片配置指纹、Embedding 模型/版本/维度/归一化/距离配置和向量引擎兼容；未变 Chunk 不再解析切片，已有 EmbeddingRecord/向量按版本复制且不会调用 ONNX，FTS 投影复用后仍接受候选全量完整性复核。配置不兼容进入完整重建；复用源失效则回退到既有计算阶段。
 
 ## 当前已知缺口
 
 - 阶段 4 无未解决功能、安全、数据一致性或迁移阻塞项；需求追踪详见 `docs/test-reports/stage-4-file-management.md`。
 - 发布候选保留：正式恶意文档集、真实资源耗尽边界、干净 Windows 安装/升级/卸载包，依据发布流程执行，不回填为阶段 4 已完成证据。
-- 阶段 5 缺口：增量构建、服务端来源快照与引用绑定、用户级严格拒答/RAG 流程、公开测试检索及面向验收集的证据阈值/质量校准仍未完成。第十八批门槛只供内部判断，不证明候选蕴含事实；本批原子激活仍未开放用户检索。
+- 阶段 5 缺口：服务端来源快照与引用绑定、用户级严格拒答/RAG 流程、公开测试检索及面向验收集的证据阈值/质量校准仍未完成。第十八批门槛只供内部判断，不证明候选蕴含事实；原子激活与增量构建仍未开放用户检索。
 
 ## 第十八批交接
 
@@ -65,9 +66,18 @@
 - 验收：串行后端全量 `147 passed`；`ruff check src tests`、Pyright（0 errors）、compileall、Alembic head `e4a7810c9b62` 和 `git diff --check` 通过。`ruff check .` 仍有 14 条既有 Alembic lint 项，无本批新增。未运行 UI E2E、未调用 DeepSeek/真实凭据/付费服务或真实用户资料。
 - 下一开发批次唯一目标：实现同一知识库的增量索引构建策略，继续保留版本快照及原子激活边界。
 
+## 第二十批交接
+
+- 本批结论：`PASS`；阶段 5 继续 `PARTIAL`。没有迁移、公开 API/OpenAPI、前端改动或外部模型请求。
+- 判定键：成员范围和加入时间属于候选输入快照；文件产物复用要求 `file_id + content_hash + parse_revision_id`，再匹配 ChunkingConfig 全字段指纹、EmbeddingConfig（provider/model/model_revision/dimension/normalization/distance）全字段指纹和 sqlite-vec 引擎。指纹与实际配置字段不一致时按不兼容处理。
+- 复用与重算：未变文件复用已存在 Chunk；逐文件 EmbeddingRecord/向量复用通过向量库哈希对账并写入新 IndexVersion 隔离空间，不调用 ONNX；FTS 从兼容完成版本复制映射/投影字段。新增/变更/缓存不可用文件仍走现有 `INDEX_CHUNK → INDEX_EMBED → INDEX_FTS`，失败使用原 `PARTIAL/FAILED` 状态和重试入口。移除成员不清理源文件、历史版本、其他成员可复用的 Chunk/Embedding；活动查询范围立即按当前成员过滤。
+- 任务与故障：增量计划和逐输入复用来源写入现有任务检查点/输入原因字段，无新增 schema。相同输入和配置的重复提交返回原候选；输入快照变化时允许新候选排队，较旧候选沿用激活器的 `SUPERSEDED` 规则，避免自动无限重试。旧活动指针在候选校验和原子切换前保持不变。
+- 验收：后端全量串行 `153 passed`；新增用例验证新增、文件内容替换、成员移除、跨知识库兼容复用、Embedding 维度/配置不兼容全量重建、重复候选幂等；未变文件 Embedding Mock 调用数不增加。Chunk、向量及 FTS 产物通过第十九批激活器复核后才切换。Ruff、Pyright、compileall、Alembic head `e4a7810c9b62` 与 `git diff --check` 通过；全目录 Ruff 仍有 14 条既有迁移 lint。未运行 UI E2E 或调用 DeepSeek/真实凭据/真实用户资料。
+- 下一开发批次唯一目标：为活动索引建立持久化的服务端来源快照，并校验来源仍属于该知识库的活动版本范围。
+
 ## 测试状态
 
-- 后端测试：`147 passed`（包含索引激活的产物对账、首次激活/旧版保留、BUILDING 拒绝、缺失产物、部分失败、空库/空文本、重启恢复、事务回滚、并发激活者和新候选晚到竞争）
+- 后端测试：`153 passed`（包含索引激活的产物对账、首次激活/旧版保留、BUILDING 拒绝、缺失产物、部分失败、空库/空文本、重启恢复、事务回滚、并发激活者和新候选晚到竞争，以及增量计划/兼容复用回归）
 - 阶段 4 后端定向测试：`21 passed`
 - 后端静态检查：`uv run ruff check src tests` 通过；Pyright `0 errors, 0 warnings, 0 informations`。`ruff check .` 的额外全目录扫描发现既有 migrations lint 项，本批未改。
 - 后端 compileall：通过
@@ -123,7 +133,7 @@
 
 ## 下一开发批次
 
-- 阶段 5 下一个唯一目标：对内部 Top 8 实现配置化的证据充分性阈值判定和严格拒答结果；继续不公开检索、不激活索引、不生成回答或引用。
+- 阶段 5 下一个唯一目标：为活动索引建立持久化的服务端来源快照，并校验来源仍属于该知识库的活动版本范围；继续不开放公开检索或生成式问答。
 
 ## 交接说明
 

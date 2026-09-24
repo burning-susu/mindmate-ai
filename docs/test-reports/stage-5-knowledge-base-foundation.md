@@ -26,9 +26,9 @@
 
 ## 结论
 
-第八至第十六批完成知识库成员、索引预处理、Chunk、Embedding、FTS5、向量 Top-K 与双路候选基础；第十七批完成内部 RRF/多样性 Top 8；第十八批完成 Top 8 后的内部证据充分性判定与严格拒答结果。空库保持 `EMPTY`；Embedding、FTS、检索排序及证据判定均不激活索引，也不可作为用户检索。
+第八至第十六批完成知识库成员、索引预处理、Chunk、Embedding、FTS5、向量 Top-K 与双路候选基础；第十七批完成内部 RRF/多样性 Top 8；第十八批完成内部证据判定；第十九批完成产物完整性复核与原子激活；第二十批完成同一知识库增量构建。空库保持 `EMPTY`；内部检索/证据用例仍不是公开用户检索。
 
-第十批 `INDEX_PREPROCESS` 的 `COMPLETED` 只证明输入快照与预处理结果已持久化；第十一批 `INDEX_CHUNK` 只证明切片阶段结束；第十三批 `INDEX_EMBED` 只证明向量已持久化；第十四批 `INDEX_FTS` 只证明 FTS5 投影已建立。第十五至十八批依次提供内部向量 Top-K、双路候选、RRF/多样性排序与证据门控；`supported` 只表示候选具备进入后续引用绑定/生成流程的资格，不证明最终答案获事实支持。以上均不表示索引就绪；`IndexVersion.status` 保持 `BUILDING`，`active_index_version_id` 不变，成员仍不可检索。阶段 5 仍为 `PARTIAL`：产物完整性复核与原子激活、服务端来源快照/引用绑定、公开检索、RAG、前端和质量验收仍未完成。
+第十批 `INDEX_PREPROCESS` 的 `COMPLETED` 只证明输入快照与预处理结果已持久化；第十一批 `INDEX_CHUNK` 只证明切片阶段结束；第十三批 `INDEX_EMBED` 只证明向量已持久化；第十四批 `INDEX_FTS` 只证明 FTS5 投影已建立。第十五至十八批提供内部召回、排序与证据判定；`supported` 只表示候选可进入后续来源绑定流程，不证明最终答案获事实支持。第十九批验证完整候选后才允许原子激活；第二十批增量候选沿用同一完整性复核。阶段 5 仍为 `PARTIAL`：服务端来源快照/引用绑定、公开检索、RAG、前端和质量验收仍未完成。
 
 ## 实现范围
 
@@ -550,3 +550,49 @@ repo> git diff --check
 ~~~
 
 全量测试包含迁移空库/既有数据升级回归。没有改前端或公开 API，未运行 UI E2E；未调用 DeepSeek、真实凭据、付费外部服务或真实用户文件。第十九批结论 `PASS`；阶段 5 继续 `PARTIAL`。下一批唯一目标：实现同一知识库的增量索引构建策略。
+
+## 第二十批验收追踪：同一知识库增量索引构建
+
+| ID | 验收项 | 证据 | 结论 |
+| --- | --- | --- | --- |
+| S5-B20-01 | 有活动版本时输出可审计的 `FULL/INCREMENTAL` 计划，区分新增、变更、未变、移除、待解析、失败及复用数量 | `test_incremental_add_reuses_unchanged_vectors_and_fts`、`test_incremental_removed_member_is_excluded_while_old_active_stays_readable` | PASS |
+| S5-B20-02 | 新增文件只计算新增输入；未变文件复用 Chunk/Embedding/FTS，ONNX Mock 推理调用数不增加 | `test_incremental_add_reuses_unchanged_vectors_and_fts`（计数 Mock + 候选激活器完整性复核） | PASS |
+| S5-B20-03 | 文件内容哈希/解析修订变化只重算该文件；候选 Chunk、Embedding/向量、FTS 均对账后才激活 | `test_incremental_replace_only_recomputes_changed_file` | PASS |
+| S5-B20-04 | 成员移出立即被旧活动版本的当前范围过滤；新快照不含该成员，不删除旧文件/历史产物 | `test_incremental_removed_member_is_excluded_while_old_active_stays_readable` | PASS |
+| S5-B20-05 | 相同文件可跨知识库复用兼容 Chunk/向量/FTS；配置/模型/维度不兼容强制全量重建、不复用旧向量 | `test_incremental_cross_kb_reuses_compatible_file_cache`、`test_incompatible_embedding_dimension_forces_full_rebuild_without_reuse` | PASS |
+| S5-B20-06 | 重复提交相同输入返回既有候选；既有 Worker 重试、重启、失败回退和成员/快照竞态用例继续通过 | `test_incremental_duplicate_submission_reuses_building_candidate` 及既有阶段 5 Worker/激活测试 | PASS |
+
+### 第二十批复用契约
+
+- 目标输入快照仍包含 ACTIVE 成员身份、文件 ID、内容哈希、解析修订和加入时间；删除成员在生成计划时不进入新候选，活动版本检索的实时成员过滤继续生效。
+- 文件级产物兼容键包含 `file_id + content_hash + parse_revision_id`。ChunkingConfig 指纹涵盖算法版本、度量单位、目标/最小/最大长度、重叠和结构规则；EmbeddingConfig 指纹涵盖 Provider、模型名与 revision、维度、归一化和距离度量。实际字段与保存指纹不一致也视为不兼容。
+- 只从输入阶段状态完整、配置相同的版本复用。Chunk 保持文件级权威记录；EmbeddingRecord 按现有唯一映射复用，向量按 record ID/hash 复制到新 IndexVersion 专属向量空间；FTS 按源文件复制倒排字段和新版本映射。缺项或映射变化回退至现有 Worker 计算。复用标记和计划数量存于已有预处理任务检查点/输入原因字段，没有迁移。
+- 候选创建与激活继续遵循第十九批：活动指针在新版本完整性复核和原子提交前不变；切换失败保留旧活动版本及旧引用所需产物。构建过程中快照变化时，较旧候选不能激活，可针对新快照创建候选并由激活器将旧候选标记 `SUPERSEDED`。
+- 固定验证没有 10 万 Chunk 性能或最终 Recall@10 结论；未运行 UI E2E，没有调用 DeepSeek、真实凭据、付费接口或真实用户文件。
+
+### 第二十批实际验证
+
+~~~text
+backend> uv run pytest
+153 passed（串行运行）
+
+backend> uv run ruff check src tests
+All checks passed
+
+backend> uv run pyright
+0 errors, 0 warnings, 0 informations
+
+backend> uv run python -m compileall -q src tests migrations
+通过
+
+backend> uv run alembic heads
+e4a7810c9b62 (head)
+
+backend> uv run ruff check .
+14 条既有 Alembic migration lint 项；本批相关源码/测试范围无 lint 问题
+
+repo> git diff --check
+通过
+~~~
+
+第二十批结论 `PASS`；阶段 5 继续 `PARTIAL`。下一批唯一目标：为活动索引建立持久化的服务端来源快照，并校验来源仍属于该知识库的活动版本范围。

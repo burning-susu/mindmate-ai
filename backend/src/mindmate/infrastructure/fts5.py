@@ -143,6 +143,71 @@ class Fts5Projection:
             rows,
         )
 
+    def copy_file(
+        self,
+        session: Session,
+        *,
+        source_index_version_id: str,
+        index_version_id: str,
+        file_id: str,
+    ) -> int:
+        """Copy a verified file projection without rebuilding its FTS fields."""
+        source_rows = list(
+            session.execute(
+                text(
+                    f"""
+                    SELECT m.chunk_id, m.file_id, m.parse_revision_id,
+                           m.chunking_config_id, m.content_hash,
+                           f.content, f.han_bigrams, f.han_unigrams, f.terms
+                    FROM fts_chunk_map AS m
+                    JOIN {FTS_TABLE} AS f ON f.rowid = m.fts_row_id
+                    WHERE m.index_version_id = :source_version_id
+                      AND m.file_id = :file_id
+                    ORDER BY m.fts_row_id
+                    """
+                ),
+                {
+                    "source_version_id": source_index_version_id,
+                    "file_id": file_id,
+                },
+            ).mappings()
+        )
+        if not source_rows:
+            return 0
+        self.delete_file(session, index_version_id, file_id)
+        mappings = [
+            FtsChunkMap(
+                index_version_id=index_version_id,
+                chunk_id=str(row["chunk_id"]),
+                file_id=str(row["file_id"]),
+                parse_revision_id=str(row["parse_revision_id"]),
+                chunking_config_id=str(row["chunking_config_id"]),
+                content_hash=str(row["content_hash"]),
+            )
+            for row in source_rows
+        ]
+        session.add_all(mappings)
+        session.flush()
+        rows = [
+            {
+                "rowid": mapping.fts_row_id,
+                "content": row["content"],
+                "han_bigrams": row["han_bigrams"],
+                "han_unigrams": row["han_unigrams"],
+                "terms": row["terms"],
+            }
+            for mapping, row in zip(mappings, source_rows, strict=True)
+        ]
+        session.execute(
+            text(
+                f"INSERT INTO {FTS_TABLE} "
+                "(rowid, content, han_bigrams, han_unigrams, terms) "
+                "VALUES (:rowid, :content, :han_bigrams, :han_unigrams, :terms)"
+            ),
+            rows,
+        )
+        return len(mappings)
+
     def delete_file(self, session: Session, index_version_id: str, file_id: str) -> int:
         return self._delete(
             session,

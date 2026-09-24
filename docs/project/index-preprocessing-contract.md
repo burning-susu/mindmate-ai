@@ -155,3 +155,13 @@ Windows 11 x64 / Python 3.12.11 实际 CPU 验证使用 ONNX Runtime 1.30.0、to
 - 恢复语义：事务外复核期间进程退出不修改版本；重启后从 `BUILDING` 重做核验。激活状态、旧版本退役状态与知识库指针在同一业务 SQLite 事务提交；重复扫描已由活动指针指向的 `READY` 版本直接幂等返回。
 - 检索边界：应用层 Vector Top-K 和 Hybrid Query 只接受 `status=READY` 且等于知识库当前 `active_index_version_id` 的版本，并仅消费 `index_state=READY` 成员；FTS 应用查询同时限定活动版本和已完成 Embedding 输入。内部基础投影/固定用例不构成用户 API；本批没有公开检索、聊天或测试检索路由。
 - 第十九批固定离线验证覆盖首次成功、构建期旧版可读/新 `BUILDING` 不可读、原子切换、旧版产物保留、缺 Chunk/向量/FTS/维度、任务未完成、更新成员/候选竞争、空库/空文本/部分失败、重复激活/重启恢复、并发重复激活与最终提交错误回滚。串行全量后端 `147 passed`；`ruff check src tests`、Pyright、compileall、Alembic head 和 `git diff --check` 通过。额外 `ruff check .` 仍报 14 条既有 Alembic lint；未改旧迁移。没有 DeepSeek/真实凭据/真实用户资料，也没有前端/API/E2E 变更。
+
+## 同一知识库增量构建阶段（第二十批）
+
+- `INDEX_PREPROCESS` 对活动版本和当前 ACTIVE 成员快照做差异计划。输入身份含成员 ID、`file_id`、内容 SHA-256、解析修订和 `membership_added_at`；逐项分类为 `NEW`、`CHANGED`、`UNCHANGED`、`PENDING`、`FAILED`，另统计从活动输入中移除的成员。预处理任务检查点保存 `FULL/INCREMENTAL`、基线版本、分类数量、逐文件复用来源及配置不兼容原因，供审计和重启恢复。没有活动 `READY` 版本按首次 `FULL` 构建处理。
+- 文件级复用至少要求 `file_id + content_hash + parse_revision_id` 一致。ChunkingConfig 指纹涵盖配置版本、切片算法、Unicode 字符度量单位、目标/最小/最大长度、重叠长度和结构规则 hash。EmbeddingConfig 指纹涵盖 Provider、模型名与完整 revision、维度、归一化及距离度量。指纹必须能由当前实际配置字段重算；向量引擎不兼容、模型/维度/规范化/Chunk 配置差异或指纹不一致时明确选择 `FULL`，不复用旧向量。
+- 新知识库可以复用其他知识库已完成且兼容的文件级缓存，但目标成员、加入时间、回收站、内容 hash 和解析修订仍由目标版本每一阶段重新验证。来源输入须有完整 Chunk、Embedding 和 FTS 检查点；共享文件不共享知识库范围映射。
+- 兼容的未变文件复用既有 Chunk 集，不再读取解析正文或运行切片算法。EmbeddingWorker 复用 Chunk/EmbeddingConfig 唯一映射和持久向量，通过向量 ID、Chunk ID、向量 hash 读写目标 IndexVersion 专属向量空间；目标空间缺向量时复制已存在单位向量，不调用 ONNX。来源产物缺失或验证失败时清除复用标记并走正常 `INDEX_CHUNK → INDEX_EMBED → INDEX_FTS`。FTS Worker 复制来源版本对应文件的 FTS 字段和映射至新版本；候选仍必须通过第十九批 FTS5 integrity-check、映射集合、向量/EmbeddingRecord、Chunk 与任务链完整性复核后激活。
+- 删除成员立即由当前知识库成员范围过滤从旧活动索引排除；新候选快照不含该成员。构建/校验期间旧活动指针与旧版本保持不变。移出一个成员不会删除源文件、被其他知识库引用的 Chunk/EmbeddingRecord、旧 IndexVersion 或旧 FTS/向量历史。候选切换仍复用第十九批唯一激活器和短事务 CAS。
+- 相同知识库当前输入快照与配置的重复提交返回现有任务/候选，不创建竞争版本。已有快照任务发现输入或配置变化时，允许创建新任务/候选；较旧候选通过最新版本/输入哈希复核后标记 `SUPERSEDED`，失败使用原 `PARTIAL/FAILED` 语义，不自动无限重试。Worker 重启仍依靠任务检查点、逐文件输入状态和现有租约恢复。
+- 第二十批无数据库迁移、公开检索/问答 API、OpenAPI、前端或 Provider 调用。离线回归覆盖增量新增、内容替换、移除成员即时过滤、跨知识库兼容缓存、Embedding 维度配置不兼容、重复任务、候选完整性审计及原子激活；ONNX 计数 Mock 证明未变文件不重复推理。后端串行 `153 passed`；Ruff、Pyright、compileall、Alembic head `e4a7810c9b62` 和 `git diff --check` 通过。`ruff check .` 仍有 14 条既有 Alembic migration lint。没有 10 万 Chunk 或最终 Recall@10 验收结论。
