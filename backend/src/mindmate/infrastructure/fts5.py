@@ -244,6 +244,7 @@ class Fts5Projection:
         limit: int = DEFAULT_FTS_TOP_K,
         *,
         knowledge_base_id: str | None = None,
+        require_active_version: bool = False,
     ) -> list[dict[str, Any]]:
         if (
             isinstance(limit, bool)
@@ -277,11 +278,17 @@ class Fts5Projection:
                     WHERE index_chunk_fts MATCH :query
                       AND m.index_version_id = :version_id
                       AND (:knowledge_base_id IS NULL OR v.scope_id = :knowledge_base_id)
-                      AND v.status = 'BUILDING'
+                      AND (
+                        (:require_active = 1 AND v.status = 'READY'
+                         AND kb.active_index_version_id = v.index_version_id)
+                        OR (:require_active = 0 AND v.status = 'BUILDING')
+                      )
                       AND v.fts_status IN ('COMPLETED', 'PARTIAL')
                       AND i.status = 'PREPARED' AND i.chunk_status = 'CHUNKED'
                       AND i.fts_status = 'INDEXED'
+                      AND (:require_active = 0 OR i.embedding_status = 'EMBEDDED')
                       AND membership.membership_status = 'ACTIVE'
+                      AND (:require_active = 0 OR membership.index_state = 'READY')
                       AND membership.added_at = i.membership_added_at
                       AND kb.deleted_at IS NULL AND f.deleted_at IS NULL AND f.status = 'PARSED'
                       AND f.content_hash = i.content_hash AND f.parse_revision_id = i.parse_revision_id
@@ -299,6 +306,7 @@ class Fts5Projection:
                     "version_id": index_version_id,
                     "knowledge_base_id": knowledge_base_id,
                     "limit": limit,
+                    "require_active": int(require_active_version),
                 },
             ).mappings()
         except Exception as error:

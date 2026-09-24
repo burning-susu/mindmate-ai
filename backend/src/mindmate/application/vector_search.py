@@ -75,7 +75,8 @@ class VectorTopKQuery:
             version is None
             or version.scope_type != "KNOWLEDGE_BASE"
             or version.scope_id != knowledge_base_id
-            or version.status != "BUILDING"
+            or version.status != "READY"
+            or knowledge_base.active_index_version_id != version.index_version_id
             or version.vector_engine != "sqlite-vec"
             or version.chunking_status not in {"COMPLETED", "PARTIAL"}
             or version.embedding_status not in {"COMPLETED", "PARTIAL"}
@@ -174,6 +175,7 @@ class VectorTopKQuery:
                 IndexVersionInput.parse_revision_id == FileRecord.parse_revision_id,
                 IndexVersionInput.membership_added_at == KnowledgeBaseFile.added_at,
                 KnowledgeBaseFile.membership_status == "ACTIVE",
+                KnowledgeBaseFile.index_state == "READY",
                 FileRecord.deleted_at.is_(None),
                 FileRecord.status == "PARSED",
             )

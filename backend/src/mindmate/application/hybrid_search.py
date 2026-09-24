@@ -571,6 +571,7 @@ class HybridCandidateQuery:
                 query_text,
                 limit=k,
                 knowledge_base_id=knowledge_base_id,
+                require_active_version=True,
             )
         except Exception as error:
             fts_error = getattr(error, "code", None)
@@ -645,10 +646,11 @@ class HybridCandidateQuery:
                 raise HybridQueryError("INDEX_VERSION_NOT_AVAILABLE")
             version = signature[0]
             if (
-                version[0] != "BUILDING"
+                version[0] != "READY"
                 or version[1] != "KNOWLEDGE_BASE"
                 or version[2] != knowledge_base_id
                 or version[7] is not None
+                or version[8] != index_version_id
             ):
                 raise HybridQueryError("INDEX_VERSION_NOT_AVAILABLE")
             if version[5] not in {"COMPLETED", "PARTIAL"}:
@@ -701,10 +703,11 @@ class HybridCandidateQuery:
             raise HybridQueryError("INDEX_VERSION_NOT_AVAILABLE")
         version = signature[0]
         if (
-            version[0] != "BUILDING"
+            version[0] != "READY"
             or version[1] != "KNOWLEDGE_BASE"
             or version[2] != knowledge_base_id
             or version[7] is not None
+            or version[8] != index_version_id
         ):
             raise HybridQueryError("INDEX_VERSION_NOT_AVAILABLE")
 
@@ -733,6 +736,7 @@ class HybridCandidateQuery:
                 IndexVersion.fts_status,
                 IndexVersion.embedding_status,
                 KnowledgeBase.deleted_at,
+                KnowledgeBase.active_index_version_id,
             )
             .join(KnowledgeBase, KnowledgeBase.knowledge_base_id == IndexVersion.scope_id)
             .where(
@@ -755,6 +759,7 @@ class HybridCandidateQuery:
                 IndexVersionInput.embedding_status,
                 IndexVersionInput.fts_status,
                 KnowledgeBaseFile.membership_status,
+                KnowledgeBaseFile.index_state,
                 KnowledgeBaseFile.added_at,
                 FileRecord.status,
                 FileRecord.display_name,

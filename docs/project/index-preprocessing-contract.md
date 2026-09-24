@@ -141,3 +141,17 @@ Windows 11 x64 / Python 3.12.11 实际 CPU 验证使用 ONNX Runtime 1.30.0、to
 - 结构化结果状态为 `supported`、`insufficient`、`unavailable`，包含规则版本、问题类型、原因码、候选的 Chunk/File/IndexVersion 身份及原始 rank/相似度/锚点等信号。`insufficient` 只带固定本地提示和补充/调整资料建议，不输出候选正文，不调用模型、不拼引用；`unavailable` 不带拒答提示，保留索引、范围或通道错误原因；`supported` 仅表示候选可进入后续服务端来源快照、引用绑定和生成流程，不代表事实蕴含或最终答案验证通过。
 - 第十八批固定离线样本覆盖：精确问题与核心实体改写、无结果、相似但缺少所问数值、短词误命中、标题/编号假阳性、低/空/不一致余弦信号、奖励分不能绕过、重复位置切片、单文件证据、部分覆盖复合问题、数值和极性冲突、单路未请求/显式故障、跨范围版本及范围变化。8 个纯判定样本通过；另有真实 SQLite FTS5 + sqlite-vec 链路确认候选全在范围内、门控在 Top 8 后运行、无引用编号、版本仍 `BUILDING` 且活动版本为空。样本不包含私人文件，不等价于最终 Recall@10 或问答质量验收。
 - 第十八批验证：后端串行 `133 passed`；`uv run ruff check src tests`、Pyright、`python -m compileall -q src tests migrations`、`git diff --check` 通过。测试曾有一次既有 Embedding Worker 互斥用例失败，单测重跑及后续全量重跑通过。额外 `ruff check .` 报 14 条未修改的既有 Alembic migration lint 问题；本批 `src`/`tests` lint 通过。没有 OpenAPI、前端、API 或迁移改动；没有 UI E2E、DeepSeek、真实凭据、付费服务或用户资料。阶段 5 仍为 `PARTIAL`。
+
+## 索引完整性复核与原子激活阶段（第十九批）
+
+- `IndexActivationWorker` 在应用生命周期内周期扫描仍处于 `BUILDING` 的版本。它不产生公开路由，也不引入新的 `BackgroundTask` 类型；已有预处理、Chunk、Embedding 和 FTS 任务的持久状态/检查点是准入证据，`IndexVersion.activation_error_code` 记录终结失败或过期原因。应用重启后扫描器从数据库重新发现候选并重复核验。
+- 候选必须属于未删除知识库，并且是最新创建的 `IndexVersion`。尚有阶段未终结或同版本任务 `QUEUED/RUNNING` 时等待；最新阶段任务必须成功结束，版本阶段状态必须为 `COMPLETED/PARTIAL`。旧候选在自身任务链未终结时保持 `BUILDING`，但不能越过更新版本激活；任务链结束后转为 `SUPERSEDED`。同版本重试任务开始运行时扫描器继续等待；成功重试后再复核最新任务检查点。
+- 输入集合以当前知识库 ACTIVE 成员与不可变 `IndexVersionInput` 快照逐项相等为准，并同时复算 `parse_revision_set_hash`。有效 PREPARED 来源还须保持文件 `PARSED`、未永久清理、内容哈希和解析修订匹配；临时回收站或解析处理中状态等待现有恢复/清理流程，不能激活旧正文。成员移出/重加、快照变化和更新候选使旧版本无法覆盖新范围。
+- Chunk 检查只读取持久 Chunk，不重跑切片或 Embedding；校验 ChunkingConfig 和 EmbeddingConfig 的配置 ID、按实际字段重算 fingerprint 与最新任务 checkpoint。每个 `CHUNKED` 文件的有效 Chunk 数必须等于持久 `chunk_count`，Chunk 正文 UTF-8 SHA-256 必须等于 Chunk 行内容哈希。失败/跳过输入不进入可用范围。
+- Embedding 检查使用固定有效的本地 ONNX 配置和 512 维；每个 `EMBEDDED` 输入要求逐 Chunk 的 `EmbeddingRecord.READY` 数与 `embedding_count` 一致，校验 EmbeddingConfig fingerprint、vector ID、Chunk ID 和业务行 vector hash。对应每版本 sqlite-vec 文件再检查配置/IndexVersion/引擎 identity、SQLite `quick_check`、元数据和向量行 rowid 一一对应、向量维度 512、有限值、单位范数、实际字节 SHA-256，以及已完成输入要求的向量记录集合。复核不重新推理，也不修改旧版本向量库。
+- FTS 检查分别执行 FTS5 `integrity-check` 和版本范围 `consistency_check`；虚表每个 rowid 必须对应唯一 `fts_chunk_map` 行，映射字段、Chunk 正文、文件/解析修订/配置/hash 必须相符，并且整个版本映射集合精确等于各成功输入的 Chunk 集。空表存在、单向映射存在或单独计数相等都不能代替双向完整性复核。
+- 文件策略：输入快照为零且没有 FTS/向量产物时版本以 `EMPTY` 结束，知识库回到 `EMPTY` 并清空活动指针；输入失败或跳过时逐项原因保留。至少一个文件的 Chunk、Embedding 和 FTS 都完整时允许候选以 `READY` 激活，知识库标记 `PARTIAL`，仅这些成员设置 `index_state=READY`；不存在完整可用文件时新候选为 `FAILED`。首次失败且无旧版时知识库=`FAILED`；有旧活动版时指针不变并继续由旧版提供当前范围内结果，知识库状态根据旧版当前有效范围恢复为 `READY/PARTIAL/NEEDS_REBUILD`。
+- 激活事务边界：产物/文件复核全部在事务外做。提交时以知识库 `row_version` 和预期旧活动指针的条件 UPDATE 取得 SQLite 写锁，再于同一事务重新校验当前候选、最新版本、活动版本、成员/来源快照、配置及任务检查点。成功时原子设置新版本 `READY/activated_at`、旧版本 `RETIRED/retired_at`、`active_index_version_id`、知识库和成员状态；事务异常或 CAS 失败回滚，不会暴露空窗或新旧版本混读。物理回收不属于此批，旧版和历史引用所需产物保持。
+- 恢复语义：事务外复核期间进程退出不修改版本；重启后从 `BUILDING` 重做核验。激活状态、旧版本退役状态与知识库指针在同一业务 SQLite 事务提交；重复扫描已由活动指针指向的 `READY` 版本直接幂等返回。
+- 检索边界：应用层 Vector Top-K 和 Hybrid Query 只接受 `status=READY` 且等于知识库当前 `active_index_version_id` 的版本，并仅消费 `index_state=READY` 成员；FTS 应用查询同时限定活动版本和已完成 Embedding 输入。内部基础投影/固定用例不构成用户 API；本批没有公开检索、聊天或测试检索路由。
+- 第十九批固定离线验证覆盖首次成功、构建期旧版可读/新 `BUILDING` 不可读、原子切换、旧版产物保留、缺 Chunk/向量/FTS/维度、任务未完成、更新成员/候选竞争、空库/空文本/部分失败、重复激活/重启恢复、并发重复激活与最终提交错误回滚。串行全量后端 `147 passed`；`ruff check src tests`、Pyright、compileall、Alembic head 和 `git diff --check` 通过。额外 `ruff check .` 仍报 14 条既有 Alembic lint；未改旧迁移。没有 DeepSeek/真实凭据/真实用户资料，也没有前端/API/E2E 变更。

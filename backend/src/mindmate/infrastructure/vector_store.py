@@ -5,7 +5,7 @@ import importlib.metadata
 import math
 import shutil
 import sqlite3
-from collections.abc import Collection
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from uuid import UUID
@@ -318,6 +318,72 @@ class SqliteVecAdapter:
                 ).fetchall()
             }
         except sqlite3.Error:
+            raise VectorStoreError("VECTOR_STORE_READ_FAILED") from None
+        finally:
+            connection.close()
+
+    def validate_version(
+        self,
+        embedding_config_id: str,
+        index_version_id: str,
+        *,
+        allowed_records: Mapping[str, tuple[str, str]],
+        required_record_ids: set[str],
+    ) -> None:
+        """Verify persisted vector rows against business mappings without recomputing."""
+        database = self._existing_database(embedding_config_id, index_version_id)
+        if database is None:
+            if required_record_ids:
+                raise VectorStoreError("VECTOR_STORE_RECORD_MISSING")
+            return
+
+        connection = self._connect(embedding_config_id, index_version_id)
+        try:
+            integrity = connection.execute("PRAGMA quick_check").fetchone()
+            if integrity is None or integrity[0] != "ok":
+                raise VectorStoreError("VECTOR_STORE_INTEGRITY_FAILED")
+
+            metadata_rows = connection.execute(
+                "SELECT row_id, vector_store_record_id, chunk_id, vector_hash "
+                "FROM vector_metadata ORDER BY row_id"
+            ).fetchall()
+            vector_rows = connection.execute(
+                "SELECT rowid, embedding FROM vectors ORDER BY rowid"
+            ).fetchall()
+            metadata_by_row = {int(row[0]): row for row in metadata_rows}
+            vectors_by_row = {int(row[0]): bytes(row[1]) for row in vector_rows}
+            if len(metadata_by_row) != len(metadata_rows) or set(metadata_by_row) != set(
+                vectors_by_row
+            ):
+                raise VectorStoreError("VECTOR_STORE_MAPPING_INCONSISTENT")
+
+            actual_ids: set[str] = set()
+            for row_id, record_id_value, chunk_id_value, stored_hash_value in metadata_rows:
+                record_id = str(record_id_value)
+                chunk_id = str(chunk_id_value)
+                stored_hash = str(stored_hash_value)
+                expected = allowed_records.get(record_id)
+                if expected is None or expected != (chunk_id, stored_hash):
+                    raise VectorStoreError("VECTOR_STORE_MAPPING_INCONSISTENT")
+
+                raw = vectors_by_row[int(row_id)]
+                values = np.frombuffer(raw, dtype="<f4")
+                actual_hash = self._blob_hash(raw)
+                if (
+                    len(raw) != self._dimension * 4
+                    or values.shape != (self._dimension,)
+                    or not np.isfinite(values).all()
+                    or abs(float(np.linalg.norm(values)) - 1.0) > 1e-4
+                    or actual_hash != stored_hash
+                ):
+                    raise VectorStoreError("VECTOR_STORE_CONTENT_INCONSISTENT")
+                actual_ids.add(record_id)
+
+            if not required_record_ids.issubset(actual_ids):
+                raise VectorStoreError("VECTOR_STORE_RECORD_MISSING")
+        except VectorStoreError:
+            raise
+        except (sqlite3.Error, TypeError, ValueError, OverflowError):
             raise VectorStoreError("VECTOR_STORE_READ_FAILED") from None
         finally:
             connection.close()

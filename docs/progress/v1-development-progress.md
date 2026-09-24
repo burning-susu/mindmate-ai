@@ -138,6 +138,18 @@
 - 验收：串行后端 `133 passed`；`uv run ruff check src tests` 通过；Pyright `0 errors, 0 warnings, 0 informations`；`uv run python -m compileall -q src tests migrations` 与 `git diff --check` 通过。额外 `uv run ruff check .` 检出 14 条未修改的 Alembic migration lint 项。全量测试曾有一次既有 Embedding Worker 互斥用例失败；单项重跑及随后全量串行重跑均通过，最终 `133 passed`。无前端/API 改动，未跑 UI E2E；未调用 DeepSeek、真实凭据、付费接口或真实用户资料。
 - 下一开发批次唯一目标：为已完成索引版本实现产物完整性复核与原子激活，继续不开放用户检索。
 
+### 第十九批：索引产物完整性复核与原子激活
+
+- 状态：本批 `PASS`；阶段 5 继续 `PARTIAL`。Alembic 新增 `e4a7810c9b62`，只为 `IndexVersion` 增加内部 `activation_error_code`；没有公开 API/OpenAPI 或前端改动。
+- 候选准入：`IndexActivationWorker` 扫描终态任务链候选；逐项核对知识库当前成员集合与冻结的 `IndexVersionInput`/解析快照、准备文件的解析状态/回收站/内容哈希/解析修订、Chunking/Embedding 配置重算指纹、阶段任务检查点和候选版本新旧顺序。存在新任务或尚未终结的阶段时等待；新版本已出现时旧候选不能激活，待其任务链终结后标为 `SUPERSEDED`。临时回收站/解析处理中输入等待既有恢复或永久清理流程。
+- 产物规则：对每个已切片输入校验有效 Chunk 集和逐文件计数、Chunk 正文 SHA-256；对账 EmbeddingRecord 的 Chunk/配置/向量 hash、向量库 identity、SQLite `quick_check`、元数据/向量 rowid 一致、维度 512、有限单位向量及完整输入所需记录；执行 FTS5 `integrity-check` 与映射/倒排行对账，并将版本映射精确匹配到预期 Chunk/文件/解析修订/配置/hash。全部高成本检查在激活事务外完成，不重新运行 Embedding。
+- 空库与部分失败：零成员、零计数且无派生产物的版本终结为 `EMPTY`，清除旧活动指针并保留旧版本物理数据；输入中的 `FAILED/SKIPPED` 被排除检索，至少一个输入的 Chunk/Embedding/FTS 均完整才可激活，知识库标记 `PARTIAL`；没有完整可用输入则候选 `FAILED`。失败原因写入逐输入阶段状态或 `activation_error_code`，首次构建失败时知识库为 `FAILED`。
+- 原子切换：事务外对账后开始短事务，先按 `KnowledgeBase.row_version + active_index_version_id` CAS 占位并取得 SQLite 写锁，再复核活动/候选状态、最新版本、当前成员与输入指纹、任务检查点和配置指纹。成功时同一事务把新版本设为 `READY`/写入 `activated_at`，旧活动版本设为 `RETIRED`/写入 `retired_at`，切换活动指针、知识库/成员可用状态；失败或 CAS 变化回滚，不暴露半激活，不删除旧版向量或 FTS 产物。
+- 恢复与可见性：应用启动后周期扫描 `BUILDING` 候选；在提交前崩溃会从持久状态重新复核，事务提交后的重复执行幂等返回。内部向量与混合查询只读取当前 `active_index_version_id` 指向的 `READY` 版本，FTS/向量均限制到完全可用成员；候选 `BUILDING`、非活动的 `RETIRED` 和 `FAILED/SUPERSEDED` 均不可通过应用查询层读取。没有公开检索 API。
+- 固定离线验证覆盖首次成功、活动旧版与新候选隔离、切换后仅一个 `READY`、旧版物理产物保留、缺 Chunk/向量/FTS/错误维度拒绝、未终结任务等待、成员变化与新候选抢占、部分失败过滤、空知识库/空文本、重复恢复、并发重复激活、进程中断和提交故障回滚。所有用例使用 SQLite、固定 512 维向量和离线任务，不含用户文件。
+- 验收：串行 `uv run pytest` 为 `147 passed`；`uv run ruff check src tests` 全过；Pyright `0 errors, 0 warnings, 0 informations`；`uv run python -m compileall -q src tests migrations`、`uv run alembic heads`（`e4a7810c9b62`）和 `git diff --check` 通过。`uv run ruff check .` 仍报 14 条既有 Alembic migration lint，未改旧迁移；没有 UI E2E、DeepSeek、真实凭据、付费服务或真实用户资料。
+- 下一开发批次唯一目标：实现同一知识库的增量索引构建策略，保留本批快照校验与原子激活边界。
+
 ## 进度口径
 
 文件产出不等于测试通过；测试通过不等于 Spike 通过；Spike 通过不等于业务验收或发布完成。

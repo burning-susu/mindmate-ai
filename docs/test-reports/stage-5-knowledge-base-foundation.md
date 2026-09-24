@@ -497,3 +497,56 @@ repo> git diff --check
 首次完整 pytest 运行曾有一次既有 `test_embedding_claim_releases_only_expired_singleton_lease` 失败；单项重跑通过，之后完整串行重跑 `133 passed`。额外运行的 `uv run ruff check .` 报告 14 条既有 Alembic migration lint 项；本批相关源码/测试范围 Ruff 通过，迁移文件未修改。未运行 UI E2E（无前端/API 变化），未调用 DeepSeek、真实凭据、付费接口或用户资料。第十八批结论 `PASS`；阶段 5 继续 `PARTIAL`。
 
 下一开发批次唯一目标：为已完成索引版本实现产物完整性复核与原子激活，继续不开放用户检索。
+
+## 第十九批验收追踪：索引产物完整性复核与原子激活
+
+| ID | 验收项 | 证据 | 结论 |
+| --- | --- | --- | --- |
+| S5-B19-01 | 首次完整候选可激活，重复执行幂等返回；同一知识库仅一个版本为活动 `READY` | `test_first_activation_is_complete_and_idempotent` | PASS |
+| S5-B19-02 | 新候选 `BUILDING` 不可读；切换后旧版 `RETIRED`，其 FTS/向量文件仍保留 | `test_atomic_switch_preserves_old_artifacts_and_rejects_building_candidate` | PASS |
+| S5-B19-03 | Chunk 数、向量记录/维度/hash、FTS 映射任一不完整时拒绝；旧活动指针与旧产物不变 | `test_incomplete_artifacts_fail_candidate_and_keep_old_version` | PASS |
+| S5-B19-04 | 任务未终结时等待；部分失败文件被排除并形成 `PARTIAL`；空库为 `EMPTY`、空文本无可用输入为 `FAILED` | `test_unfinished_task_waits_and_partial_files_activate_as_partial`、`test_empty_database_and_empty_text_have_distinct_terminal_states` | PASS |
+| S5-B19-05 | 更新候选胜出；较旧候选晚到、成员快照变化均不能覆盖更新状态 | `test_newest_candidate_wins_and_older_late_completion_is_superseded`、`test_candidate_created_during_audit_blocks_late_activation`、`test_changed_membership_supersedes_candidate_without_replacing_old_active` | PASS |
+| S5-B19-06 | 重复 Worker 并发只发布一次；进程中断可重跑；激活提交注入故障完整回滚 | `test_concurrent_activation_attempts_publish_exactly_once`、`test_activation_resumes_after_interruption_and_commit_failure_rolls_back` | PASS |
+| S5-B19-07 | 应用层向量/混合查询仅接受活动 `READY` 版本；BUILDING 候选不经此边界开放；无公开检索 API/API schema/UI | `tests/test_stage5_vector_search.py` 活动版本回归、OpenAPI 未变、代码差异 | PASS |
+
+### 第十九批完整性规则
+
+- 激活扫描器只评估仍为 `BUILDING` 的候选。必须存在已完成的预处理、Chunk、Embedding、FTS 阶段任务；每阶段最新任务为 `COMPLETED`，无同版本 `QUEUED/RUNNING` 任务，配置 ID/fingerprint 与任务检查点一致。未终结阶段保持等待；新版本已出现时旧候选不能激活，待其任务链终结后标记 `SUPERSEDED`。临时回收站/解析处理中输入等待既有恢复或永久清理流程。
+- `IndexVersionInput` 必须与当前 ACTIVE 成员集合、`membership_added_at`、内容哈希、解析修订和 `parse_revision_set_hash` 完全相符。Chunking/Embedding 配置从实际字段重算 fingerprint；候选任务检查点必须与当前版本和配置相符。
+- 对每个已切片输入校验有效 Chunk 集、逐文件计数和 Chunk 正文 SHA-256；对账 EmbeddingRecord 的 Chunk/配置/向量 hash、向量库 identity、SQLite `quick_check`、元数据/向量 rowid 一致、维度 512、有限单位向量及完整输入所需记录；执行 FTS5 `integrity-check` 与映射/倒排行对账，并将版本映射精确匹配到预期 Chunk/文件/解析修订/配置/hash。全部高成本检查在激活事务外完成，不重新运行 Embedding。
+- 空知识库零成员、零计数且无派生产物时终结为 `EMPTY`，清除旧活动指针并保留旧版本物理数据；输入中的 `FAILED/SKIPPED` 被排除检索，至少一个输入的 Chunk/Embedding/FTS 均完整才可激活，知识库标记 `PARTIAL`；没有完整可用输入则候选 `FAILED`。失败原因写入逐输入阶段状态或 `activation_error_code`，首次构建失败时知识库为 `FAILED`。
+
+### 第十九批事务与恢复
+
+- Chunk、Embedding、向量与 FTS 校验均在激活事务外完成，不重新推理。开始短事务后，先以 `KnowledgeBase.row_version` 和预期旧 `active_index_version_id` 做条件写入以取得 SQLite 写锁；锁内再次检查知识库未删除、候选仍最新且为 `BUILDING`、成员/解析快照/配置和最新任务检查点未变化。
+- 成功时同一事务设置新版本 `READY + activated_at`、旧版本 `RETIRED + retired_at`、`KnowledgeBase.active_index_version_id`/状态及文件成员 `index_state`。唯一活动版本以知识库活动指针为准；冲突或任一步骤异常回滚整笔事务。失败候选记录 `activation_error_code`，无旧版时 KnowledgeBase=`FAILED`，有旧版时保留活动指针并按旧版当前有效范围恢复 `READY/PARTIAL/NEEDS_REBUILD`。
+- `IndexActivationWorker` 启动后周期扫描未终态候选。审计期间进程退出时不会留下中间状态，重启会重新校验持久产物；提交发生在一次事务内，因此不会出现版本状态与活动指针半切换。活动版本已等于请求版本时重复激活直接幂等返回。旧版 FTS/向量文件和历史物理产物不会因切换被清理。
+- 应用层 Vector Top-K/Hybrid 查询只接受 `status=READY` 且与知识库活动指针一致的版本，并只消费 `index_state=READY` 的成员。构建中的候选不能从应用查询层读取；本批仍无对用户开放的检索/聊天接口。
+
+### 第十九批实际验证
+
+~~~text
+backend> uv run pytest
+147 passed（串行运行）
+
+backend> uv run ruff check src tests
+All checks passed
+
+backend> uv run pyright
+0 errors, 0 warnings, 0 informations
+
+backend> uv run python -m compileall -q src tests migrations
+通过
+
+backend> uv run alembic heads
+e4a7810c9b62 (head)
+
+backend> uv run ruff check .
+14 条既有 Alembic migration lint 项；本批源码/测试范围无 lint 问题
+
+repo> git diff --check
+通过
+~~~
+
+全量测试包含迁移空库/既有数据升级回归。没有改前端或公开 API，未运行 UI E2E；未调用 DeepSeek、真实凭据、付费外部服务或真实用户文件。第十九批结论 `PASS`；阶段 5 继续 `PARTIAL`。下一批唯一目标：实现同一知识库的增量索引构建策略。

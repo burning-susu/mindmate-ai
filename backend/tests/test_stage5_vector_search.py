@@ -121,7 +121,7 @@ def vector_fixture(tmp_path: Path):
             embedding_config_id=embedding.embedding_config_id,
             vector_engine="sqlite-vec",
             vector_engine_version=SqliteVecAdapter(settings.vectors_dir).version,
-            status="BUILDING",
+            status="READY",
             preprocessing_status="COMPLETED",
             chunking_status="COMPLETED",
             embedding_status="COMPLETED",
@@ -130,6 +130,7 @@ def vector_fixture(tmp_path: Path):
             prepared_count=3,
             created_at=now,
             preprocessed_at=now,
+            activated_at=now,
         )
         second_version = IndexVersion(
             index_version_id=new_id(),
@@ -140,7 +141,7 @@ def vector_fixture(tmp_path: Path):
             embedding_config_id=embedding.embedding_config_id,
             vector_engine="sqlite-vec",
             vector_engine_version=version.vector_engine_version,
-            status="BUILDING",
+            status="READY",
             preprocessing_status="COMPLETED",
             chunking_status="COMPLETED",
             embedding_status="COMPLETED",
@@ -149,7 +150,12 @@ def vector_fixture(tmp_path: Path):
             prepared_count=1,
             created_at=now,
             preprocessed_at=now,
+            activated_at=now,
         )
+        first_kb.status = "READY"
+        first_kb.active_index_version_id = version.index_version_id
+        second_kb.status = "READY"
+        second_kb.active_index_version_id = second_version.index_version_id
         files: list[FileRecord] = []
         content_objects: list[ContentObject] = []
         memberships: list[KnowledgeBaseFile] = []
@@ -339,7 +345,9 @@ def test_vector_top_k_orders_scores_and_does_not_change_index_state(vector_fixtu
         before = session.get(IndexVersion, fixture.index_version_id)
         assert before is not None
         before_status = before.status
-        before_active = session.get(KnowledgeBase, fixture.knowledge_base_id).active_index_version_id
+        before_active = session.get(
+            KnowledgeBase, fixture.knowledge_base_id
+        ).active_index_version_id
 
     hits = _query(fixture, k=3)
 
@@ -354,6 +362,52 @@ def test_vector_top_k_orders_scores_and_does_not_change_index_state(vector_fixtu
         assert after is not None and after.status == before_status
         kb = session.get(KnowledgeBase, fixture.knowledge_base_id)
         assert kb is not None and kb.active_index_version_id == before_active
+
+
+def test_building_candidate_is_unreadable_while_active_version_remains_available(
+    vector_fixture,
+) -> None:
+    fixture: VectorFixture = vector_fixture
+    with fixture.factory() as session:
+        old_version = session.get(IndexVersion, fixture.index_version_id)
+        knowledge_base = session.get(KnowledgeBase, fixture.knowledge_base_id)
+        assert old_version is not None and knowledge_base is not None
+        candidate = IndexVersion(
+            index_version_id=new_id(),
+            scope_type="KNOWLEDGE_BASE",
+            scope_id=fixture.knowledge_base_id,
+            parse_revision_set_hash="c" * 64,
+            chunking_config_id=old_version.chunking_config_id,
+            embedding_config_id=old_version.embedding_config_id,
+            vector_engine="sqlite-vec",
+            vector_engine_version=old_version.vector_engine_version,
+            status="BUILDING",
+            preprocessing_status="RUNNING",
+            chunking_status="NOT_STARTED",
+            embedding_status="NOT_STARTED",
+            fts_status="NOT_STARTED",
+            input_count=0,
+            prepared_count=0,
+            created_at=datetime.now(UTC) + timedelta(seconds=1),
+        )
+        knowledge_base.status = "PREPARING"
+        session.add(candidate)
+        session.commit()
+        candidate_id = candidate.index_version_id
+
+    assert len(_query(fixture, k=3)) == 3
+    with fixture.factory() as session:
+        with pytest.raises(VectorQueryError, match="INDEX_VERSION_NOT_AVAILABLE"):
+            query_vector_top_k(
+                session,
+                fixture.store,
+                knowledge_base_id=fixture.knowledge_base_id,
+                index_version_id=candidate_id,
+                query_vector=fixture.vectors[0],
+            )
+        knowledge_base = session.get(KnowledgeBase, fixture.knowledge_base_id)
+        assert knowledge_base is not None
+        assert knowledge_base.active_index_version_id == fixture.index_version_id
 
 
 def test_scope_is_applied_before_top_k_and_shared_file_is_independent(vector_fixture) -> None:
@@ -520,20 +574,26 @@ def test_adapter_scope_ties_and_empty_vector_space_are_deterministic(tmp_path: P
     )
     assert first == second
     assert first[0].vector_store_record_id == min(record_ids)
-    assert store.search(
-        embedding_config_id=config_id,
-        index_version_id=version_id,
-        query_vector=vector,
-        allowed_record_ids={new_id()},
-        k=30,
-    ) == []
+    assert (
+        store.search(
+            embedding_config_id=config_id,
+            index_version_id=version_id,
+            query_vector=vector,
+            allowed_record_ids={new_id()},
+            k=30,
+        )
+        == []
+    )
     store.delete_version(config_id, version_id)
-    assert store.search(
-        embedding_config_id=config_id,
-        index_version_id=version_id,
-        query_vector=vector,
-        k=30,
-    ) == []
+    assert (
+        store.search(
+            embedding_config_id=config_id,
+            index_version_id=version_id,
+            query_vector=vector,
+            k=30,
+        )
+        == []
+    )
 
 
 def test_query_propagates_vector_store_failure(vector_fixture, monkeypatch) -> None:
@@ -610,11 +670,14 @@ def test_hybrid_search_uses_real_fts_and_vector_scopes_and_deduplicates(vector_f
     with fixture.factory() as session:
         version = session.get(IndexVersion, fixture.index_version_id)
         knowledge_base = session.get(KnowledgeBase, fixture.knowledge_base_id)
-        assert version is not None and version.status == "BUILDING"
-        assert knowledge_base is not None and knowledge_base.active_index_version_id is None
+        assert version is not None and version.status == "READY"
+        assert knowledge_base is not None
+        assert knowledge_base.active_index_version_id == fixture.index_version_id
 
 
-def test_hybrid_search_assesses_scoped_top_eight_without_activating_index(vector_fixture) -> None:
+def test_hybrid_search_assesses_scoped_top_eight_without_changing_active_index(
+    vector_fixture,
+) -> None:
     fixture: VectorFixture = vector_fixture
     _prepare_fts_for_hybrid(fixture)
 
@@ -636,16 +699,20 @@ def test_hybrid_search_assesses_scoped_top_eight_without_activating_index(vector
         and identity.index_version_id == fixture.index_version_id
         for identity in result.assessment.candidate_ids
     )
-    assert all(signal.identity == identity for signal, identity in zip(
-        result.assessment.signals,
-        result.assessment.candidate_ids,
-        strict=True,
-    ))
+    assert all(
+        signal.identity == identity
+        for signal, identity in zip(
+            result.assessment.signals,
+            result.assessment.candidate_ids,
+            strict=True,
+        )
+    )
     with fixture.factory() as session:
         version = session.get(IndexVersion, fixture.index_version_id)
         knowledge_base = session.get(KnowledgeBase, fixture.knowledge_base_id)
-        assert version is not None and version.status == "BUILDING"
-        assert knowledge_base is not None and knowledge_base.active_index_version_id is None
+        assert version is not None and version.status == "READY"
+        assert knowledge_base is not None
+        assert knowledge_base.active_index_version_id == fixture.index_version_id
 
 
 def test_assessment_keeps_missing_route_and_wrong_scope_out_of_insufficient(vector_fixture) -> None:
@@ -696,7 +763,9 @@ def test_hybrid_single_route_keeps_other_signal_empty(vector_fixture) -> None:
             query_vector=fixture.vectors[0],
         )
 
-    assert fts_only and all(hit.vector_rank is None and hit.vector_score is None for hit in fts_only)
+    assert fts_only and all(
+        hit.vector_rank is None and hit.vector_score is None for hit in fts_only
+    )
     assert vector_only and all(hit.fts_rank is None and hit.bm25 is None for hit in vector_only)
 
 
@@ -809,7 +878,10 @@ def test_hybrid_vector_failure_is_explicit_and_optional_degrade(vector_fixture) 
     assert degraded.vector_error == "VECTOR_STORE_UNAVAILABLE"
     assert degraded.fts_error is None
     assert degraded.candidates and all(hit.vector_rank is None for hit in degraded.candidates)
-    assert all(hit.degraded and hit.vector_error == "VECTOR_STORE_UNAVAILABLE" for hit in degraded.candidates)
+    assert all(
+        hit.degraded and hit.vector_error == "VECTOR_STORE_UNAVAILABLE"
+        for hit in degraded.candidates
+    )
     assert all("RRF_FTS" in hit.ranking_reasons for hit in degraded.candidates)
     assert all("RRF_VECTOR" not in hit.ranking_reasons for hit in degraded.candidates)
     assert assessed.assessment.status == "unavailable"
@@ -850,7 +922,11 @@ def test_merge_candidates_has_stable_order_and_no_fake_scores(vector_fixture) ->
         )
     ]
     merged = merge_candidates(fts, vectors)
-    assert [hit.chunk_id for hit in merged] == [fixture.chunk_ids[1], fixture.chunk_ids[2], fixture.chunk_ids[0]]
+    assert [hit.chunk_id for hit in merged] == [
+        fixture.chunk_ids[1],
+        fixture.chunk_ids[2],
+        fixture.chunk_ids[0],
+    ]
     assert merged[1].fts_rank is None and merged[1].bm25 is None
 
 
@@ -906,7 +982,12 @@ def test_diversity_softly_promotes_other_files_without_dropping_overlapping_chun
         "a-2", "file-a", fts_rank=2, vector_rank=2, sequence_number=11, content=shared
     )
     other_file = _rank_candidate(
-        "b-1", "file-b", fts_rank=3, vector_rank=3, sequence_number=1, content="其他来源里的独立证据。"
+        "b-1",
+        "file-b",
+        fts_rank=3,
+        vector_rank=3,
+        sequence_number=1,
+        content="其他来源里的独立证据。",
     )
 
     ranked = rank_candidates([adjacent, other_file, first], query_text="")
@@ -964,9 +1045,7 @@ def test_short_ascii_term_requires_boundaries_and_never_overrides_stronger_rrf()
     substring = _rank_candidate(
         "substring", "file-b", fts_rank=2, vector_rank=2, heading_path=("PRAIRIEAI-like",)
     )
-    exact = _rank_candidate(
-        "exact", "file-c", fts_rank=30, vector_rank=30, heading_path=("AI",)
-    )
+    exact = _rank_candidate("exact", "file-c", fts_rank=30, vector_rank=30, heading_path=("AI",))
 
     ranked = rank_candidates([exact, substring, strong], query_text="AI")
     by_id = {candidate.chunk_id: candidate for candidate in ranked}

@@ -216,6 +216,7 @@ class IndexVersion(Base):
     preprocessed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     retired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    activation_error_code: Mapped[str | None] = mapped_column(String(80))
 
 
 class IndexVersionInput(Base):
