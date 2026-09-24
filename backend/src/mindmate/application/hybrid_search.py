@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import math
+import re
+import unicodedata
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, replace
 from typing import Any, Protocol
@@ -24,6 +26,49 @@ from mindmate.infrastructure.vector_store import DEFAULT_VECTOR_TOP_K, SqliteVec
 
 DEFAULT_CANDIDATE_TOP_K = 30
 MAX_CANDIDATE_TOP_K = 30
+DEFAULT_FINAL_TOP_K = 8
+RANKING_ALGORITHM_VERSION = "rrf-exact-diversity-v1"
+
+
+@dataclass(frozen=True, slots=True)
+class HybridRankingConfig:
+    """Versioned, bounded local ranking parameters for internal candidates."""
+
+    rank_constant: int = 60
+    final_top_k: int = DEFAULT_FINAL_TOP_K
+    exact_phrase_bonus: float = 0.002
+    exact_term_bonus: float = 0.0004
+    max_exact_bonus: float = 0.004
+    same_file_penalty: float = 0.001
+    adjacent_overlap_penalty: float = 0.0025
+    max_diversity_penalty: float = 0.0035
+    overlap_threshold: float = 0.6
+
+    def __post_init__(self) -> None:
+        scores = (
+            self.exact_phrase_bonus,
+            self.exact_term_bonus,
+            self.max_exact_bonus,
+            self.same_file_penalty,
+            self.adjacent_overlap_penalty,
+            self.max_diversity_penalty,
+        )
+        if (
+            isinstance(self.rank_constant, bool)
+            or not isinstance(self.rank_constant, int)
+            or self.rank_constant < 1
+            or isinstance(self.final_top_k, bool)
+            or not isinstance(self.final_top_k, int)
+            or not 1 <= self.final_top_k <= DEFAULT_FINAL_TOP_K
+            or any(not math.isfinite(value) or value < 0 for value in scores)
+            or isinstance(self.overlap_threshold, bool)
+            or not math.isfinite(self.overlap_threshold)
+            or not 0 <= self.overlap_threshold <= 1
+        ):
+            raise ValueError("HYBRID_RANKING_CONFIG_INVALID")
+
+
+DEFAULT_HYBRID_RANKING_CONFIG = HybridRankingConfig()
 
 
 class HybridQueryError(RuntimeError):
@@ -64,6 +109,24 @@ class HybridCandidate:
     sqlite_distance: float | None = None
     content: str | None = None
     sources: tuple[str, ...] = ()
+    sequence_number: int | None = None
+    file_title: str | None = None
+    heading_path: tuple[str, ...] = ()
+    rrf_score: float | None = None
+    exact_match_bonus: float = 0.0
+    exact_match_terms: tuple[str, ...] = ()
+    exact_match_fields: tuple[str, ...] = ()
+    diversity_adjustment: float = 0.0
+    diversity_reasons: tuple[str, ...] = ()
+    ranking_score: float | None = None
+    ranking_rank: int | None = None
+    ranking_reasons: tuple[str, ...] = ()
+    fts_error: str | None = None
+    vector_error: str | None = None
+
+    @property
+    def degraded(self) -> bool:
+        return self.fts_error is not None or self.vector_error is not None
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,6 +136,8 @@ class HybridSearchResult:
     candidates: tuple[HybridCandidate, ...]
     fts_error: str | None = None
     vector_error: str | None = None
+    ranking_algorithm: str | None = None
+    ranking_config: HybridRankingConfig | None = None
 
     @property
     def degraded(self) -> bool:
@@ -213,6 +278,241 @@ def merge_candidates(
     return sorted(merged.values(), key=_candidate_sort_key)
 
 
+def _normalize_evidence(text: str) -> str:
+    normalized = unicodedata.normalize("NFKC", text).casefold()
+    separated = "".join(
+        " " if unicodedata.category(character)[0] in {"P", "Z", "S"} else character
+        for character in normalized
+    )
+    return " ".join(separated.split())
+
+
+def _query_terms(query_text: str) -> tuple[str, ...]:
+    terms: list[str] = []
+    for token in re.findall(r"[a-z0-9_]+|[\u3400-\u9fff]+", _normalize_evidence(query_text)):
+        if token[0].isascii():
+            if len(token) >= 2:
+                terms.append(token)
+        elif len(token) <= 8:
+            if len(token) >= 2:
+                terms.append(token)
+        else:
+            terms.extend(token[index : index + 3] for index in range(len(token) - 2))
+    return tuple(dict.fromkeys(terms))
+
+
+def _contains_exact_term(text: str, term: str) -> bool:
+    def is_ascii_word(character: str) -> bool:
+        return character.isascii() and (character.isalnum() or character == "_")
+
+    start = 0
+    while (position := text.find(term, start)) >= 0:
+        end = position + len(term)
+        if term[0].isascii():
+            before_is_word = position > 0 and is_ascii_word(text[position - 1])
+            after_is_word = end < len(text) and is_ascii_word(text[end])
+            if not before_is_word and not after_is_word:
+                return True
+        else:
+            return True
+        start = position + 1
+    return False
+
+
+def _contains_exact_phrase(text: str, phrase: str) -> bool:
+    if len(phrase) < 4:
+        return False
+
+    def is_ascii_word(character: str) -> bool:
+        return character.isascii() and (character.isalnum() or character == "_")
+
+    start = 0
+    while (position := text.find(phrase, start)) >= 0:
+        end = position + len(phrase)
+        before_is_word = position > 0 and is_ascii_word(text[position - 1])
+        after_is_word = end < len(text) and is_ascii_word(text[end])
+        if not before_is_word and not after_is_word:
+            return True
+        start = position + 1
+    return False
+
+
+def _exact_match_details(
+    candidate: HybridCandidate,
+    query_text: str,
+    config: HybridRankingConfig,
+) -> tuple[float, tuple[str, ...], tuple[str, ...], bool]:
+    phrase = _normalize_evidence(query_text)
+    terms = _query_terms(query_text)
+    fields = {
+        "file_title": _normalize_evidence(candidate.file_title or ""),
+        "heading": _normalize_evidence(" ".join(candidate.heading_path)),
+        "content": _normalize_evidence(candidate.content or ""),
+    }
+    exact_phrase = any(_contains_exact_phrase(value, phrase) for value in fields.values())
+    matches = tuple(
+        term for term in terms if any(_contains_exact_term(value, term) for value in fields.values())
+    )
+    matching_fields = tuple(
+        field
+        for field, value in fields.items()
+        if (exact_phrase and _contains_exact_phrase(value, phrase))
+        or any(_contains_exact_term(value, term) for term in matches)
+    )
+    short_cjk = {term for term in matches if not term[0].isascii() and len(term) == 2}
+    term_bonus = sum(
+        config.exact_term_bonus * (0.25 if term in short_cjk else 1.0)
+        for term in matches
+    )
+    bonus = min(
+        config.max_exact_bonus,
+        term_bonus + (config.exact_phrase_bonus if exact_phrase else 0.0),
+    )
+    return bonus, matches, matching_fields, exact_phrase
+
+
+def _overlap_coefficient(left: str | None, right: str | None) -> float:
+    def grams(value: str | None) -> set[str]:
+        text = _normalize_evidence(value or "")
+        if not text:
+            return set()
+        if len(text) < 3:
+            return {text}
+        return {text[index : index + 3] for index in range(len(text) - 2)}
+
+    left_grams = grams(left)
+    right_grams = grams(right)
+    if not left_grams or not right_grams:
+        return 0.0
+    return len(left_grams & right_grams) / min(len(left_grams), len(right_grams))
+
+
+def _rrf_score(candidate: HybridCandidate, config: HybridRankingConfig) -> float:
+    return sum(
+        1.0 / (config.rank_constant + rank)
+        for rank in (candidate.fts_rank, candidate.vector_rank)
+        if rank is not None
+    )
+
+
+def _base_tie_key(candidate: HybridCandidate) -> tuple[Any, ...]:
+    ranks = [rank for rank in (candidate.fts_rank, candidate.vector_rank) if rank is not None]
+    return (
+        -(candidate.rrf_score or 0.0),
+        -candidate.exact_match_bonus,
+        min(ranks) if ranks else MAX_CANDIDATE_TOP_K + 1,
+        0 if len(ranks) == 2 else 1,
+        candidate.fts_rank if candidate.fts_rank is not None else MAX_CANDIDATE_TOP_K + 1,
+        candidate.vector_rank if candidate.vector_rank is not None else MAX_CANDIDATE_TOP_K + 1,
+        candidate.file_id,
+        candidate.sequence_number if candidate.sequence_number is not None else 2**31,
+        candidate.chunk_id,
+    )
+
+
+def _diversity_penalty(
+    candidate: HybridCandidate,
+    selected: Sequence[HybridCandidate],
+    config: HybridRankingConfig,
+) -> tuple[float, tuple[str, ...]]:
+    same_file_count = sum(item.file_id == candidate.file_id for item in selected)
+    penalty = min(same_file_count, 2) * config.same_file_penalty
+    reasons = ["same_file"] if same_file_count else []
+    overlap_matches = [
+        _overlap_coefficient(candidate.content, item.content)
+        for item in selected
+        if item.file_id == candidate.file_id
+        and candidate.sequence_number is not None
+        and item.sequence_number is not None
+        and abs(candidate.sequence_number - item.sequence_number) <= 1
+    ]
+    highest_overlap = max(overlap_matches, default=0.0)
+    if highest_overlap >= config.overlap_threshold:
+        penalty += config.adjacent_overlap_penalty
+        reasons.append(f"adjacent_overlap:{highest_overlap:.3f}")
+    return min(penalty, config.max_diversity_penalty), tuple(reasons)
+
+
+def rank_candidates(
+    candidates: Iterable[HybridCandidate],
+    *,
+    query_text: str,
+    config: HybridRankingConfig = DEFAULT_HYBRID_RANKING_CONFIG,
+) -> list[HybridCandidate]:
+    """Apply deterministic RRF, bounded exact-match bonuses and soft diversity."""
+    prepared: list[HybridCandidate] = []
+    for candidate in candidates:
+        if (
+            candidate.fts_rank is None
+            and candidate.vector_rank is None
+            or any(
+                rank is not None and (isinstance(rank, bool) or rank < 1)
+                for rank in (candidate.fts_rank, candidate.vector_rank)
+            )
+        ):
+            raise HybridQueryError("RANKING_CANDIDATE_INVALID")
+        rrf = _rrf_score(candidate, config)
+        exact_bonus, terms, fields, exact_phrase = _exact_match_details(
+            candidate, query_text, config
+        )
+        reasons = ["RRF_FTS"] if candidate.fts_rank is not None else []
+        if candidate.vector_rank is not None:
+            reasons.append("RRF_VECTOR")
+        if exact_phrase:
+            reasons.append("EXACT_PHRASE")
+        if terms:
+            reasons.append("EXACT_TERM")
+        prepared.append(
+            replace(
+                candidate,
+                rrf_score=rrf,
+                exact_match_bonus=exact_bonus,
+                exact_match_terms=terms,
+                exact_match_fields=fields,
+                diversity_adjustment=0.0,
+                diversity_reasons=(),
+                ranking_score=rrf + exact_bonus,
+                ranking_rank=None,
+                ranking_reasons=tuple(reasons),
+            )
+        )
+
+    remaining = sorted(prepared, key=_base_tie_key)
+    selected: list[HybridCandidate] = []
+    while remaining and len(selected) < config.final_top_k:
+        scored: list[tuple[tuple[Any, ...], HybridCandidate, float, tuple[str, ...]]] = []
+        for candidate in remaining:
+            penalty, diversity_reasons = _diversity_penalty(candidate, selected, config)
+            adjusted = (candidate.rrf_score or 0.0) + candidate.exact_match_bonus - penalty
+            key = (
+                -adjusted,
+                *_base_tie_key(candidate),
+            )
+            scored.append((key, candidate, penalty, diversity_reasons))
+        _, winner, penalty, diversity_reasons = min(scored, key=lambda item: item[0])
+        reasons = (
+            *winner.ranking_reasons,
+            *(
+                "DIVERSITY_SAME_FILE"
+                if reason == "same_file"
+                else "DIVERSITY_ADJACENT_OVERLAP"
+                for reason in diversity_reasons
+            ),
+        )
+        selected.append(
+            replace(
+                winner,
+                diversity_adjustment=-penalty,
+                diversity_reasons=diversity_reasons,
+                ranking_score=(winner.rrf_score or 0.0) + winner.exact_match_bonus - penalty,
+                ranking_rank=len(selected) + 1,
+                ranking_reasons=reasons,
+            )
+        )
+        remaining = [candidate for candidate in remaining if candidate.chunk_id != winner.chunk_id]
+    return selected
+
+
 class HybridCandidateQuery:
     """Collect FTS5 and vector Top-K candidates for one immutable version."""
 
@@ -222,9 +522,11 @@ class HybridCandidateQuery:
         *,
         projection: Fts5Projection | None = None,
         vector_query: _VectorQuery | None = None,
+        ranking_config: HybridRankingConfig | None = None,
     ) -> None:
         self._projection = projection or Fts5Projection()
         self._vector_query = vector_query or VectorTopKQuery(vector_store)
+        self._ranking_config = ranking_config or DEFAULT_HYBRID_RANKING_CONFIG
 
     def search_with_status(
         self,
@@ -283,7 +585,26 @@ class HybridCandidateQuery:
             candidates = merge_candidates(fts_rows, vector_hits)
         except HybridQueryError:
             raise
-        return HybridSearchResult(tuple(candidates), fts_error, vector_error)
+        candidates = _attach_chunk_context(session, candidates)
+        after = self._fresh_scope_signature(session, knowledge_base_id, index_version_id)
+        if before != after:
+            raise HybridQueryError("RETRIEVAL_SCOPE_CHANGED")
+        ranked = rank_candidates(
+            candidates,
+            query_text=query_text,
+            config=self._ranking_config,
+        )
+        ranked = [
+            replace(candidate, fts_error=fts_error, vector_error=vector_error)
+            for candidate in ranked
+        ]
+        return HybridSearchResult(
+            tuple(ranked),
+            fts_error,
+            vector_error,
+            RANKING_ALGORITHM_VERSION,
+            self._ranking_config,
+        )
 
     def search(self, *args: Any, **kwargs: Any) -> list[HybridCandidate]:
         return list(self.search_with_status(*args, **kwargs).candidates)
@@ -355,6 +676,7 @@ class HybridCandidateQuery:
                 KnowledgeBaseFile.membership_status,
                 KnowledgeBaseFile.added_at,
                 FileRecord.status,
+                FileRecord.display_name,
                 FileRecord.deleted_at,
                 FileRecord.content_hash.label("file_content_hash"),
                 FileRecord.parse_revision_id.label("file_parse_revision_id"),
@@ -426,6 +748,51 @@ class HybridCandidateQuery:
         )
 
 
+def _attach_chunk_context(
+    session: Session, candidates: Sequence[HybridCandidate]
+) -> list[HybridCandidate]:
+    if not candidates:
+        return []
+    expected = {candidate.chunk_id: candidate.file_id for candidate in candidates}
+    with Session(
+        bind=session.get_bind(), autoflush=False, expire_on_commit=False
+    ) as context_session:
+        rows = context_session.execute(
+            select(
+                Chunk.chunk_id,
+                Chunk.file_id,
+                Chunk.sequence_number,
+                Chunk.heading_path,
+                Chunk.content,
+                Chunk.invalidated_at,
+                FileRecord.display_name.label("file_title"),
+            )
+            .join(FileRecord, FileRecord.file_id == Chunk.file_id)
+            .where(Chunk.chunk_id.in_(expected))
+        ).mappings()
+        contexts = {str(row["chunk_id"]): row for row in rows}
+    if contexts.keys() != expected.keys():
+        raise HybridQueryError("RETRIEVAL_SCOPE_CHANGED")
+    hydrated: list[HybridCandidate] = []
+    for candidate in candidates:
+        row = contexts[candidate.chunk_id]
+        if row["file_id"] != candidate.file_id or row["invalidated_at"] is not None:
+            raise HybridQueryError("RETRIEVAL_SCOPE_CHANGED")
+        heading_path = row["heading_path"]
+        hydrated.append(
+            replace(
+                candidate,
+                content=str(row["content"]),
+                sequence_number=int(row["sequence_number"]),
+                file_title=str(row["file_title"]),
+                heading_path=tuple(
+                    item for item in (heading_path or ()) if isinstance(item, str)
+                ),
+            )
+        )
+    return hydrated
+
+
 def query_hybrid_candidates(
     session: Session,
     vector_store: SqliteVecAdapter,
@@ -436,9 +803,10 @@ def query_hybrid_candidates(
     query_vector: NDArray[Any] | list[float] | None,
     allow_degraded: bool = False,
     k: int = DEFAULT_CANDIDATE_TOP_K,
+    ranking_config: HybridRankingConfig | None = None,
 ) -> list[HybridCandidate]:
     """Functional entry point for internal callers and fixed integration tests."""
-    return HybridCandidateQuery(vector_store).search(
+    return HybridCandidateQuery(vector_store, ranking_config=ranking_config).search(
         session,
         knowledge_base_id=knowledge_base_id,
         index_version_id=index_version_id,
@@ -451,13 +819,18 @@ def query_hybrid_candidates(
 
 __all__ = [
     "DEFAULT_CANDIDATE_TOP_K",
+    "DEFAULT_FINAL_TOP_K",
     "DEFAULT_FTS_TOP_K",
+    "DEFAULT_HYBRID_RANKING_CONFIG",
+    "HybridRankingConfig",
     "DEFAULT_VECTOR_TOP_K",
     "FtsTopKHit",
     "HybridCandidate",
     "HybridCandidateQuery",
     "HybridQueryError",
     "HybridSearchResult",
+    "RANKING_ALGORITHM_VERSION",
     "merge_candidates",
+    "rank_candidates",
     "query_hybrid_candidates",
 ]

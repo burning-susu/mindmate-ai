@@ -12,9 +12,12 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from mindmate.application.hybrid_search import (
+    HybridCandidate,
     HybridCandidateQuery,
     HybridQueryError,
+    HybridRankingConfig,
     merge_candidates,
+    rank_candidates,
 )
 from mindmate.application.index_preprocessing import (
     get_or_create_default_configs,
@@ -592,12 +595,23 @@ def test_hybrid_search_uses_real_fts_and_vector_scopes_and_deduplicates(vector_f
 
     assert result.degraded is False
     assert len(result.candidates) == 3
+    assert result.ranking_algorithm == "rrf-exact-diversity-v1"
+    assert result.ranking_config == HybridRankingConfig()
+    assert [candidate.ranking_rank for candidate in result.candidates] == [1, 2, 3]
+    assert all(candidate.rrf_score is not None for candidate in result.candidates)
     assert all(candidate.fts_rank is not None for candidate in result.candidates)
     assert all(candidate.vector_rank is not None for candidate in result.candidates)
     assert all(candidate.sources == ("fts", "vector") for candidate in result.candidates)
+    assert all(candidate.file_title for candidate in result.candidates)
+    assert all("EXACT_PHRASE" in candidate.ranking_reasons for candidate in result.candidates)
     assert len({candidate.chunk_id for candidate in result.candidates}) == 3
     assert [candidate.fts_rank for candidate in result.candidates] == [1, 2, 3]
     assert [candidate.vector_rank for candidate in result.candidates] == [1, 2, 3]
+    with fixture.factory() as session:
+        version = session.get(IndexVersion, fixture.index_version_id)
+        knowledge_base = session.get(KnowledgeBase, fixture.knowledge_base_id)
+        assert version is not None and version.status == "BUILDING"
+        assert knowledge_base is not None and knowledge_base.active_index_version_id is None
 
 
 def test_hybrid_single_route_keeps_other_signal_empty(vector_fixture) -> None:
@@ -687,6 +701,9 @@ def test_hybrid_vector_failure_is_explicit_and_optional_degrade(vector_fixture) 
     assert degraded.vector_error == "VECTOR_STORE_UNAVAILABLE"
     assert degraded.fts_error is None
     assert degraded.candidates and all(hit.vector_rank is None for hit in degraded.candidates)
+    assert all(hit.degraded and hit.vector_error == "VECTOR_STORE_UNAVAILABLE" for hit in degraded.candidates)
+    assert all("RRF_FTS" in hit.ranking_reasons for hit in degraded.candidates)
+    assert all("RRF_VECTOR" not in hit.ranking_reasons for hit in degraded.candidates)
 
 
 def test_merge_candidates_has_stable_order_and_no_fake_scores(vector_fixture) -> None:
@@ -724,3 +741,146 @@ def test_merge_candidates_has_stable_order_and_no_fake_scores(vector_fixture) ->
     merged = merge_candidates(fts, vectors)
     assert [hit.chunk_id for hit in merged] == [fixture.chunk_ids[1], fixture.chunk_ids[2], fixture.chunk_ids[0]]
     assert merged[1].fts_rank is None and merged[1].bm25 is None
+
+
+def _rank_candidate(
+    chunk_id: str,
+    file_id: str,
+    *,
+    fts_rank: int | None = None,
+    vector_rank: int | None = None,
+    sequence_number: int | None = None,
+    file_title: str | None = None,
+    heading_path: tuple[str, ...] = (),
+    content: str = "",
+) -> HybridCandidate:
+    return HybridCandidate(
+        chunk_id=chunk_id,
+        file_id=file_id,
+        index_version_id="rank-test-version",
+        fts_rank=fts_rank,
+        bm25=-1.0 if fts_rank is not None else None,
+        vector_rank=vector_rank,
+        vector_distance=0.0 if vector_rank is not None else None,
+        vector_score=1.0 if vector_rank is not None else None,
+        content=content,
+        file_title=file_title,
+        heading_path=heading_path,
+        sequence_number=sequence_number,
+    )
+
+
+def test_rrf_fusion_only_uses_available_ranks_and_preserves_source_signals() -> None:
+    fts_only = _rank_candidate("fts", "file-a", fts_rank=1, content="FTS evidence")
+    vector_only = _rank_candidate("vector", "file-b", vector_rank=1, content="Vector evidence")
+    both = _rank_candidate("both", "file-c", fts_rank=1, vector_rank=1, content="Dual evidence")
+
+    ranked = rank_candidates([vector_only, fts_only, both], query_text="")
+    by_id = {candidate.chunk_id: candidate for candidate in ranked}
+
+    assert [candidate.chunk_id for candidate in ranked] == ["both", "fts", "vector"]
+    assert by_id["both"].rrf_score == pytest.approx(2 / 61)
+    assert by_id["fts"].rrf_score == pytest.approx(1 / 61)
+    assert by_id["vector"].rrf_score == pytest.approx(1 / 61)
+    assert by_id["fts"].vector_rank is None and by_id["fts"].vector_score is None
+    assert by_id["vector"].fts_rank is None and by_id["vector"].bm25 is None
+
+
+def test_diversity_softly_promotes_other_files_without_dropping_overlapping_chunks() -> None:
+    shared = "混合检索候选融合保留原始排名并使用稳定的证据排序。"
+    first = _rank_candidate(
+        "a-1", "file-a", fts_rank=1, vector_rank=1, sequence_number=10, content=shared
+    )
+    adjacent = _rank_candidate(
+        "a-2", "file-a", fts_rank=2, vector_rank=2, sequence_number=11, content=shared
+    )
+    other_file = _rank_candidate(
+        "b-1", "file-b", fts_rank=3, vector_rank=3, sequence_number=1, content="其他来源里的独立证据。"
+    )
+
+    ranked = rank_candidates([adjacent, other_file, first], query_text="")
+
+    assert [candidate.chunk_id for candidate in ranked] == ["a-1", "b-1", "a-2"]
+    assert ranked[1].file_id == "file-b"
+    assert ranked[2].diversity_adjustment < 0
+    assert "adjacent_overlap" in ranked[2].diversity_reasons[1]
+    assert {candidate.chunk_id for candidate in ranked} == {"a-1", "a-2", "b-1"}
+
+
+def test_exact_heading_match_normalizes_case_width_and_punctuation_with_bounded_bonus() -> None:
+    strongest = _rank_candidate(
+        "strong", "file-a", fts_rank=1, vector_rank=1, content="强相关的检索说明。"
+    )
+    exact_heading = _rank_candidate(
+        "exact",
+        "file-b",
+        fts_rank=20,
+        vector_rank=20,
+        file_title="ＲＦＣ－２０２６．０７",
+        heading_path=("ＲＦＣ－２０２６．０７ 接口说明",),
+        content="编号内容",
+    )
+    substring = _rank_candidate(
+        "substring",
+        "file-c",
+        fts_rank=2,
+        vector_rank=2,
+        heading_path=("XRFC 02026 0700 接口说明",),
+    )
+
+    ranked = rank_candidates(
+        [exact_heading, substring, strongest],
+        query_text="rfc-2026/07",
+    )
+    by_id = {candidate.chunk_id: candidate for candidate in ranked}
+
+    assert by_id["exact"].exact_match_bonus > 0
+    assert by_id["exact"].exact_match_fields == ("file_title", "heading")
+    assert "EXACT_PHRASE" in by_id["exact"].ranking_reasons
+    exact_score = by_id["exact"].ranking_score
+    strong_score = by_id["strong"].ranking_score
+    assert exact_score is not None and strong_score is not None
+    assert exact_score < strong_score
+    assert by_id["substring"].exact_match_bonus == 0
+    assert "rfc" not in by_id["substring"].exact_match_terms
+    assert "2026" not in by_id["substring"].exact_match_terms
+
+
+def test_short_ascii_term_requires_boundaries_and_never_overrides_stronger_rrf() -> None:
+    strong = _rank_candidate(
+        "strong", "file-a", fts_rank=1, vector_rank=1, heading_path=("其他资料",)
+    )
+    substring = _rank_candidate(
+        "substring", "file-b", fts_rank=2, vector_rank=2, heading_path=("PRAIRIEAI-like",)
+    )
+    exact = _rank_candidate(
+        "exact", "file-c", fts_rank=30, vector_rank=30, heading_path=("AI",)
+    )
+
+    ranked = rank_candidates([exact, substring, strong], query_text="AI")
+    by_id = {candidate.chunk_id: candidate for candidate in ranked}
+
+    assert by_id["strong"].ranking_rank == 1
+    assert by_id["substring"].exact_match_bonus == 0
+    assert by_id["exact"].exact_match_bonus <= HybridRankingConfig().exact_term_bonus
+    exact_score = by_id["exact"].ranking_score
+    strong_score = by_id["strong"].ranking_score
+    assert exact_score is not None and strong_score is not None
+    assert exact_score < strong_score
+
+
+def test_ranking_is_input_order_independent_caps_at_eight_and_accepts_empty_input() -> None:
+    candidates = [
+        _rank_candidate(f"chunk-{index:02d}", f"file-{index:02d}", fts_rank=4, vector_rank=4)
+        for index in range(10)
+    ]
+
+    forward = rank_candidates(candidates, query_text="")
+    reversed_order = rank_candidates(reversed(candidates), query_text="")
+
+    assert len(forward) == 8
+    assert [candidate.chunk_id for candidate in forward] == [
+        candidate.chunk_id for candidate in reversed_order
+    ]
+    assert [candidate.ranking_rank for candidate in forward] == list(range(1, 9))
+    assert rank_candidates([], query_text="") == []

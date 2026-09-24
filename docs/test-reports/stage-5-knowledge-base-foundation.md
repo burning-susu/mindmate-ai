@@ -408,3 +408,45 @@ repo> git diff --check
 本批没有调用 DeepSeek、真实 Provider、真实凭据或用户资料；没有新增数据库迁移、公开 API、OpenAPI、前端、索引激活、RRF、引用或 RAG。阶段 5 仍为 `PARTIAL`。
 
 本批结论：`PASS`。下一批唯一目标：实现候选集的 RRF 融合、精确命中奖励和确定性多样性排序；不激活索引、不开放用户检索、不做引用或 RAG。
+
+## 第十七批验收追踪：内部 RRF 与多样性排序
+
+| ID | 验收项 | 证据 | 结论 |
+| --- | --- | --- | --- |
+| S5-B17-01 | 仅用有效 FTS/vector rank 执行 RRF；缺失通道贡献为零且原 rank/score 保持 NULL | `test_rrf_fusion_only_uses_available_ranks_and_preserves_source_signals` | PASS |
+| S5-B17-02 | NFKC、大小写、全半角及标点规则确定；完整编号/标题/正文命中可审计，短词子串不会被误认为完整词 | `test_exact_heading_match_normalizes_case_width_and_punctuation_with_bounded_bonus`、`test_short_ascii_term_requires_boundaries_and_never_overrides_stronger_rrf` | PASS |
+| S5-B17-03 | 同文件分布与相邻高重叠 Chunk 采用有界软惩罚；不同来源优先；不硬删除重复附近的候选 | `test_diversity_softly_promotes_other_files_without_dropping_overlapping_chunks` | PASS |
+| S5-B17-04 | 同分、输入顺序变化、空候选、Top 8 和排名理由可重复 | `test_ranking_is_input_order_independent_caps_at_eight_and_accepts_empty_input` | PASS |
+| S5-B17-05 | 显式降级时只按可用 rank 排名，并保留失败通道、错误码及 degraded 标记；范围变化仍失败关闭 | `test_hybrid_vector_failure_is_explicit_and_optional_degrade`、`test_hybrid_scope_change_between_routes_fails_closed` | PASS |
+| S5-B17-06 | 至少一条真实 SQLite FTS5 + sqlite-vec 内部端到端排序用例；原始信号保留且 IndexVersion 不激活 | `test_hybrid_search_uses_real_fts_and_vector_scopes_and_deduplicates` | PASS |
+| S5-B17-07 | 不开放公开检索或 API；不修改 BUILDING/活动索引/可检索状态，不声称证据充分，不做引用/RAG | 代码差异、真实集成状态断言；无 API/OpenAPI/前端/迁移变更 | PASS |
+
+### 第十七批算法与排序解释
+
+- 算法版本为 `rrf-exact-diversity-v1`。默认 RRF 常量 `k=60`，融合分数是每个实际命中通道 `1 / (60 + rank)` 的和。分数只代表倒数排名融合量，不是概率，也不是 BM25 与余弦相似度的直接加和。缺失通道不产生贡献，原始 `NULL` rank 与分数不变。
+- 查询、文件显示名、Chunk heading path 和正文以 NFKC、casefold 规范化；Unicode 标点、空白和符号统一成为分隔符。完整规范化查询短语（至少 4 个规范化字符）奖励 `0.002`，每个完整命中词项奖励 `0.0004`，总精确命中奖励封顶 `0.004`。ASCII 拉丁/数字词项要求 ASCII 词边界；长中文查询按三字片段检查，二字中文项按四分之一权重计分。结果保留命中词项、`file_title`/`heading`/`content` 字段、精确奖励分数和原因码。
+- 多样性按确定性贪心顺序逐个选取：候选每次以 RRF + 精确奖励 - 当前多样性惩罚重新比较。同文件此前每选中一个候选扣 `0.001`，最多计两个；同文件 Chunk 序号差不超过 1 且归一化三元字符集合的重叠系数不低于 `0.6` 时再扣 `0.0025`；总惩罚封顶 `0.0035`。惩罚只会调整次序，不按文件或相似度直接丢弃候选。
+- 并列排序依次比较：融合 RRF 分高者、精确奖励高者、最佳原始 rank 小者、双路命中者、FTS rank 小者、vector rank 小者、`file_id` 字典序、Chunk 序号、`chunk_id` 字典序。排序输出最多 8 个。
+- `HybridSearchResult` 返回算法版本和有效配置；每个候选保留 FTS/vector rank、原始 BM25/距离/相似度、RRF 分、精确命中与字段、多样性调整与原因、最终分和最终名次。显式单路故障降级还保留通道错误码和 `degraded`。
+- 范围指纹在双路前后检查，并在读取候选 Chunk 正文/标题/序号后再次复核；发现变化返回 `RETRIEVAL_SCOPE_CHANGED`。本批没有数据库迁移、公开检索、OpenAPI、前端、索引激活、证据阈值、引用或 RAG。固定样本不是最终 Recall@10 验收；向量过滤的 O(N) 性能限制不变。
+
+### 第十七批实际验证
+
+~~~text
+backend> uv run --locked pytest
+122 passed（串行运行）
+
+backend> uv run --locked ruff check src tests
+All checks passed
+
+backend> uv run --locked pyright
+0 errors, 0 warnings, 0 informations
+
+backend> uv run --locked python -m compileall -q src tests migrations
+通过
+
+repo> git diff --check
+通过
+~~~
+
+本批没有改前端或 API，因此没有运行阶段 4/5 UI E2E；真实 SQLite FTS5/sqlite-vec 的内部检索集成测试已纳入后端 pytest。没有调用 DeepSeek、真实凭据、付费服务或真实用户资料。第十七批结论 `PASS`；阶段 5 继续 `PARTIAL`。下一批唯一目标：对内部 Top 8 实现配置化的证据充分性阈值判定和严格拒答结果，仍不公开检索、不激活索引、不生成回答或引用。

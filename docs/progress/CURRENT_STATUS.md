@@ -6,7 +6,7 @@
 - 当前远程提交：以 `git ls-remote --heads origin feat/v1-bootstrap` 为准；本文件随本批次收口提交推送
 - 最后更新时间：`2026-09-24`
 - 当前开发阶段：阶段 5 开发中，状态 `PARTIAL`
-- 当前批次状态：第十六批“内部双路召回合并去重”结论 `PASS`；阶段 5 状态 `PARTIAL`
+- 当前批次状态：第十七批“内部 RRF 与多样性排序”结论 `PASS`；阶段 5 状态 `PARTIAL`
 
 ## 已完成阶段
 
@@ -15,7 +15,7 @@
 - 阶段 2：安全本地应用壳，`0b19795`
 - 阶段 3：数据、任务和备份基础，`02a32b8`
 - 阶段 4：初始实现 `bc30e1f`，证据修订 `9e0174a`，收口修复 `3b29d22`，第四批交接 `0448d5b`；第五批完成数据模型、迁移、乐观锁、解析失败持久化与契约同步；第六批完成持久解析 Worker、原子领取/租约、重试恢复和 Windows Job Object；第七批补齐列表状态恢复并完成最终验收，状态 `PASS`
-- 阶段 5：第八批完成空知识库持久化基础；第九批完成成员加入/移出、多库共享、批量准入、持久任务、取消/恢复和前端真实状态闭环；第十批完成索引配置、不可变版本输入快照与可恢复预处理 Worker；第十一批完成可复用版本化 Chunk 与独立可恢复切片任务；第十二批完成固定 ONNX 产物来源、哈希验证与本地 CPU Adapter；第十三批完成持久 EmbeddingRecord、单并发 Worker 与 sqlite-vec 向量写入；第十四批完成按 IndexVersion 隔离的持久 FTS5 投影与逐输入恢复；第十五批完成内部向量 Top-K 与范围过滤；第十六批完成同一 IndexVersion 的 FTS5/向量 Top 30 候选收集、稳定按 Chunk ID 去重与范围变更复核；阶段整体仍为 `PARTIAL`
+- 阶段 5：第八批完成空知识库持久化基础；第九批完成成员加入/移出、多库共享、批量准入、持久任务、取消/恢复和前端真实状态闭环；第十批完成索引配置、不可变版本输入快照与可恢复预处理 Worker；第十一批完成可复用版本化 Chunk 与独立可恢复切片任务；第十二批完成固定 ONNX 产物来源、哈希验证与本地 CPU Adapter；第十三批完成持久 EmbeddingRecord、单并发 Worker 与 sqlite-vec 向量写入；第十四批完成按 IndexVersion 隔离的持久 FTS5 投影与逐输入恢复；第十五批完成内部向量 Top-K 与范围过滤；第十六批完成同一 IndexVersion 的 FTS5/向量 Top 30 候选收集、稳定按 Chunk ID 去重与范围变更复核；第十七批完成内部 RRF、精确命中奖励和确定性多样性 Top 8；阶段整体仍为 `PARTIAL`
 
 ## 当前已实现能力
 
@@ -36,24 +36,31 @@
 - 内部向量 Top-K：`SqliteVecAdapter.search` 校验 512 维单位查询向量和 `k<=30`，全量读取同版本 KNN 候选后先按业务范围过滤，再按距离与记录 ID 稳定排序；`VectorTopKQuery` 重新校验知识库、IndexVersion、成员加入时间、文件解析修订/回收站、Chunk 和 `EmbeddingRecord` 有效性，返回可追溯的 Chunk/File/Version/距离/相似度/rank。该查询只读，不激活索引，也没有公开 API。
 - 持久 FTS5：独立 `INDEX_FTS` Worker 只消费同版本有效的 `PREPARED + CHUNKED` 输入；以 `IndexVersion + Chunk` 映射隔离，逐文件 FTS5 行、映射、输入检查点和任务进度在同一主 SQLite 事务提交。支持租约接管、取消、幂等重建和显式失败重试，不修改 Chunk/Embedding 权威数据，也不激活版本。
 - 中文关键词投影：FTS5 仍使用 `unicode61` 和 BM25；中文按连续汉字生成重叠二元词及单字辅助列，支持中文短查询；拉丁词项大小写折叠。没有接入公开 MATCH API、RRF 或前端搜索；向量 Top-K 只存在于内部用例。
-- 内部双路候选：`HybridCandidateQuery` 在同一 `IndexVersion` 内分别获取 FTS5 BM25 Top 30 与 sqlite-vec Top 30，使用真实有效成员/文件/解析修订/Chunk/EmbeddingRecord 范围；按 `chunk_id` 合并并保留 `fts_rank`/`bm25`、`vector_rank`/距离/相似度、文件和版本 ID。路由间版本或成员范围变化会返回 `RETRIEVAL_SCOPE_CHANGED`；单路故障默认显式失败，显式降级时保留错误码，不伪造另一通道信号。
+- 内部检索排序：双路 Top 30 按 `chunk_id` 合并后使用 RRF 常量 `60`，分数为各有效通道 `1/(60 + rank)` 之和；NFKC/大小写折叠后的完整查询短语和精确词项获得最高 `0.004` 的局部奖励；相同来源及相邻高重叠 Chunk 接受有界软惩罚，确定性输出最多 Top 8。结果保留原始双路信号、排序版本/参数、精确命中字段、调整原因和显式降级状态。仅供内部用例，无公开检索/API，不改变 `BUILDING`、活动版本或可检索状态。
 
 ## 当前已知缺口
 
 - 阶段 4 无未解决功能、安全、数据一致性或迁移阻塞项；需求追踪详见 `docs/test-reports/stage-4-file-management.md`。
 - 发布候选保留：正式恶意文档集、真实资源耗尽边界、干净 Windows 安装/升级/卸载包，依据发布流程执行，不回填为阶段 4 已完成证据。
-- 阶段 5 缺口：增量/原子索引激活、RRF 融合、最终重排、引用和 RAG 尚未实现；虽然双路候选收集已建立，本批仍未开放检索，Embedding、FTS、Top-K 和候选合并完成均不会使知识库可检索。
+- 阶段 5 缺口：证据充分性阈值、服务端引用、严格拒答/RAG 流程和增量/原子索引激活仍未实现。第十七批排序仅产生内部 Top 8 候选，不证明证据充分，不开放用户检索；Embedding、FTS、Top-K、候选合并或排序完成都不会使知识库可检索。
+
+## 第十七批交接
+
+- 本批结论：`PASS`；阶段 5 继续 `PARTIAL`。
+- 验收：后端全量串行 `122 passed`；Ruff 全量通过；Pyright `0 errors`；compileall 通过；`git diff --check` 在提交前通过。
+- 固定样本和算法参数见 `docs/test-reports/stage-5-knowledge-base-foundation.md` 及 `docs/project/index-preprocessing-contract.md`。真实 SQLite FTS5 + sqlite-vec 内部集成覆盖排序；没有前端/API 变化，因此未运行无关 UI E2E。
+- 下一开发批次唯一目标：对内部 Top 8 实现配置化的证据充分性阈值判定和严格拒答结果；继续不公开检索、不激活索引、不生成回答或引用。
 
 ## 测试状态
 
-- 后端测试：`117 passed`（含第十六批真实 SQLite FTS5/sqlite-vec 双路合并、单路信号留空、范围变更失败关闭、向量故障显式降级，以及第十五批固定向量 Top-K、同分稳定排序、范围外近邻过滤、版本/配置隔离、成员移出重加、知识库/文件回收站、失效 Chunk/EmbeddingRecord、坏向量和向量库异常）
+- 后端测试：`122 passed`（新增固定 RRF/精确命中/多样性/确定性 Top 8 样本，以及真实 SQLite FTS5 + sqlite-vec 排序集成；覆盖单路缺失、范围变更失败关闭和显式降级）
 - 阶段 4 后端定向测试：`21 passed`
-- 后端静态检查：Ruff 通过；Pyright `0 errors`
+- 后端静态检查：Ruff 全量通过；Pyright `0 errors, 0 warnings, 0 informations`
 - 后端 compileall：通过
 - 前端测试：`13 passed`
 - 前端类型检查：通过
 - 前端构建：通过
-- 浏览器 E2E：阶段 4 文件回归与阶段 5 知识库共 `2 passed`（各 1 项），由隔离 SQLite、真实本地 FastAPI + Vite 代理运行
+- 浏览器 E2E：最近一次历史证据为阶段 4 文件回归与阶段 5 知识库共 `2 passed`（各 1 项），由隔离 SQLite、真实本地 FastAPI + Vite 代理运行；第十七批仅改后端内部排序，无前端/API 改动，未重跑 UI E2E
 - OpenAPI 同步：OpenAPI 3.1，`34 schemas / 50 operations`；任务详情包含 `task_type` 和 `index_version_id`
 - 数据库迁移：最新 revision `d60f2e8a7c31`；空库及既有 Chunk/EmbeddingRecord 数据升级通过；降级到 `a81f3c6d2e90` 仅移除可重建的 FTS 投影，再升级后可从 Chunk 重建；`PRAGMA quick_check=ok`
 
@@ -102,7 +109,7 @@
 
 ## 下一开发批次
 
-- 阶段 5 下一个唯一目标：实现候选集的 RRF 融合、精确命中奖励和确定性多样性排序；不激活索引、不开放用户检索、不做引用或 RAG。
+- 阶段 5 下一个唯一目标：对内部 Top 8 实现配置化的证据充分性阈值判定和严格拒答结果；继续不公开检索、不激活索引、不生成回答或引用。
 
 ## 交接说明
 

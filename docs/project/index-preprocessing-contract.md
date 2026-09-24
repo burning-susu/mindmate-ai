@@ -119,3 +119,14 @@ Windows 11 x64 / Python 3.12.11 实际 CPU 验证使用 ONNX Runtime 1.30.0、to
 - 双路开始和合并前分别计算版本、成员、文件、Chunk 与 EmbeddingRecord 的范围指纹。若成员移出/重加、回收站、解析修订、Chunk/EmbeddingRecord 失效或版本状态在两路间变化，返回 `RETRIEVAL_SCOPE_CHANGED`，不发布旧候选。路由异常默认保留原错误语义并失败关闭；调用方显式允许降级时，结果带 `fts_error`/`vector_error`，不得伪装成完整双路成功。
 - 第十六批没有新增迁移、公开 API、OpenAPI、前端、索引激活、RRF、重排、引用或 RAG。向量路仍使用第十五批记录的精确 O(N) 范围过滤策略；本批没有 10 万 Chunk 性能验收。
 - 第十六批验证：后端 `117 passed`；真实 SQLite FTS5/sqlite-vec 夹具覆盖 FTS-only、Vector-only、双路同 Chunk、不同 Chunk、中文短词/英文/编号/特殊符号/空输入、范围外高排名、成员中途变化、版本/配置隔离和单路故障；Ruff、Pyright、compileall、`git diff --check` 通过。第十六批结论 `PASS`，阶段 5 仍为 `PARTIAL`。
+
+## 内部 RRF 与多样性排序阶段（第十七批）
+
+- 在已按当前版本/知识库范围验证并按 `chunk_id` 去重的候选集上调用纯函数 `rank_candidates`；该函数不访问数据库或外部服务。`HybridCandidateQuery` 只负责双路收集、合并、加载有效文件显示名、Chunk 正文/标题路径/序号、复核范围指纹，再调用排序并截断 Top 8。无公开检索/API 路由。
+- 排序版本为 `rrf-exact-diversity-v1`。配置默认 `rank_constant=60`、`final_top_k=8`。RRF 分数为 `sum(1 / (60 + rank))`，只累加非 NULL 的 `fts_rank` 和 `vector_rank`；缺失通道贡献为 0，但源字段仍保持 NULL。RRF 分数是倒数排名融合量，不是概率，也不把 BM25 和余弦分数相加。
+- 精确奖励证据使用当前命中 Chunk 对应的文件显示名、heading path 和 body。三者统一做 NFKC、casefold；Unicode 标点、空白及符号变为空格分隔。完整规范化查询短语（至少 4 个规范化字符）奖励 `0.002`；每个精确词项奖励 `0.0004`，单候选总奖励最多 `0.004`。ASCII 拉丁词/编号要求 ASCII 字母数字/下划线边界，避免 `AI` 命中 `PRAIRIE` 子串；长中文连续查询以重叠三字片段检查，二字词项只按四分之一权重。评分记录命中项、`file_title`/`heading`/`content` 字段、奖励及 `EXACT_PHRASE`/`EXACT_TERM` 原因码。短词奖励受总上限约束，不替代后续证据阈值。
+- 多样性使用有界贪心重排，不硬删除候选。对已选择集中每个相同 `file_id` 候选施加 `0.001` 惩罚，最多累计两项；若 Chunk 序号距离不超过 1 且 NFKC/casefold 文本的三元字符集合重叠系数达到 `0.6`，另加 `0.0025` 惩罚。单候选总多样性惩罚最多 `0.0035`。每轮从 `RRF + 精确奖励 - 当前惩罚` 最高项选择，其他唯一候选仍保留在排序池。
+- 确定性并列键依次为：RRF 降序、精确奖励降序、最佳原始 rank 升序、双路命中优先、FTS rank 升序、vector rank 升序、`file_id` 字典序、Chunk 序号升序、`chunk_id` 字典序。重排后名次是 1-based，最多返回配置的 8 个候选。每项可审计字段包括原始两路 rank/分数、RRF 分、命中词与字段、精确奖励、惩罚/原因、最终分/名次和算法版本；显式故障降级另保留失败通道、错误码及 `degraded` 标记。
+- 双路前后范围指纹逻辑保持不变，读取候选文件标题和 Chunk 上下文后再做一次范围复核；文件显示名也纳入范围指纹，避免标题变化期间使用不一致的精确匹配上下文。任何版本、成员、文件、Chunk 或 EmbeddingRecord 范围变化仍返回 `RETRIEVAL_SCOPE_CHANGED`。不改变 `IndexVersion.status=BUILDING`、`active_index_version_id` 或 `available_for_retrieval=false`。
+- 固定离线样本覆盖 FTS-only、Vector-only、双路同 Chunk、两个文件相关性相近、相邻高重叠片段、完整编号/标题与模糊短词、大小写/全半角/标点、同分与反转输入顺序、空候选、Top 8、单路显式降级和范围变化。真实 SQLite FTS5 + sqlite-vec 集成测试验证排序信号。该固定样本不等价于最终 Recall@10 验收。
+- 第十七批验证：后端 `122 passed` 串行；Ruff 全量通过；Pyright `0 errors, 0 warnings, 0 informations`；compileall 与 `git diff --check` 通过。没有前端/API 改动，未运行 UI E2E；没有 DeepSeek/真实凭据/付费服务调用或真实用户资料。第十七批 `PASS`；阶段 5 仍 `PARTIAL`，证据阈值、严格拒答、引用、RAG 与索引激活仍未完成。

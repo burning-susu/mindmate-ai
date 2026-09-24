@@ -113,6 +113,18 @@
 - 验收：后端全量 `117 passed`；Ruff、Pyright `0 errors`、compileall、`git diff --check` 通过；真实 SQLite FTS5/sqlite-vec 集成测试覆盖双路同 Chunk、单路命中、成员中途变化、路由故障、中文/英文/编号/特殊符号/空查询和稳定去重。第十六批结论 `PASS`，阶段 5 继续 `PARTIAL`。
 - 下一批唯一目标：实现候选集 RRF 融合、精确命中奖励和确定性多样性排序；不激活索引、不开放用户检索、不做引用或 RAG。
 
+### 第十七批：内部 RRF 与多样性排序
+
+- 状态：本批 `PASS`；阶段 5 仍为 `PARTIAL`。
+- 新增 `rank_candidates` 纯函数和 `HybridRankingConfig`。算法版本为 `rrf-exact-diversity-v1`，默认 RRF 常量 `60`；仅计算有效 FTS/vector rank 的 `1/(60 + rank)` 贡献，单路缺失仍保留原 `NULL` rank/分数。
+- 精确匹配以 NFKC、casefold 和标点/空白/符号分隔规范化完整查询及文件显示名/heading/content；完整短语奖励 `0.002`，完整词项每项 `0.0004`，总奖励最多 `0.004`。拉丁/数字词项检查 ASCII 词边界；二字中文词项只给四分之一奖励。命中词、文件标题/Chunk 标题/正文位置和原因码均输出用于审计。
+- 多样性采用确定性贪心排序：同文件候选按此前选中数量施加每项 `0.001` 的软惩罚（最多 2 项）；同文件相邻序号的三元字符集合重叠系数达到 `0.6` 时额外惩罚 `0.0025`；总惩罚封顶 `0.0035`。不按文件或重叠关系硬删除候选。
+- 并列顺序依次按 RRF 分数、精确奖励、最佳原始 rank、双路命中优先、FTS rank、vector rank、`file_id`、Chunk 序号、`chunk_id` 决定；多样性每轮重新计算惩罚。最多输出 Top 8，并保留原始两路分数/rank、融合分、奖励、惩罚、原因和显式降级状态。
+- 检索用例仅在复用既有范围校验后加载有效文件显示名、Chunk 正文、标题路径和序号，再核对版本/成员/文件/Chunk/EmbeddingRecord 指纹（含文件显示名）。发生范围变化仍直接返回 `RETRIEVAL_SCOPE_CHANGED`。不新增迁移、公开 API/OpenAPI、前端、索引激活、证据阈值、引用或 RAG。
+- 固定离线样本覆盖 FTS-only、Vector-only、双路同 Chunk、跨文件覆盖、相邻高重叠 Chunk、完整编号和模糊短词、大小写/全半角/标点、同分与反转输入顺序、空输入、Top 8、显式单路故障降级及范围变化。真实 SQLite FTS5 + sqlite-vec 集成测试断言排序元数据及 BUILDING 状态不变；不将样本视作最终 Recall@10 验收。
+- 验收：后端全量串行 `122 passed`；Ruff `All checks passed`；Pyright `0 errors, 0 warnings, 0 informations`；`python -m compileall -q src tests migrations` 通过；`git diff --check` 通过。未运行阶段 4/5 UI E2E（无前端/API 改动）；未调用 DeepSeek、真实凭据、付费外部调用或用户资料。
+- 下一开发批次唯一目标：对内部 Top 8 实现配置化的证据充分性阈值判定和严格拒答结果；继续不公开检索、不激活索引、不生成回答或引用。
+
 ## 进度口径
 
 文件产出不等于测试通过；测试通过不等于 Spike 通过；Spike 通过不等于业务验收或发布完成。
