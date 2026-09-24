@@ -753,3 +753,71 @@ repo> git diff --check
 本批未修改后端、数据库迁移或 OpenAPI schema，因此未重跑后端全量；第二十三批后端 API 证据仍为 `176 passed, 143 warnings`。未调用 DeepSeek、真实凭据、付费接口或私人资料。
 
 第二十四批结论：`PASS`；阶段 5 继续 `PARTIAL`。第二十二批 Citation owner 绑定仍延期至阶段 6/7。下一批唯一目标：准备固定本地验收资料并建立可复现 READY 索引，为本地测试检索页面补充真实浏览器候选显示证据。
+
+## 第二十五批验收追踪：固定资料 READY 索引与真实浏览器候选
+
+| ID | 验收项 | 证据 | 结论 |
+| --- | --- | --- | --- |
+| S5-B25-01 | 固定样本公开、可复跑、重复执行不创建无界重复记录；数据根与默认用户数据隔离 | `docs/test-data/stage5-fixed-ready/`、`scripts/prepare_stage5_fixed_ready.py`；两轮后 3 files / 3 knowledge bases / 13 tasks，counts unchanged | PASS |
+| S5-B25-02 | 固定模型来源/revision/hash 可校验；不下载、不调用 Provider、不使用 Mock 伪造 READY | `backend/model-cache/manager-validation` 离线 ModelManager 源缓存和隔离副本均 `READY`；report 中记录 BAAI/Xenova revision/fingerprint | PASS |
+| S5-B25-03 | 文件导入、解析、成员、预处理、Chunk、真实 ONNX Embedding、FTS、产物复核和原子激活闭环 | 主库 2/2/2/2，干扰库 1/1/1/1（Chunk/Embedding/vector/FTS）；四阶段任务检查点 `COMPLETED`，主库与干扰库活动版本均 READY | PASS |
+| S5-B25-04 | 检索仅返回当前知识库范围；回收站与其他库不泄漏；资料外问题不生成答案或伪引用 | 主库 API 返回主文件，干扰库 API 返回干扰文件；回收站文件名/ID/专属摘录未出现；资料外为 `insufficient` 且响应无 `answer`/`citations` 字段 | PASS |
+| S5-B25-05 | 真实浏览器通过网络请求命中真实 API，桌面/窄屏和键盘均展示 READY 候选 | Playwright Chromium `1440x1000`、`390x844`，Tab 到按钮后 Enter；真实响应 ID/IndexVersion/文件名/摘录/行定位核对通过，`2 passed` | PASS |
+| S5-B25-06 | 未建索引与模型不可用不误报成功；不为凑 `supported` 降低门槛 | 每次准备运行由独立空诊断库验证 `unavailable / INDEX_VERSION_NOT_AVAILABLE`；现有 `test_retrieval_test_missing_model_is_distinct_and_never_downloads` 覆盖离线模型缺失。目标/干扰候选实际 `insufficient / VECTOR_SIMILARITY_BELOW_THRESHOLD` 并保留原阈值 | PASS |
+
+### 第二十五批固定资料与隔离范围
+
+- 可复跑命令（PowerShell，从 `backend` 运行）：`uv run python scripts/prepare_stage5_fixed_ready.py --data-dir "$env:TEMP\mindmate-ai-stage5-fixed-ready"`。脚本在专用目录创建所有权标记；非空且无标记的目录拒绝接管。脚本只读取 Git 忽略的固定模型缓存并将经校验副本写入隔离 `models`，不会读写 `%LOCALAPPDATA%\MindMateAI`，也不执行清理。
+- 三份无私人内容资料为 `服务超时策略.txt`（主库，30 秒）、`相似服务超时策略.txt`（独立干扰库，47 秒）与 `回收站范围验证.txt`（READY 后经文件回收站 API 软删除，专属标识 `TRASH-9274`）。另有一个空诊断知识库，每轮用于核验无活动索引失败状态。
+- 使用本地固定 BGE：`BAAI/bge-small-zh-v1.5@7999e1d3359715c523056ef9478215996d62a620`，ONNX `Xenova/bge-small-zh-v1.5@75c43b069aac4d136ba6bc1122f995fedcfd2781`，MIT，manifest fingerprint `4d07bfc3eefa75de01924a4350eef08182c163b0060228410c3d882c9f07c6a5`，总大小 `95,291,718` 字节。源缓存和隔离副本均经过固定 manifest 大小/SHA-256/配置验证；本批没有联网或下载。
+- 首次运行暴露各索引阶段是独立持久任务；仅完成 `INDEX_PREPROCESS` 不会自动入队后续任务。准备脚本按现有 enqueue 服务顺序启动 `INDEX_CHUNK`、`INDEX_EMBED`、`INDEX_FTS`，由现有 Workers 和 `IndexActivationWorker` 完成；不直接 SQL 写入业务状态或伪造 READY。
+- 每次完整准备连续执行两遍。验证前后文件、知识库和任务总数一致：3 files、3 knowledge bases、13 tasks（3 FILE_IMPORT、2 KNOWLEDGE_MEMBERSHIP_ADD、2 INDEX_PREPROCESS、2 INDEX_CHUNK、2 INDEX_EMBED、2 INDEX_FTS）。逐输入状态为 `PREPARED/CHUNKED/EMBEDDED/INDEXED`。
+
+### 第二十五批真实检索结果
+
+- 主库当前活动版本：主库两个成员各 1 Chunk、1 EmbeddingRecord、1 sqlite-vec 向量和 1 FTS 映射；第二个回收站成员仍在版本物理快照中，但当前检索范围即时排除它。FTS5 `integrity_check`、版本一致性、向量 ID 集合、SHA-256、512 维、有限值与单位范数检查全部通过。两个知识库的 `INDEX_PREPROCESS/INDEX_CHUNK/INDEX_EMBED/INDEX_FTS` 任务均为 `COMPLETED`，IndexVersion 和知识库均为 `READY`。
+- `API 单次请求超时时间是多少秒？` 返回 `服务超时策略.txt`、真实段落摘录和 `line_start=1`；当前实际 gate 状态是 `insufficient`，原因 `VECTOR_SIMILARITY_BELOW_THRESHOLD`，余弦相似度约 `0.5867`。干扰库问题返回另一库的 `相似服务超时策略.txt` 与 `47 秒`，余弦相似度约 `0.6568`，同样为 `insufficient`。按提示词要求保留既有 `0.82` 阈值，不改算法；页面如实显示“资料不足”，同时展示真实候选。
+- 查询回收站专属标识没有返回回收站文件的 file ID、文件名或摘录。资料外问题 `南极冰芯中氮同位素的具体丰度百分比是多少？` 返回 `insufficient / NUMERIC_ANSWER_VALUE_NOT_FOUND`；检索响应可能保留主库内诊断候选，但没有生成 `answer` 或 `citations` 字段，UI 明确显示“资料不足”，不显示正式引用。未将候选诊断当成答案。
+- E2E 截图：`%TEMP%\mindmate-ai-stage5-fixed-ready\evidence\retrieval-desktop.png`、`retrieval-narrow.png`、`retrieval-out-of-scope.png`。真实浏览器 API 请求为 `POST /api/v1/knowledge-bases/{id}/retrieval-tests`；Chromium 桌面 `1440x1000`、窄屏 `390x844` 页面无横向溢出，候选文件名、摘录和来源行号与网络 JSON 一致。键盘流程从问题文本框 Tab 到按钮，再按 Enter。
+
+### 第二十五批实际验证
+
+~~~text
+backend> uv run python scripts/prepare_stage5_fixed_ready.py --data-dir "$env:TEMP\mindmate-ai-stage5-fixed-ready"
+PASS；模型 READY；两个活动 IndexVersion READY；第二轮记录数不变；真实 API 范围/回收站/资料外检查通过
+
+backend> uv run pytest
+176 passed, 143 warnings（串行全量）
+
+backend> uv run ruff check src tests scripts
+All checks passed
+
+backend> uv run pyright src tests scripts/prepare_stage5_fixed_ready.py
+0 errors, 0 warnings, 0 informations
+
+backend> uv run python -m compileall -q src tests migrations scripts
+通过
+
+backend> uv run alembic heads
+6b3e91a0c4d7 (head)
+
+frontend> npm run typecheck
+通过
+
+frontend> npm run lint
+通过
+
+frontend> npm test -- --run
+Test Files 6 passed; Tests 21 passed
+
+frontend> npm run build
+通过（Vite production build）
+
+frontend> npm run test:e2e -- e2e/stage5-ready-retrieval.spec.ts
+2 passed；Playwright Chromium + real local API
+
+repo> git diff --check
+通过
+~~~
+
+没有数据库迁移、公开 API/OpenAPI schema 或 Provider 改动；没有 DeepSeek、真实凭据、付费外部服务或个人资料。固定样本不等于 Recall@10、10 万 Chunk 性能、门控阈值校准或 AC-KB-* 全量验收。第二十五批 `PASS`；阶段 5 继续 `PARTIAL`；Citation owner 仍待阶段 6/7。下一批唯一目标：用固定真实 ONNX 中文查询样本评估现有 `evidence-gate-v1` 判定分布，不先调整阈值。

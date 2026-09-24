@@ -6,7 +6,7 @@
 - 当前远程提交：以 `git ls-remote --heads origin feat/v1-bootstrap` 为准；本文件随本批次收口提交推送
 - 最后更新时间：`2026-09-24`
 - 当前开发阶段：阶段 5 开发中，状态 `PARTIAL`
-- 当前批次状态：第二十二批 Citation 绑定因无真实 Chat/Learning owner 而 `BLOCKED` 并延期到阶段 6/7；第二十三批本地测试检索 API、第二十四批知识库详情测试检索页面均为 `PASS`；阶段 5 状态 `PARTIAL`
+- 当前批次状态：第二十二批 Citation 绑定因无真实 Chat/Learning owner 而 `BLOCKED` 并延期到阶段 6/7；第二十三批本地测试检索 API、第二十四批知识库详情测试检索页面、第二十五批固定 READY 资料与真实浏览器候选验证均为 `PASS`；阶段 5 状态 `PARTIAL`
 
 ## 已完成阶段
 
@@ -113,8 +113,9 @@
 - 前端类型检查：通过
 - 前端 lint：通过
 - 前端构建：通过
-- 浏览器 E2E：最近一次历史证据为阶段 4 文件回归与阶段 5 知识库共 `2 passed`（各 1 项），由隔离 SQLite、真实本地 FastAPI + Vite 代理运行；第十九批无前端/API 改动，未重跑 UI E2E
+- 浏览器 E2E：阶段 4 文件回归与阶段 5 知识库历史用例共 `2 passed`（各 1 项）；第二十五批新增真实 READY 检索浏览器用例 `2 passed`，使用固定 ONNX、隔离数据根目录和真实 FastAPI + Vite。
 - 第二十四批浏览器证据：真实本地 FastAPI + Vite（允许来源 `127.0.0.1:5173`）创建空知识库后打开 `/knowledge-bases/:id`，页面显示测试检索入口、长度限制和“索引待开放”；用键盘 Tab/Enter 提交后真实 API 返回 `unavailable / INDEX_VERSION_NOT_AVAILABLE`，未误报为资料不足；`390x844` 窄屏无障碍树仍能读到输入、按钮和结果状态。没有可用 READY 固定资料，因此没有把 Vitest Mock 候选显示写成真实检索浏览器验收。
+- 第二十五批浏览器证据：真实本地 FastAPI `127.0.0.1:8000` 与 Vite `127.0.0.1:5173`；Chromium 桌面 `1440x1000`、窄屏 `390x844` 均通过 Tab 到提交按钮再按 Enter 的真实网络请求；主库候选文件名、摘录与 API `line_start` 相符。目标问题与相似干扰库问题均如实标为 `insufficient`（余弦相似度分别 `0.5867`、`0.6568`，低于既有 `0.82` 阈值）；回收站样本未泄漏，资料外问题为 `insufficient / NUMERIC_ANSWER_VALUE_NOT_FOUND`，没有答案或 Citation 字段。截图位于 `%TEMP%\mindmate-ai-stage5-fixed-ready\evidence\`。
 - OpenAPI 同步：OpenAPI 3.1，`38 schemas / 51 operations`；新增本地检索测试请求/响应类型与操作
 - 数据库迁移：最新 revision `6b3e91a0c4d7`；空库升级/降级/重升级及阶段 5 既有数据迁移回归通过。
 
@@ -126,6 +127,15 @@
 - 状态与竞态：分别呈现 `supported`、`insufficient`、`unavailable`；无活动索引、模型缺失、通道错误、范围变化和空结果保持不同文案；请求错误保留输入并可重试。AbortController、序列号和按知识库 ID 的组件卸载保证连续请求、切换问题、切换知识库和卸载后的旧响应不会覆盖当前结果。
 - 验收证据：前端 Vitest `21 passed`；`npm run typecheck`、`npm run lint`、`npm run build`、`git diff --check` 均通过。真实浏览器仅验证空知识库和无活动索引状态，候选 Top 8/HTML 片段安全/错误重试等使用确定性 UI Mock 回归，不冒充真实索引验收。
 - 本批没有后端改动、数据库迁移或 OpenAPI schema 变化；未为凑数重跑后端全量。第二十二批 Citation owner 绑定继续延期到阶段 6/7。
+
+## 第二十五批交接
+
+- 本批结论：`PASS`；阶段 5 继续 `PARTIAL`。起始本地/远端 SHA 均为 `63bca0d73d66ac0810ae394d8545cb19ce1110cb`。
+- 固定资料与隔离：新增 `docs/test-data/stage5-fixed-ready/` 三份合成 TXT，准备脚本建立主库、相似干扰库和无索引诊断库。默认数据根为 `%TEMP%\mindmate-ai-stage5-fixed-ready`，所有权标记保护已有非空目录；重复两轮检查文件/库/任务数不变，结果为 3 个文件、3 个库、13 个任务。脚本不会清理该目录。
+- 模型与 READY：`backend/model-cache/manager-validation` 的固定 BAAI/Xenova manifest 离线校验为 `READY`；revision、大小、SHA-256 和 fingerprint 复核后复制到隔离根并复验，无联网或下载。通过文件导入 API、知识库/成员 API 与 `INDEX_PREPROCESS → INDEX_CHUNK → INDEX_EMBED → INDEX_FTS → IndexActivationWorker` 建立真实本地 ONNX 索引；主库和干扰库均有活动 `READY` 版本。Chunk、EmbeddingRecord、sqlite-vec 向量和 FTS 映射数逐项相等，FTS integrity/consistency、向量 SHA-256/512 维/有限值/单位范数及持久任务检查点均通过。
+- 检索结果：主库问题返回 `服务超时策略.txt` 的真实候选、原文 `30 秒` 和第 1 行起始定位；相似干扰库问题只返回其自身 `47 秒` 文件。证据门控均为 `insufficient / VECTOR_SIMILARITY_BELOW_THRESHOLD`，主库余弦相似度 `0.5867`、干扰库 `0.6568`；没有调整既有阈值。回收站专属文件、名称与摘录未泄漏。资料外问题返回 `insufficient / NUMERIC_ANSWER_VALUE_NOT_FOUND`，API/UI 未生成答案或正式引用。
+- 验收：后端串行 `uv run pytest` 为 `176 passed, 143 warnings`；`uv run ruff check src tests scripts`、`uv run pyright src tests scripts/prepare_stage5_fixed_ready.py`（0 errors）、`uv run python -m compileall -q src tests migrations scripts`、`uv run alembic heads`（`6b3e91a0c4d7`）通过。前端 `npm run typecheck`、`npm run lint`、`npm test -- --run`（21 passed）、`npm run build` 通过；真实 Chromium Playwright `2 passed`；`git diff --check` 通过。浏览器截图保存在 `%TEMP%\mindmate-ai-stage5-fixed-ready\evidence\`。
+- 未验证范围：固定样本只证明当前本地运行闭环，不替代 Recall@10、10 万 Chunk 性能、阈值校准或 AC-KB-* 全量验收。未调用 DeepSeek、真实凭据、付费服务或个人资料；Citation owner 仍延期到阶段 6/7。
 
 ## 第十三批交接
 
@@ -172,7 +182,7 @@
 
 ## 下一开发批次
 
-- 阶段 5 下一个唯一目标：准备固定本地验收资料并建立可复现的 READY 索引，为本地测试检索页面补充一条真实浏览器候选显示证据；继续不生成回答或绑定 Citation。
+- 阶段 5 下一个唯一目标：用固定真实 ONNX 中文查询样本评估 `evidence-gate-v1` 当前门槛下的 supported/insufficient 判定分布，先建立证据与校准结论，不在未治理前调整阈值或绑定 Citation。
 
 ## 交接说明
 

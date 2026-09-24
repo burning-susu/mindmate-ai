@@ -196,6 +196,16 @@
 - 验收：新增 `frontend/src/test/stage5-retrieval-test.test.tsx`，覆盖 Top 8/空结果、三种状态、无活动索引/模型、错误重试、防重复、问题/知识库切换竞态、无持久历史和 HTML 片段安全。前端 Vitest `21 passed`；typecheck、lint、build、`git diff --check` 通过。真实本地 FastAPI + Vite 浏览器验证空知识库键盘提交，返回 `unavailable / INDEX_VERSION_NOT_AVAILABLE`；没有固定 READY 资料，不把 Mock 候选显示写成真实检索证据。
 - 本批无后端、迁移或 OpenAPI schema 变更；Citation owner 继续延期到阶段 6/7。下一开发批次唯一目标：准备固定本地验收资料并建立可复现 READY 索引，为该页面补充真实浏览器候选显示证据。
 
+### 第二十五批：固定资料 READY 索引与真实浏览器候选验证
+
+- 状态：本批 `PASS`；阶段 5 继续 `PARTIAL`。起始本地/远端 SHA 均为 `63bca0d73d66ac0810ae394d8545cb19ce1110cb`。
+- 固定资料：`docs/test-data/stage5-fixed-ready/` 提供主库超时策略、相似干扰库策略和索引 READY 后移入回收站的范围验证资料；另有无成员诊断库验证未就绪错误。运行命令：`uv run python scripts/prepare_stage5_fixed_ready.py --data-dir "$env:TEMP\mindmate-ai-stage5-fixed-ready"`。数据根通过专用所有权标记保护；脚本两轮运行后仍是 3 文件、3 知识库、13 持久任务，没有新增重复记录。最终验证摘要在隔离根的 `stage5-fixed-ready-report.json`。
+- 模型：离线复验并复制 Git 忽略缓存 `backend/model-cache/manager-validation` 的真实 `BAAI/bge-small-zh-v1.5`（base revision `7999e1d3359715c523056ef9478215996d62a620`）与 `Xenova/bge-small-zh-v1.5` ONNX revision `75c43b069aac4d136ba6bc1122f995fedcfd2781`；manifest fingerprint `4d07bfc3eefa75de01924a4350eef08182c163b0060228410c3d882c9f07c6a5`。源与隔离副本的 manifest 大小/SHA-256 校验均为 `READY`；无联网、无下载、无 Mock 向量。
+- 构建闭环：真实文件导入/解析、知识库成员任务和预处理服务后，准备脚本分别入队现有 `INDEX_CHUNK`、`INDEX_EMBED`、`INDEX_FTS` 持久 Worker，由激活 Worker 原子切换。主库与干扰库活动 IndexVersion 均为 `READY`。主库 2 输入产生 2 Chunk/2 Embedding/2 vector/2 FTS 映射；干扰库 1 输入各产物均为 1。任务检查点四阶段均 `COMPLETED`；FTS integrity/consistency 和向量 ID、哈希、512 维、有限值、单位范数核验通过。
+- 检索与浏览器：真实 `POST /api/v1/knowledge-bases/{id}/retrieval-tests` 在主库返回 `服务超时策略.txt`、含 `30 秒` 的摘录与 `line_start=1`；相似库只返回 `相似服务超时策略.txt` 及 `47 秒`。两个目标查询的门控结果都是 `insufficient / VECTOR_SIMILARITY_BELOW_THRESHOLD`，余弦相似度 `0.5867/0.6568`，未调整既有 `0.82` 门槛。回收站内容没有泄漏；资料外问题返回 `insufficient / NUMERIC_ANSWER_VALUE_NOT_FOUND`，没有答案或正式 Citation 字段。Chromium `1440x1000` 与 `390x844` 真实浏览器均通过键盘 Tab/Enter 提交和候选显示；E2E `2 passed`。截图位于 `%TEMP%\mindmate-ai-stage5-fixed-ready\evidence\`。
+- 验收：`uv run pytest` 为 `176 passed, 143 warnings`；`uv run ruff check src tests scripts`、`uv run pyright src tests scripts/prepare_stage5_fixed_ready.py`（0 errors）、`uv run python -m compileall -q src tests migrations scripts`、`uv run alembic heads`（`6b3e91a0c4d7`）通过。前端 `npm run typecheck`、`npm run lint`、`npm test -- --run`（21 passed）、`npm run build`、真实 Playwright E2E（2 passed）与 `git diff --check` 通过。
+- 未验证：几份固定资料不替代 Recall@10、10 万 Chunk 性能、门控阈值校准或 AC-KB-* 全量验收。无 DeepSeek、真实凭据、付费服务或个人资料；Citation owner 仍延期到阶段 6/7。
+
 ## 进度口径
 
 文件产出不等于测试通过；测试通过不等于 Spike 通过；Spike 通过不等于业务验收或发布完成。
