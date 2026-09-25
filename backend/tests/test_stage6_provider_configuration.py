@@ -13,7 +13,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
-from mindmate.ai.providers.base import ProviderRequestError
+from mindmate.ai.providers.base import ChatRequest, ProviderRequestError
 from mindmate.ai.providers.deepseek import DEEPSEEK_MODEL, PROBE_TEXT, DeepSeekChatProvider
 from mindmate.application.backups import create_backup, verify_backup
 from mindmate.config import Settings
@@ -277,6 +277,48 @@ def test_provider_timeout_is_retryable() -> None:
         provider.test_connection(API_KEY)
     assert caught.value.code == "PROVIDER_READ_TIMEOUT"
     assert caught.value.retryable is True
+
+
+def test_deepseek_stream_fixture_yields_incremental_chunks() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        body = (
+            'data: {"id":"stream-fixture","model":"deepseek-flash",'
+            '"choices":[{"delta":{"content":"第一"},"finish_reason":null}]}\n\n'
+            'data: {"id":"stream-fixture","model":"deepseek-flash",'
+            '"choices":[{"delta":{"content":"段"},"finish_reason":null}]}\n\n'
+            'data: {"id":"stream-fixture","model":"deepseek-flash",'
+            '"choices":[{"delta":{},"finish_reason":"stop"}],'
+            '"usage":{"prompt_tokens":3,"completion_tokens":2,"total_tokens":5}}\n\n'
+            'data: [DONE]\n\n'
+        )
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            content=body.encode(),
+            request=request,
+        )
+
+    provider = DeepSeekChatProvider(
+        base_url="https://fixture.invalid",
+        model=DEEPSEEK_MODEL,
+        transport=httpx.MockTransport(handler),
+    )
+    request = ChatRequest(
+        request_id="stream-fixture-request",
+        task_type="GENERAL_CHAT",
+        model_profile=DEEPSEEK_MODEL,
+        system_instructions="只回答问题",
+        messages=({"role": "user", "content": "流式测试"},),
+        stream=True,
+    )
+    chunks = list(provider.generate_stream(request, "fixture-key"))
+    assert "".join(chunk.delta for chunk in chunks) == "第一段"
+    assert chunks[-1].done is True
+    assert chunks[-2].usage == {"prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 5}
+    assert json.loads(requests[0].content)["stream"] is True
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows Credential Manager is Windows-only")

@@ -6,7 +6,7 @@
 - 当前远程提交：以 `git ls-remote --heads origin feat/v1-bootstrap` 为准；本文件随本批次收口提交推送
 - 最后更新时间：`2026-09-25`
 - 当前开发阶段：阶段 6 开发中，状态 `PARTIAL`；阶段 5 继续 `PARTIAL`
-- 当前批次状态：第二十二批 Citation 绑定因无真实 Chat/Learning owner 而 `BLOCKED` 并延期到阶段 6/7；第二十三至第三十批均为 `PASS`；第三十一批完成 Windows Credential Manager 凭据生命周期、版本化外发同意、固定 DeepSeek 最小连接探测和设置页配置闭环；第三十二批完成普通 Chat 服务端会话、消息、回答版本、AI Operation、幂等和 Mock 生成闭环；没有真实 Key 或真实 DeepSeek 外部调用；阶段 5 遗留项保持有效
+- 当前批次状态：第二十二批 Citation 绑定因无真实 Chat/Learning owner 而 `BLOCKED` 并延期到阶段 6/7；第二十三至第三十批均为 `PASS`；第三十一批完成 Windows Credential Manager 凭据生命周期、版本化外发同意、固定 DeepSeek 最小连接探测和设置页配置闭环；第三十二批完成普通 Chat 服务端会话、消息、回答版本、AI Operation、幂等和 Mock 生成闭环；第三十三批完成普通 Chat 流式快照、SSE 重订阅、停止与前端恢复闭环；没有真实 Key 或真实 DeepSeek 外部调用；阶段 5 遗留项保持有效
 
 ## 已完成阶段
 
@@ -26,8 +26,9 @@
 - AI 服务凭据：第三十一批增加 `CredentialStorePort`、Windows Credential Manager 实现和隔离假存储；SQLite 只保留非秘密 Provider profile/同意/探测状态；固定 DeepSeek Chat Completions 探测只在用户显式确认后发送短文本，失败不删除 Key，不暴露原始响应。
 - AI 服务设置：第三十一批接入 `/settings`，分开展示 Key 配置、外发同意和连接探测；保存后清空明文输入，不写入 LocalStorage 或前端全局状态；官方 Key/价格入口使用当前复核链接。
 - 普通 Chat 服务端：第三十二批新增 `Conversation`、`ConversationScope`、`Message`、`AnswerVersion` 和 `AiOperation` 持久化；首条与后续消息使用幂等键/业务请求 ID，在事务中创建用户消息、助手占位、回答版本和持久生成任务；Mock Provider 生成后保存回答、模型、状态和 usage，失败与重启中断可轮询读取。仅支持 `GENERAL_CHAT`，不执行 RAG、不创建 Citation、不提供聊天页面或 SSE UI。
+- 普通 Chat 流式闭环：第三十三批在既有 owner 上新增 provider-neutral 增量分片、持久快照与 `TaskEvent.sequence` SSE；支持断线/刷新游标恢复、重复订阅不重复生成、显式停止与自然完成原子裁决、停止后保留已生成正文、`STOPPED/FAILED/INTERRUPTED` 安全终态。`/chat` 前端接入真实会话/消息、有限重连、停止轮询和刷新恢复；不包含 RAG/Citation/Learning/自动 Provider 切换。
 - 数据库：SQLite/Alembic 核心实体、持久任务、内容对象引用计数和软删除字段；revision `d91f4a6b2c30` 增加 ChunkingConfig、EmbeddingConfig、IndexVersion 与逐文件输入快照；revision `f2c7a1d8e904` 增加文件级 Chunk 与切片检查点；revision `a81f3c6d2e90` 增加 EmbeddingRecord、逐输入 Embedding 检查点及 INDEX_EMBED 单运行租约约束；revision `d60f2e8a7c31` 增加逐输入 FTS 状态、映射表、FTS5 虚表和 INDEX_FTS 单运行租约约束；revision `e4a7810c9b62` 增加索引激活失败原因码；revision `6b3e91a0c4d7` 增加内部未绑定来源快照和文件永久删除净化触发器；revision `a7c9e1f2b304` 增加普通 Chat owner、范围快照、消息、回答版本和 AI Operation。
-- 测试与工程：第三十二批新增 8 项普通 Chat 服务端/Provider fixture 回归；完整串行后端为 `214 passed, 167 warnings`，前端为 `25 passed`，Ruff、Pyright、compileall、OpenAPI/前端类型、typecheck、lint、build 均通过。
+- 测试与工程：第三十三批新增流式快照、重订阅、停止竞态、重复停止和 DeepSeek SSE fixture 回归；完整串行后端 `217 passed`，阶段 6 定向 `16 passed`，前端 `27 passed`；Ruff、Pyright、compileall、OpenAPI/前端类型、typecheck、lint、build 均通过；真实本地 FastAPI + Vite 浏览器发送/完成流程通过。
 - 知识库：空库创建保持 `EMPTY`；名称/描述/颜色/图标编辑；回收站生命周期；已导入文件批量加入/移出、多库共享、幂等重加与逐项结果；成员准入完成后保持 `index_state=PENDING` 和知识库 `PREPARING`，不伪造可检索状态。
 - 索引预处理：独立 `INDEX_PREPROCESS` Worker 在请求生命周期外冻结活动成员、内容哈希、解析修订、配置指纹与集合指纹；逐文件记录 `PREPARED/SKIPPED/FAILED`，支持幂等、租约接管、检查点续跑、取消和完成前版本复核。预处理后 `IndexVersion.status=BUILDING`，不会写入 `active_index_version_id`。
 - 版本化切片：独立 `INDEX_CHUNK` Worker 仅消费同版本 `PREPARED` 快照；Chunk 按文件/解析修订/切片配置复用，不与知识库绑定；文件级 Chunk 集、切片检查点和任务进度原子提交，支持取消、租约接管、关闭续跑、显式失败重试、多库复用与旧解析/配置版本共存。完成后仍为 `BUILDING` 且不可检索。
@@ -51,7 +52,7 @@
 - 阶段 4 无未解决功能、安全、数据一致性或迁移阻塞项；需求追踪详见 `docs/test-reports/stage-4-file-management.md`。
 - 发布候选保留：正式恶意文档集、真实资源耗尽边界、干净 Windows 安装/升级/卸载包，依据发布流程执行，不回填为阶段 4 已完成证据。
 - 阶段 5 缺口：来源快照 owner/Citation 绑定（延期到阶段 6/7）、用户级严格拒答/RAG 流程、固定样本之外的质量/性能评估仍未完成；第二十八批只完成固定 31+7 样本的门控校准回归。`supported` 不证明候选蕴含事实；本地调试端点和本批页面不构成 AC-KB-003、Recall@10 或聊天验收。
-- 阶段 6 缺口：普通 Chat 服务端 owner 和 Mock/fixture 生成已完成；聊天前端、SSE/停止、重试/重新生成、RAG/Citation、Learning owner、预算执行和自动回退仍未实现；本批只验证 Mock 与本地 HTTP fixture，不代表真实 DeepSeek 已联通或账户余额充足。
+- 阶段 6 缺口：普通 Chat 服务端 owner、Mock/fixture 生成、聊天前端、SSE/停止、断线/刷新恢复已完成；重试/重新生成与答案版本切换、RAG/Citation、Learning owner、预算执行和自动回退仍未实现；本批只验证 Mock 与本地 HTTP fixture，不代表真实 DeepSeek 已联通或账户余额充足。
 
 ## 第十八批交接
 

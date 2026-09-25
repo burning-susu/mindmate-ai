@@ -35,7 +35,7 @@ def _wait_for_terminal(client: TestClient, operation_id: str) -> dict:
         response = client.get(f"/api/v1/ai-operations/{operation_id}")
         assert response.status_code == 200
         payload = response.json()
-        if payload["status"] not in {"QUEUED", "RUNNING"}:
+        if payload["status"] not in {"QUEUED", "RUNNING", "STOPPING"}:
             return payload
         time.sleep(0.02)
     raise AssertionError("AI Operation did not reach a terminal state")
@@ -113,6 +113,83 @@ def test_first_message_is_atomic_idempotent_and_generates_with_mock(tmp_path: Pa
         )
         assert conflict.status_code == 409
         assert conflict.json()["code"] == "IDEMPOTENCY_KEY_REUSED"
+
+
+def test_stream_events_are_durable_snapshots_and_resubscribe_does_not_regenerate(
+    tmp_path: Path,
+) -> None:
+    provider = MockChatProvider(
+        response_factory=lambda request: "第一段回答\n\n第二段回答", stream_chunk_size=2
+    )
+    _app, client = _start_client(tmp_path, provider)
+    with client:
+        _open_session(client)
+        created = client.post(
+            "/api/v1/conversations",
+            headers=_headers("chat-stream-001"),
+            json={"first_message": "流式问题", "client_request_id": "client-stream-001"},
+        )
+        assert created.status_code == 202
+        operation_id = created.json()["operation_id"]
+        with client.stream(
+            "GET",
+            f"/api/v1/ai-operations/{operation_id}/events",
+            headers={"Origin": ORIGIN, "Accept": "text/event-stream"},
+        ) as stream:
+            body = "".join(stream.iter_text())
+        assert stream.status_code == 200
+        assert "event: snapshot" in body
+        assert "event: completed" in body
+        event_ids = [
+            int(line.removeprefix("id: "))
+            for line in body.splitlines()
+            if line.startswith("id: ")
+        ]
+        assert event_ids == sorted(set(event_ids))
+        final = client.get(f"/api/v1/ai-operations/{operation_id}").json()
+        assert final["status"] == "COMPLETED"
+        assert final["assistant_message"]["content"] == "第一段回答\n\n第二段回答"
+        with client.stream(
+            "GET",
+            f"/api/v1/ai-operations/{operation_id}/events?after=999999",
+            headers={"Origin": ORIGIN, "Accept": "text/event-stream"},
+        ) as resubscribe:
+            assert "".join(resubscribe.iter_text()) == ""
+        assert len(provider.calls) == 1
+
+
+def test_explicit_stop_wins_over_late_stream_completion(tmp_path: Path) -> None:
+    provider = MockChatProvider(
+        response_factory=lambda request: "停止后保留已经生成的内容并且不上游追加",
+        delay_seconds=0.02,
+        stream_chunk_size=2,
+    )
+    _app, client = _start_client(tmp_path, provider)
+    with client:
+        _open_session(client)
+        created = client.post(
+            "/api/v1/conversations",
+            headers=_headers("chat-stop-001"),
+            json={"first_message": "停止问题", "client_request_id": "client-stop-001"},
+        )
+        operation_id = created.json()["operation_id"]
+        time.sleep(0.08)
+        stop = client.post(
+            f"/api/v1/ai-operations/{operation_id}/stop",
+            headers=_headers("chat-stop-action-001"),
+        )
+        assert stop.status_code == 200
+        final = _wait_for_terminal(client, operation_id)
+        assert final["status"] == "STOPPED"
+        assert final["assistant_message"]["status"] == "STOPPED"
+        assert final["assistant_message"]["content"]
+        repeated = client.post(
+            f"/api/v1/ai-operations/{operation_id}/stop",
+            headers=_headers("chat-stop-action-002"),
+        )
+        assert repeated.status_code == 200
+        assert repeated.json()["status"] == "STOPPED"
+        assert len(provider.calls) == 1
 
 
 def test_follow_up_preserves_order_and_duplicate_does_not_generate_twice(tmp_path: Path) -> None:

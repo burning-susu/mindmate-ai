@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Iterator
 from urllib.parse import urlparse
 
 import httpx
@@ -9,6 +10,7 @@ import httpx
 from mindmate.ai.providers.base import (
     ChatRequest,
     ChatResponse,
+    ChatStreamChunk,
     ProviderProbeResult,
     ProviderRequestError,
 )
@@ -307,6 +309,153 @@ class DeepSeekChatProvider:
             usage=usage,
             provider_request_id=provider_request_id,
         )
+
+    def generate_stream(
+        self, request: ChatRequest, api_key: str | None = None
+    ) -> Iterator[ChatStreamChunk]:
+        """Stream an OpenAI-compatible chat completion through the bounded adapter."""
+        if not api_key:
+            raise ProviderRequestError("PROVIDER_KEY_MISSING", "尚未配置 DeepSeek API Key。", 409)
+        messages = [{"role": "system", "content": request.system_instructions}]
+        messages.extend(
+            {"role": message["role"], "content": message["content"]}
+            for message in request.messages
+            if message.get("role") in {"user", "assistant"}
+        )
+        payload = {
+            "model": request.model_profile,
+            "messages": messages,
+            "max_tokens": request.max_output_tokens,
+            "temperature": request.temperature,
+            "stream": True,
+        }
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "Accept": "text/event-stream",
+        }
+        resolved_model: str | None = None
+        provider_request_id: str | None = None
+        usage: dict[str, int] | None = None
+        saw_content = False
+        saw_done = False
+        response_bytes = 0
+        data_lines: list[str] = []
+        try:
+            with httpx.Client(
+                base_url=self.base_url,
+                timeout=httpx.Timeout(self.timeout_seconds),
+                follow_redirects=False,
+                transport=self.transport,
+            ) as client:
+                with client.stream(
+                    "POST", "/chat/completions", headers=headers, json=payload
+                ) as response:
+                    if response.status_code != 200:
+                        self._raise_for_status(response)
+                    for raw_line in response.iter_lines():
+                        line = raw_line if isinstance(raw_line, str) else raw_line.decode("utf-8", "replace")
+                        response_bytes += len(line.encode("utf-8")) + 1
+                        if response_bytes > MAX_GENERATION_RESPONSE_BYTES or len(line) > 64 * 1024:
+                            raise ProviderRequestError(
+                                "PROVIDER_RESPONSE_TOO_LARGE",
+                                "DeepSeek 返回的普通聊天流超过本地安全上限。",
+                                502,
+                            )
+                        if line.startswith("data:"):
+                            data_lines.append(line[5:].lstrip())
+                            continue
+                        if line.strip() and not data_lines:
+                            continue
+                        if not data_lines:
+                            continue
+                        data = "\n".join(data_lines).strip()
+                        data_lines = []
+                        if data == "[DONE]":
+                            saw_done = True
+                            yield ChatStreamChunk(
+                                request_id=request.request_id,
+                                provider=self.provider_name,
+                                requested_model=request.model_profile,
+                                resolved_model=resolved_model,
+                                usage=usage,
+                                provider_request_id=provider_request_id,
+                                done=True,
+                            )
+                            break
+                        try:
+                            body = json.loads(data)
+                        except (TypeError, ValueError) as exc:
+                            raise ProviderRequestError(
+                                "PROVIDER_INVALID_RESPONSE", "DeepSeek 返回了无法识别的生成响应。", 502
+                            ) from exc
+                        if not isinstance(body, dict):
+                            raise ProviderRequestError(
+                                "PROVIDER_INVALID_RESPONSE", "DeepSeek 返回了无法识别的生成响应。", 502
+                            )
+                        model = body.get("model")
+                        if isinstance(model, str) and model:
+                            resolved_model = model[:200]
+                        response_id = body.get("id")
+                        if isinstance(response_id, str) and response_id:
+                            provider_request_id = response_id[:128]
+                        normalized_usage = self._normalize_usage(body.get("usage"))
+                        if normalized_usage is not None:
+                            usage = normalized_usage
+                        choices = body.get("choices")
+                        choice = choices[0] if isinstance(choices, list) and choices else None
+                        if not isinstance(choice, dict):
+                            continue
+                        delta_value = choice.get("delta")
+                        delta = delta_value.get("content") if isinstance(delta_value, dict) else ""
+                        delta = delta if isinstance(delta, str) else ""
+                        finish_reason = choice.get("finish_reason")
+                        finish_reason = finish_reason[:80] if isinstance(finish_reason, str) else None
+                        if delta:
+                            saw_content = True
+                        if delta or finish_reason or usage is not None:
+                            yield ChatStreamChunk(
+                                request_id=request.request_id,
+                                delta=delta,
+                                finish_reason=finish_reason,
+                                provider=self.provider_name,
+                                requested_model=request.model_profile,
+                                resolved_model=resolved_model,
+                                usage=usage,
+                                provider_request_id=provider_request_id,
+                            )
+                    if data_lines and not saw_done:
+                        data = "\n".join(data_lines).strip()
+                        if data == "[DONE]":
+                            saw_done = True
+                    if not saw_done or not saw_content:
+                        raise ProviderRequestError(
+                            "PROVIDER_INVALID_RESPONSE",
+                            "DeepSeek 返回了不完整的生成响应。",
+                            502,
+                        )
+        except ProviderRequestError:
+            raise
+        except httpx.ConnectTimeout as exc:
+            raise ProviderRequestError(
+                "PROVIDER_CONNECT_TIMEOUT", "连接 DeepSeek 超时，请检查网络后重试。", 504, True
+            ) from exc
+        except httpx.ReadTimeout as exc:
+            raise ProviderRequestError(
+                "PROVIDER_READ_TIMEOUT", "等待 DeepSeek 响应超时，请稍后重试。", 504, True
+            ) from exc
+        except httpx.TimeoutException as exc:
+            raise ProviderRequestError(
+                "PROVIDER_TIMEOUT", "DeepSeek 请求超时，请稍后重试。", 504, True
+            ) from exc
+        except httpx.NetworkError as exc:
+            raise ProviderRequestError(
+                "PROVIDER_NETWORK_ERROR", "无法连接 DeepSeek，请检查网络后重试。", 502, True
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise ProviderRequestError(
+                "PROVIDER_NETWORK_ERROR", "DeepSeek 网络请求失败，请稍后重试。", 502, True
+            ) from exc
 
     @staticmethod
     def _normalize_usage(value: object) -> dict[str, int] | None:

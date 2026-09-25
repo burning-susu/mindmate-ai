@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol
 
@@ -50,6 +51,25 @@ class ChatResponse:
     provider_request_id: str | None = None
 
 
+@dataclass(frozen=True)
+class ChatStreamChunk:
+    """One provider-neutral streaming update.
+
+    ``delta`` is always incremental text.  A final chunk may contain no text and
+    carries the provider usage/model metadata collected at the end of the call.
+    """
+
+    request_id: str
+    delta: str = ""
+    finish_reason: str | None = None
+    provider: str = ""
+    requested_model: str = ""
+    resolved_model: str | None = None
+    usage: dict[str, int] | None = None
+    provider_request_id: str | None = None
+    done: bool = False
+
+
 class ProviderRequestError(RuntimeError):
     def __init__(self, code: str, detail: str, status: int, retryable: bool = False) -> None:
         super().__init__(detail)
@@ -66,12 +86,17 @@ class ChatProviderPort(Protocol):
 
     def generate(self, request: ChatRequest, api_key: str | None = None) -> ChatResponse: ...
 
+    def generate_stream(
+        self, request: ChatRequest, api_key: str | None = None
+    ) -> Iterator[ChatStreamChunk]: ...
+
 
 __all__ = [
     "CapabilityState",
     "ChatProviderPort",
     "ChatRequest",
     "ChatResponse",
+    "ChatStreamChunk",
     "ProviderProbeResult",
     "ProviderRequestError",
 ]

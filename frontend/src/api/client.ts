@@ -50,7 +50,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
   if (init.body && typeof init.body === 'string' && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
   }
-  if (init.method && !['GET', 'HEAD', 'OPTIONS'].includes(init.method.toUpperCase())) {
+  if (init.method && !['GET', 'HEAD', 'OPTIONS'].includes(init.method.toUpperCase()) && !headers.has('Idempotency-Key')) {
     headers.set('Idempotency-Key', uuidv7())
   }
   const response = await fetch(path, {

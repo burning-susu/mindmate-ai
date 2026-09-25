@@ -1484,6 +1484,94 @@
         }
       }
     },
+    "/api/v1/ai-operations/{operation_id}/stop": {
+      "post": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Stop Ai Operation",
+        "operationId": "stop_ai_operation_api_v1_ai_operations__operation_id__stop_post",
+        "parameters": [
+          {
+            "name": "operation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Operation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiOperationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ai-operations/{operation_id}/events": {
+      "get": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Stream Ai Operation",
+        "operationId": "stream_ai_operation_api_v1_ai_operations__operation_id__events_get",
+        "parameters": [
+          {
+            "name": "operation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Operation Id"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "After"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/file-imports": {
       "post": {
         "tags": [
@@ -3233,6 +3321,26 @@
             ],
             "title": "Completed At"
           },
+          "stream_sequence": {
+            "type": "integer",
+            "title": "Stream Sequence",
+            "default": 0
+          },
+          "event_sequence": {
+            "type": "integer",
+            "title": "Event Sequence",
+            "default": 0
+          },
+          "snapshot_content": {
+            "type": "string",
+            "title": "Snapshot Content",
+            "default": ""
+          },
+          "stop_requested": {
+            "type": "boolean",
+            "title": "Stop Requested",
+            "default": false
+          },
           "user_message": {
             "anyOf": [
               {
@@ -3918,6 +4026,17 @@
           "row_version": {
             "type": "integer",
             "title": "Row Version"
+          },
+          "active_operation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Operation Id"
           }
         },
         "type": "object",

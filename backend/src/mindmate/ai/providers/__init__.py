@@ -2,6 +2,7 @@ from mindmate.ai.providers.base import (
     ChatProviderPort,
     ChatRequest,
     ChatResponse,
+    ChatStreamChunk,
     ProviderProbeResult,
     ProviderRequestError,
 )
@@ -12,6 +13,7 @@ __all__ = [
     "ChatProviderPort",
     "ChatRequest",
     "ChatResponse",
+    "ChatStreamChunk",
     "DeepSeekChatProvider",
     "MockChatProvider",
     "ProviderProbeResult",

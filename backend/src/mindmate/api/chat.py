@@ -2,10 +2,13 @@ from __future__ import annotations
 
 # FastAPI evaluates dependency declarations when routes are registered.
 # ruff: noqa: B008
+import json
+import time
 from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -17,8 +20,16 @@ from mindmate.application.chat_generation import (
     ChatCommandError,
     create_chat_message,
     create_first_chat,
+    request_chat_stop,
 )
-from mindmate.infrastructure.models import AiOperation, AnswerVersion, Conversation, Message
+from mindmate.infrastructure.models import (
+    AiOperation,
+    AnswerVersion,
+    BackgroundTask,
+    Conversation,
+    Message,
+    TaskEvent,
+)
 
 router = APIRouter(prefix="/api/v1")
 
@@ -83,6 +94,7 @@ class ConversationResponse(BaseModel):
     updated_at: datetime
     last_active_at: datetime
     row_version: int
+    active_operation_id: str | None = None
 
 
 class ConversationListResponse(BaseModel):
@@ -130,6 +142,10 @@ class AiOperationResponse(BaseModel):
     updated_at: datetime
     started_at: datetime | None
     completed_at: datetime | None
+    stream_sequence: int = 0
+    event_sequence: int = 0
+    snapshot_content: str = ""
+    stop_requested: bool = False
     user_message: MessageResponse | None = None
     assistant_message: MessageResponse | None = None
     answer_version: AnswerVersionResponse | None = None
@@ -193,6 +209,15 @@ def _conversation_payload(session: Session, conversation: Conversation) -> dict[
         .select_from(Message)
         .where(Message.conversation_id == conversation.conversation_id, Message.archived_at.is_(None))
     ) or 0
+    active_operation = session.scalar(
+        select(AiOperation)
+        .where(
+            AiOperation.conversation_id == conversation.conversation_id,
+            AiOperation.status.in_({"QUEUED", "RUNNING", "STOPPING"}),
+        )
+        .order_by(AiOperation.created_at.desc())
+        .limit(1)
+    )
     return {
         "conversation_id": conversation.conversation_id,
         "title": conversation.title,
@@ -206,6 +231,7 @@ def _conversation_payload(session: Session, conversation: Conversation) -> dict[
         "updated_at": conversation.updated_at,
         "last_active_at": conversation.last_active_at,
         "row_version": conversation.row_version,
+        "active_operation_id": active_operation.operation_id if active_operation else None,
     }
 
 
@@ -234,6 +260,9 @@ def _operation_payload(session: Session, operation: AiOperation) -> dict[str, An
             "usage_total_tokens": answer.usage_total_tokens,
             "created_at": answer.created_at,
         }
+    task = session.get(BackgroundTask, operation.task_id) if operation.task_id else None
+    checkpoint = (task.checkpoint_json or {}) if task is not None else {}
+    snapshot_content = str(checkpoint.get("content") or (assistant.content if assistant else ""))
     return {
         "operation_id": operation.operation_id,
         "conversation_id": operation.conversation_id,
@@ -254,6 +283,10 @@ def _operation_payload(session: Session, operation: AiOperation) -> dict[str, An
         "updated_at": operation.updated_at,
         "started_at": operation.started_at,
         "completed_at": operation.completed_at,
+        "stream_sequence": int(checkpoint.get("stream_sequence", 0) or 0),
+        "event_sequence": int(checkpoint.get("event_sequence", 0) or 0),
+        "snapshot_content": snapshot_content,
+        "stop_requested": bool(checkpoint.get("stop_requested", False)),
         "user_message": _message_payload(user),
         "assistant_message": _message_payload(assistant),
         "answer_version": answer_payload,
@@ -273,7 +306,7 @@ def _submission_payload(session: Session, operation: AiOperation, request: Reque
         "operation_id": operation.operation_id,
         "status": operation.status,
         "status_url": f"/api/v1/ai-operations/{operation.operation_id}",
-        "events_url": None,
+        "events_url": f"/api/v1/ai-operations/{operation.operation_id}/events",
         "conversation": _conversation_payload(session, conversation),
         "user_message": _message_payload(user),
         "assistant_message": _message_payload(assistant),
@@ -420,6 +453,117 @@ def get_ai_operation(
     if operation is None:
         raise ChatApiError("AI_OPERATION_NOT_FOUND", "AI Operation 不存在。", 404)
     return _operation_payload(session, operation)
+
+
+def _sse_line(event: TaskEvent, operation_id: str) -> str:
+    payload = dict(event.payload_json or {})
+    payload.setdefault("operation_id", operation_id)
+    payload["event_sequence"] = event.sequence
+    payload.setdefault("event_type", event.event_type)
+    return (
+        f"id: {event.sequence}\n"
+        f"event: {event.event_type.lower()}\n"
+        f"data: {json.dumps(payload, ensure_ascii=False, separators=(',', ':'))}\n\n"
+    )
+
+
+def _operation_event_stream(
+    session_factory: Any,
+    operation_id: str,
+    after_event: int,
+):
+    """Yield durable task events until the operation reaches a terminal state."""
+    cursor = max(0, after_event)
+    deadline = time.monotonic() + 300
+    terminal_states = {"COMPLETED", "FAILED", "STOPPED", "INTERRUPTED"}
+    while time.monotonic() < deadline:
+        events: list[TaskEvent] = []
+        terminal = False
+        with session_factory() as stream_session:
+            operation = stream_session.get(AiOperation, operation_id)
+            if operation is None or operation.task_id is None:
+                return
+            terminal = operation.status in terminal_states
+            events = list(
+                stream_session.scalars(
+                    select(TaskEvent)
+                    .where(
+                        TaskEvent.task_id == operation.task_id,
+                        TaskEvent.sequence > cursor,
+                    )
+                    .order_by(TaskEvent.sequence)
+                )
+            )
+        if events:
+            for event in events:
+                cursor = event.sequence
+                yield _sse_line(event, operation_id)
+            if terminal or any(
+                event.event_type in {"COMPLETED", "FAILED", "STOPPED", "INTERRUPTED"}
+                for event in events
+            ):
+                return
+            continue
+        if terminal:
+            return
+        time.sleep(0.05)
+
+
+@router.post(
+    "/ai-operations/{operation_id}/stop",
+    response_model=AiOperationResponse,
+    tags=["chat"],
+)
+@router.post(
+    "/ai-operations/{operation_id}/cancel",
+    response_model=AiOperationResponse,
+    include_in_schema=False,
+    tags=["chat"],
+)
+def stop_ai_operation(
+    operation_id: str,
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    try:
+        operation = request_chat_stop(session, operation_id)
+    except ChatCommandError as exc:
+        raise _command_error(exc) from exc
+    return _operation_payload(session, operation)
+
+
+@router.get(
+    "/ai-operations/{operation_id}/events",
+    response_class=StreamingResponse,
+    tags=["chat"],
+)
+@router.get(
+    "/ai-operations/{operation_id}/stream",
+    response_class=StreamingResponse,
+    include_in_schema=False,
+    tags=["chat"],
+)
+def stream_ai_operation(
+    operation_id: str,
+    request: Request,
+    after: int = Query(default=0, ge=0),
+    session: Session = Depends(get_session),
+) -> StreamingResponse:
+    operation = session.get(AiOperation, operation_id)
+    if operation is None or operation.task_id is None:
+        raise ChatApiError("AI_OPERATION_NOT_FOUND", "AI Operation 不存在。", 404)
+    header_cursor = request.headers.get("last-event-id")
+    if header_cursor and header_cursor.isdigit():
+        after = max(after, int(header_cursor))
+    factory = request.app.state.session_factory
+    return StreamingResponse(
+        _operation_event_stream(factory, operation_id, after),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 __all__ = ["router", "ChatApiError"]

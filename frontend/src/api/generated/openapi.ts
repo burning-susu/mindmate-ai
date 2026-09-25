@@ -20,6 +20,10 @@ export interface components {
     "updated_at": string;
     "started_at": string | null;
     "completed_at": string | null;
+    "stream_sequence"?: number;
+    "event_sequence"?: number;
+    "snapshot_content"?: string;
+    "stop_requested"?: boolean;
     "user_message"?: components["MessageResponse"] | null;
     "assistant_message"?: components["MessageResponse"] | null;
     "answer_version"?: components["AnswerVersionResponse"] | null
@@ -117,7 +121,8 @@ export interface components {
     "created_at": string;
     "updated_at": string;
     "last_active_at": string;
-    "row_version": number
+    "row_version": number;
+    "active_operation_id"?: string | null
   };
   "ConversationSubmissionResponse": {
     "conversation_id": string;
@@ -208,6 +213,7 @@ export interface components {
   };
   "FirstConversationRequest": {
     "mode"?: string;
+    "source_scope"?: Record<string, unknown> | null;
     "first_message": string;
     "client_request_id"?: string | null
   };
@@ -630,6 +636,12 @@ export interface operations {
   };
   "GET /api/v1/ai-operations/{operation_id}": {
     operationId: "get_ai_operation_api_v1_ai_operations__operation_id__get"
+  };
+  "POST /api/v1/ai-operations/{operation_id}/stop": {
+    operationId: "stop_ai_operation_api_v1_ai_operations__operation_id__stop_post"
+  };
+  "GET /api/v1/ai-operations/{operation_id}/events": {
+    operationId: "stream_ai_operation_api_v1_ai_operations__operation_id__events_get"
   };
   "POST /api/v1/file-imports": {
     operationId: "create_file_import_api_v1_file_imports_post"

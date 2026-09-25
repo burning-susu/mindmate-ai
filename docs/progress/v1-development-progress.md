@@ -298,3 +298,15 @@
 - 外部调用边界：Mock Provider 和本地 HTTP fixture 均实际运行；没有真实 DeepSeek API Key、真实 DeepSeek 请求、付费 API、用户私人资料或模型外发，因此未验证实际外部联通、余额或价格。
 - 未完成：阶段 5 来源快照 owner/Citation 绑定、用户级 RAG、发布级检索/质量/性能门禁仍为 `PARTIAL`；阶段 6 的聊天前端、SSE/停止、重试/重新生成、Learning owner、预算执行和自动回退不属于本批。
 - 下一开发批次唯一目标：在本批服务端普通 Chat owner 之上实现普通聊天前端与可恢复 SSE/停止闭环，继续不打开 RAG、Citation、学习陪练或自动 Provider 切换。
+
+### 第三十三批：阶段 6 普通 Chat 流式前端、断线恢复与停止闭环
+
+- 状态：本批 `PASS`；阶段 6 继续 `PARTIAL`，阶段 5 继续 `PARTIAL`。进场分支为 `feat/v1-bootstrap`；第三十二批的普通 Chat owner、幂等键、`client_request_id`、会话版本和 Provider 外发门禁继续有效。
+- 流式契约：创建消息与订阅分离；`GET /api/v1/ai-operations/{operation_id}/events` 使用持久 `TaskEvent.sequence` 作为 SSE `id`，`SNAPSHOT` 发送完整回答快照，前端按序号替换；支持 `Last-Event-ID`/`after`，重连不会重新调用 Provider。提交返回 `events_url`，Operation 查询返回 `stream_sequence`、`event_sequence`、`snapshot_content` 和 `stop_requested`。
+- Provider：`ChatProviderPort` 新增 `ChatStreamChunk/generate_stream`。Mock 按确定性分片输出；DeepSeek 适配器解析本地 HTTP fixture 的多行 SSE、UTF-8 文本、`[DONE]`、usage、模型和安全错误。既有非流式 `generate` 和第三十二批注入 Provider 路径保持兼容。
+- Worker 与停止：复用 `BackgroundTask`/`ChatGenerationWorker`，在检查点保存完整正文、文本序号、事件序号和停止标记；显式停止进入 `STOPPING`，由 Worker 在快照边界或完成提交前原子收敛为 `STOPPED`，重复停止幂等；自然完成与停止的先提交事务胜出。应用关闭/重启仍把不确定的运行中请求收敛为 `INTERRUPTED`，不自动重发。
+- 前端：`/chat` 和 `/chat/:conversationId` 接入真实会话列表、历史消息、创建/继续消息、SSE 解析、有限次重连、断线提示、停止轮询和刷新恢复；空白新会话仍不落库；组件卸载/切换会中止读取并防止旧 Operation 事件写入新会话。未加入 RAG、Citation、学习 UI 或前端 API Key。
+- 契约与测试：OpenAPI 3.1 导出 `60 schemas / 70 operations`，前端生成类型同步；新增服务端快照/重订阅/停止竞态/重复停止/DeepSeek SSE fixture 回归。后端全量 `217 passed`；阶段 6 定向 `16 passed`；Ruff、Pyright、compileall、`git diff --check` 通过；前端 Vitest `27 passed`、lint、typecheck、build 通过。
+- 真实联调：独立临时数据目录中完成 Mock `创建 → 多个 SNAPSHOT → 完成 → 游标后重订阅`，Provider 调用 `1` 次；延迟 Mock 完成 `创建 → 中途停止` 并保留已生成正文；浏览器 `http://127.0.0.1:5174/chat` 实际发送并显示完成回答，页面错误日志为空。没有真实 DeepSeek Key、真实外部请求、付费调用或私人资料。
+- 未完成：阶段 5 Citation owner/RAG 和发布级检索质量仍为 `PARTIAL`；阶段 6 的重试/重新生成与答案版本切换、Learning owner、预算执行和自动回退仍未实现。本批不宣称最终产品验收或真实 Provider 已联通。详见 `docs/test-reports/stage-6-chat-streaming.md`。
+- 下一开发批次唯一目标：在本批普通 Chat owner、事件快照和停止状态之上完成重试/重新生成与答案版本切换契约，继续不打开 RAG、Citation、学习陪练或自动 Provider 切换。

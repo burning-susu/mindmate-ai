@@ -11,6 +11,7 @@ import KnowledgeBaseNewPage from './pages/KnowledgeBaseNewPage'
 import KnowledgeBasesPage from './pages/KnowledgeBasesPage'
 import SettingsPage from './pages/SettingsPage'
 import TrashPage from './pages/TrashPage'
+import ChatPage from './pages/ChatPage'
 import './App.css'
 
 type UiState = {
@@ -107,7 +108,8 @@ function AppShell() {
           <Routes>
             <Route path="/" element={<Placeholder title="欢迎回到 MindMate" description="阶段 0 工程基线已建立，下一步进入本地应用壳和安全运行验证。" />} />
             <Route path="/learning" element={<Placeholder title="学习" description="学习首页和陪练闭环将在后续开发阶段接入。" />} />
-            <Route path="/chat" element={<Placeholder title="AI 对话" description="Mock Provider 和 SSE 流式链路将在后续阶段接入。" />} />
+            <Route path="/chat" element={<ChatPage />} />
+            <Route path="/chat/:conversationId" element={<ChatPage />} />
             <Route path="/knowledge-bases" element={<KnowledgeBasesPage />} />
             <Route path="/knowledge-bases/new" element={<KnowledgeBaseNewPage />} />
             <Route path="/knowledge-bases/:knowledgeBaseId" element={<KnowledgeBaseDetailPage />} />
