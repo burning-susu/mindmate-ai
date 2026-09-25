@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     index_fts_worker_poll_seconds: float = 0.1
     index_fts_worker_lease_seconds: int = 60
     index_activation_worker_poll_seconds: float = 0.1
+    chat_worker_poll_seconds: float = 0.05
+    chat_worker_lease_seconds: int = 60
     alembic_ini: Path = Path(__file__).resolve().parents[2] / "alembic.ini"
 
     @property

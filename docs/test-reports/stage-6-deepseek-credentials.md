@@ -126,3 +126,81 @@ OpenAPI 3.1 已重新导出并生成前端类型：`51 schemas / 62 operations`�
 ## 下一批唯一目标
 
 在本批凭据和外发同意门禁之上，建立阶段 6 普通 Chat owner 的最小服务端生成边界；继续禁止 RAG/Citation、SSE UI、学习陪练和自动 Provider 切换。
+
+## 第三十二批：普通 Chat 服务端会话与生成闭环
+
+> 验证日期：`2026-09-25`
+> 分支：`feat/v1-bootstrap`
+> 起始本地/远端 SHA：`79207ccb6d92d1bc0e76deb87edf2e67d4323ed2`
+> 本批状态：`PASS`
+> 阶段 6 状态：`PARTIAL`
+
+### 结论
+
+本批在第三十一批的凭据、外发同意和 DeepSeek Adapter 边界之上，完成了普通 `GENERAL_CHAT` 的服务端最小闭环：首条发送事务性创建会话、范围快照、用户消息、助手占位、回答版本、AI Operation 和持久生成任务；后续消息复用同一会话；Mock Provider 生成后回答、状态、模型和 usage 可持久化读取。普通聊天不执行 RAG，不创建 Citation，不发送文件、知识库、向量、路径或完整 Prompt。
+
+### 实现范围
+
+- Alembic `a7c9e1f2b304` 新增 `conversations`、`conversation_scopes`、`messages`、`ai_operations` 和 `answer_versions`，当前 head 已更新为 `a7c9e1f2b304`。
+- 新增 `GET/POST /api/v1/conversations`、`GET /api/v1/conversations/{id}`、`POST /api/v1/conversations/{id}/messages`、`GET /api/v1/conversations/{id}/messages` 和 `GET /api/v1/ai-operations/{id}`。
+- `Idempotency-Key`、`client_request_id`、请求哈希和会话 `row_version` 参与提交边界；相同请求返回原消息/占位/Operation，不同正文返回 `IDEMPOTENCY_KEY_REUSED`，同一会话生成中拒绝并发发送。
+- `ChatProviderPort` 扩展 provider-neutral `ChatRequest/ChatResponse` 和 `generate`；新增确定性 `MockChatProvider`；DeepSeek httpx Adapter 增加非流式生成和安全 JSON/usage 解析。
+- `ChatGenerationWorker` 使用 SQLite 持久任务、原子领取、租约和 TaskEvent；启动发现 `RUNNING` Operation 时转为 `INTERRUPTED`，不自动重发不确定的外部 Provider 请求。
+- 外部 Provider 仍要求版本化外发同意、有效系统凭据和本地输入/输出上限；门禁拒绝时 Provider 调用次数为 0。未添加停止、重试、重新生成、继续生成或 SSE 端点。
+
+### 测试与证据
+
+定向服务端回归：
+
+```text
+uv run pytest tests/test_stage6_chat_owner.py -q
+8 passed
+```
+
+覆盖空白页面不落库、首条原子创建、后续顺序、同 Key 重复/冲突、同意/Key/输入上限门禁、Provider 失败、重启中断、注入 Provider 和 DeepSeek 本地 HTTP fixture 请求体。Fixture 检查请求只包含普通聊天必要上下文，并确认 API Key 不进入数据库。
+
+后端全量门禁：
+
+```text
+uv run pytest
+214 passed, 167 warnings（约 180 秒）
+
+uv run ruff check src tests scripts
+All checks passed
+
+uv run pyright src tests scripts
+0 errors, 0 warnings, 0 informations
+
+uv run python -m compileall -q src tests migrations scripts
+通过
+
+uv run alembic current
+a7c9e1f2b304 (head)
+```
+
+前端和契约门禁：
+
+```text
+npm run api:generate
+Generated 60 schemas and 68 operations.
+
+npm run test -- --run
+25 passed（7 个 test files）
+
+npm run lint
+通过
+
+npm run typecheck
+通过
+
+npm run build
+通过
+```
+
+### 外部调用与未完成边界
+
+Mock Provider 和本地 HTTP fixture 实际运行；没有真实 DeepSeek API Key、真实 DeepSeek 请求、付费 API、用户私人资料或模型外发，因此未验证真实外部联通、余额、价格或实际计费。阶段 6 仍为 `PARTIAL`：聊天前端、可恢复 SSE/停止、重试/重新生成、RAG/Citation、Learning owner、预算执行和自动 Provider 切换留待后续批次；阶段 5 的 Citation owner、用户级 RAG、质量/性能门禁继续保持 `PARTIAL`。
+
+## 下一批唯一目标
+
+在本批服务端普通 Chat owner 之上实现普通聊天前端与可恢复 SSE/停止闭环，继续禁止 RAG、Citation、学习陪练和自动 Provider 切换。

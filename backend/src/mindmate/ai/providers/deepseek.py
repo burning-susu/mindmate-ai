@@ -6,16 +6,25 @@ from urllib.parse import urlparse
 
 import httpx
 
-from mindmate.ai.providers.base import ProviderProbeResult, ProviderRequestError
+from mindmate.ai.providers.base import (
+    ChatRequest,
+    ChatResponse,
+    ProviderProbeResult,
+    ProviderRequestError,
+)
 
 DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 DEEPSEEK_MODEL = "deepseek-flash"
 PROBE_TEXT = "请只回复：连接测试成功"
 PROBE_MAX_OUTPUT_TOKENS = 8
+MAX_GENERATION_RESPONSE_BYTES = 512 * 1024
 
 
 class DeepSeekChatProvider:
-    """Small OpenAI-compatible adapter used only for an explicit connection probe."""
+    """OpenAI-compatible adapter for explicit probes and bounded chat generation."""
+
+    requires_external_transfer = True
+    provider_name = "DEEPSEEK"
 
     def __init__(
         self,
@@ -197,10 +206,126 @@ class DeepSeekChatProvider:
             usage=usage,
         )
 
+    def generate(self, request: ChatRequest, api_key: str | None = None) -> ChatResponse:
+        if not api_key:
+            raise ProviderRequestError("PROVIDER_KEY_MISSING", "尚未配置 DeepSeek API Key。", 409)
+        messages = [{"role": "system", "content": request.system_instructions}]
+        messages.extend(
+            {"role": message["role"], "content": message["content"]}
+            for message in request.messages
+            if message.get("role") in {"user", "assistant"}
+        )
+        payload = {
+            "model": request.model_profile,
+            "messages": messages,
+            "max_tokens": request.max_output_tokens,
+            "temperature": request.temperature,
+            "stream": False,
+        }
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+        try:
+            with httpx.Client(
+                base_url=self.base_url,
+                timeout=httpx.Timeout(self.timeout_seconds),
+                follow_redirects=False,
+                transport=self.transport,
+            ) as client:
+                response = client.post("/chat/completions", headers=headers, json=payload)
+                if response.status_code != 200:
+                    self._raise_for_status(response)
+                if len(response.content) > MAX_GENERATION_RESPONSE_BYTES:
+                    raise ProviderRequestError(
+                        "PROVIDER_RESPONSE_TOO_LARGE",
+                        "DeepSeek 返回的普通聊天响应超过本地安全上限。",
+                        502,
+                    )
+                try:
+                    body = response.json()
+                except (TypeError, ValueError) as exc:
+                    raise ProviderRequestError(
+                        "PROVIDER_INVALID_RESPONSE", "DeepSeek 返回了无法识别的生成响应。", 502
+                    ) from exc
+        except ProviderRequestError:
+            raise
+        except httpx.ConnectTimeout as exc:
+            raise ProviderRequestError(
+                "PROVIDER_CONNECT_TIMEOUT", "连接 DeepSeek 超时，请检查网络后重试。", 504, True
+            ) from exc
+        except httpx.ReadTimeout as exc:
+            raise ProviderRequestError(
+                "PROVIDER_READ_TIMEOUT", "等待 DeepSeek 响应超时，请稍后重试。", 504, True
+            ) from exc
+        except httpx.TimeoutException as exc:
+            raise ProviderRequestError(
+                "PROVIDER_TIMEOUT", "DeepSeek 请求超时，请稍后重试。", 504, True
+            ) from exc
+        except httpx.NetworkError as exc:
+            raise ProviderRequestError(
+                "PROVIDER_NETWORK_ERROR", "无法连接 DeepSeek，请检查网络后重试。", 502, True
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise ProviderRequestError(
+                "PROVIDER_NETWORK_ERROR", "DeepSeek 网络请求失败，请稍后重试。", 502, True
+            ) from exc
+
+        if not isinstance(body, dict):
+            raise ProviderRequestError(
+                "PROVIDER_INVALID_RESPONSE", "DeepSeek 返回了无法识别的生成响应。", 502
+            )
+        choices = body.get("choices")
+        if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+            raise ProviderRequestError(
+                "PROVIDER_INVALID_RESPONSE", "DeepSeek 返回的生成响应缺少回答内容。", 502
+            )
+        message = choices[0].get("message")
+        content = message.get("content") if isinstance(message, dict) else None
+        if not isinstance(content, str) or not content.strip():
+            raise ProviderRequestError(
+                "PROVIDER_INVALID_RESPONSE", "DeepSeek 返回的生成响应缺少回答内容。", 502
+            )
+        finish_reason = choices[0].get("finish_reason")
+        finish_reason = finish_reason[:80] if isinstance(finish_reason, str) else None
+        usage = self._normalize_usage(body.get("usage"))
+        resolved_model = body.get("model")
+        resolved_model = resolved_model[:200] if isinstance(resolved_model, str) else None
+        provider_request_id = body.get("id")
+        provider_request_id = (
+            provider_request_id[:128] if isinstance(provider_request_id, str) else None
+        )
+        return ChatResponse(
+            request_id=request.request_id,
+            status="completed",
+            content=content,
+            finish_reason=finish_reason,
+            provider=self.provider_name,
+            requested_model=request.model_profile,
+            resolved_model=resolved_model,
+            usage=usage,
+            provider_request_id=provider_request_id,
+        )
+
+    @staticmethod
+    def _normalize_usage(value: object) -> dict[str, int] | None:
+        if not isinstance(value, dict):
+            return None
+        usage = {
+            key: raw
+            for key, raw in value.items()
+            if key in {"prompt_tokens", "completion_tokens", "total_tokens"}
+            and type(raw) is int
+            and raw >= 0
+        }
+        return usage or None
+
 __all__ = [
     "DEEPSEEK_BASE_URL",
     "DEEPSEEK_MODEL",
     "DeepSeekChatProvider",
+    "MAX_GENERATION_RESPONSE_BYTES",
     "PROBE_MAX_OUTPUT_TOKENS",
     "PROBE_TEXT",
 ]

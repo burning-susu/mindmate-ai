@@ -19,13 +19,17 @@ from mindmate import __version__
 from mindmate.ai.embeddings.model_manager import ModelManager
 from mindmate.ai.providers.base import ProviderRequestError
 from mindmate.ai.providers.deepseek import DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, DeepSeekChatProvider
+from mindmate.ai.providers.mock import MockChatProvider
 from mindmate.api.ai_providers import AiProviderApiError
 from mindmate.api.ai_providers import router as ai_provider_router
+from mindmate.api.chat import ChatApiError
+from mindmate.api.chat import router as chat_router
 from mindmate.api.embedding_models import router as embedding_models_router
 from mindmate.api.files import FileApiError
 from mindmate.api.files import router as files_router
 from mindmate.api.knowledge_bases import router as knowledge_bases_router
 from mindmate.api.problem import ProblemDetail
+from mindmate.application.chat_generation import ChatGenerationWorker
 from mindmate.application.embedding_model_install import EmbeddingModelInstallWorker
 from mindmate.application.index_activation import IndexActivationWorker
 from mindmate.application.index_chunking_worker import IndexChunkingWorker
@@ -93,6 +97,13 @@ async def lifespan(app: FastAPI):
         app.state.database_status = quick_check(app.state.engine)
         app.state.session_factory = create_session_factory(app.state.engine)
         app.state.session = LocalSession()
+        app.state.chat_worker = ChatGenerationWorker(
+            app.state.session_factory,
+            settings,
+            lambda: app.state.chat_provider,
+            lambda: app.state.credential_store,
+        )
+        app.state.chat_worker.start()
         app.state.embedding_model_install_worker = EmbeddingModelInstallWorker(
             app.state.session_factory,
             app.state.embedding_model_manager,
@@ -124,6 +135,9 @@ async def lifespan(app: FastAPI):
         app.state.index_activation_worker.start()
         yield
     finally:
+        chat_worker = getattr(app.state, "chat_worker", None)
+        if chat_worker is not None:
+            chat_worker.stop()
         model_install_worker = getattr(app.state, "embedding_model_install_worker", None)
         if model_install_worker is not None:
             model_install_worker.stop()
@@ -172,6 +186,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         base_url=DEEPSEEK_BASE_URL,
         model=DEEPSEEK_MODEL,
         timeout_seconds=app_settings.provider_timeout_seconds,
+    )
+    app.state.chat_provider = (
+        MockChatProvider() if app_settings.provider_mode == "mock" else app.state.deepseek_provider
     )
 
     app.add_middleware(
@@ -315,6 +332,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             retryable=exc.retryable,
         )
 
+    @app.exception_handler(ChatApiError)
+    async def chat_api_error(request: Request, exc: ChatApiError) -> JSONResponse:
+        return problem(
+            request,
+            exc.status,
+            exc.code,
+            "普通聊天请求失败",
+            exc.detail,
+            current_row_version=exc.current_row_version,
+        )
+
     @app.exception_handler(ProviderRequestError)
     async def provider_request_error(request: Request, exc: ProviderRequestError) -> JSONResponse:
         return problem(
@@ -401,6 +429,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(knowledge_bases_router)
     app.include_router(embedding_models_router)
     app.include_router(ai_provider_router)
+    app.include_router(chat_router)
     app.include_router(files_router)
 
     return app

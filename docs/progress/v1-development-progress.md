@@ -284,3 +284,17 @@
 - 真实外部调用：没有真实 DeepSeek 请求、真实 Key、用户文件、检索片段或付费 API；不能称真实 Provider 已联通，成功 fixture 只证明 Adapter 和错误边界。
 - 阶段遗留：阶段 5 Citation owner、用户级 RAG、Recall@10、10 万 Chunk 性能、最终答案质量和 AC-KB-* 全量验收继续保留；阶段 6 普通 Chat/Learning owner、正式生成、SSE UI、预算、自动回退和学习陪练尚未实现。详见 `docs/test-reports/stage-6-deepseek-credentials.md` 和阶段 5 报告新增遗留表。
 - 下一开发批次唯一目标：建立阶段 6 普通 Chat owner 的最小服务端生成边界，继续沿用凭据/外发同意门禁，不打开 RAG/Citation/SSE UI。
+
+### 第三十二批：阶段 6 普通 Chat 服务端会话与生成闭环
+
+- 状态：本批 `PASS`；阶段 6 继续 `PARTIAL`，阶段 5 继续 `PARTIAL`。进场分支为 `feat/v1-bootstrap`，本地与 `origin/feat/v1-bootstrap` 起始 SHA 均为 `79207ccb6d92d1bc0e76deb87edf2e67d4323ed2`，工作区进场干净。
+- 数据与迁移：新增 Alembic revision `a7c9e1f2b304`，持久化 `Conversation`、`ConversationScope`、`Message`、`AnswerVersion`、`AiOperation`；普通范围固定为 `GENERAL_CHAT/NONE`。首条提交在单事务中创建会话、范围、`SENT` 用户消息、`PENDING` 助手占位、`PENDING` AnswerVersion、AI Operation 和 `AI_GENERATION` 持久任务；空白页面不落库。
+- API：新增 `GET/POST /api/v1/conversations`、`GET /api/v1/conversations/{id}`、`POST /api/v1/conversations/{id}/messages`、`GET /api/v1/conversations/{id}/messages` 和 `GET /api/v1/ai-operations/{id}`。返回会话、两条消息、Operation ID、状态 URL 和可轮询状态；列表、详情、消息分页和回答版本均可在刷新/重启后读取。未添加无实现的停止、重试、重新生成、继续生成或 SSE 端点。
+- 幂等与并发：首条和后续消息保存 `Idempotency-Key`、`client_request_id`、请求哈希和 HTTP request ID；同 Key 同正文返回原资源，不追加消息或重复调用 Provider；同 Key 不同正文返回 `IDEMPOTENCY_KEY_REUSED`；同一会话有 `QUEUED/RUNNING` Operation 时拒绝后续发送；`expected_conversation_version` 冲突返回 `412`。
+- Provider 与门禁：扩展 `ChatProviderPort` 的 provider-neutral `ChatRequest/ChatResponse` 和 `generate`；默认开发运行时使用确定性 `MockChatProvider`，DeepSeek Adapter 增加非流式 `generate` 和安全响应/usage 解析。外部 Provider 只有在版本化外发同意、凭据存储中有效 Key 和本地输入/输出上限均通过后才调用；无 Key、无同意、超限时 Provider 调用次数为 0；普通聊天不发送文件、知识库、向量、路径或完整 Prompt。
+- Worker 与恢复：新增 `ChatGenerationWorker`，复用 SQLite `BackgroundTask` 的原子领取、租约、TaskEvent 和 AnswerVersion；Provider 调用与 HTTP 请求分离。成功写入回答、状态、模型和真实 usage（Mock usage 保持未知）；Provider 错误写入脱敏 error code/detail；启动发现 `RUNNING` Operation 时转为 `INTERRUPTED`，不自动重发不确定的外部请求。
+- 测试证据：`tests/test_stage6_chat_owner.py` 8 项定向回归覆盖空白页、原子创建、顺序、幂等重复/冲突、外发门禁、Provider 失败、重启中断、注入 Provider 和 DeepSeek 本地 HTTP fixture 请求体。后端全量 `uv run pytest` 为 `214 passed, 167 warnings`（约 180 秒）；`uv run ruff check src tests scripts`、`uv run pyright src tests scripts`、compileall、Alembic head `a7c9e1f2b304` 和 `git diff --check` 通过。
+- 前端与契约：没有聊天页面改动；OpenAPI 3.1 重新导出为 `60 schemas / 68 operations`，生成 `frontend/src/api/generated/openapi.ts`；前端 `npm run test -- --run` 为 `25 passed`，lint、typecheck、build 通过。
+- 外部调用边界：Mock Provider 和本地 HTTP fixture 均实际运行；没有真实 DeepSeek API Key、真实 DeepSeek 请求、付费 API、用户私人资料或模型外发，因此未验证实际外部联通、余额或价格。
+- 未完成：阶段 5 来源快照 owner/Citation 绑定、用户级 RAG、发布级检索/质量/性能门禁仍为 `PARTIAL`；阶段 6 的聊天前端、SSE/停止、重试/重新生成、Learning owner、预算执行和自动回退不属于本批。
+- 下一开发批次唯一目标：在本批服务端普通 Chat owner 之上实现普通聊天前端与可恢复 SSE/停止闭环，继续不打开 RAG、Citation、学习陪练或自动 Provider 切换。

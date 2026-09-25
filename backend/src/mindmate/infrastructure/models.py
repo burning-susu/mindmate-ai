@@ -394,6 +394,162 @@ class SourceSnapshot(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class Conversation(Base):
+    __tablename__ = "conversations"
+    __table_args__ = (
+        Index("ix_conversations_status_updated", "status", "updated_at"),
+    )
+
+    conversation_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    title_source: Mapped[str] = mapped_column(
+        String(20), default="AUTO", server_default=text("'AUTO'"), nullable=False
+    )
+    current_mode: Mapped[str] = mapped_column(
+        String(30), default="GENERAL_CHAT", server_default=text("'GENERAL_CHAT'"), nullable=False
+    )
+    current_scope_type: Mapped[str] = mapped_column(
+        String(30), default="NONE", server_default=text("'NONE'"), nullable=False
+    )
+    current_scope_id_list: Mapped[list[str]] = mapped_column(
+        JSON, default=list, server_default=text("'[]'"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(
+        String(30), default="ACTIVE", server_default=text("'ACTIVE'"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_active_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    purge_after: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    row_version: Mapped[int] = mapped_column(
+        Integer, default=1, server_default=text("1"), nullable=False
+    )
+
+
+class ConversationScope(Base):
+    __tablename__ = "conversation_scopes"
+    __table_args__ = (
+        UniqueConstraint("conversation_id", "scope_version", name="uq_conversation_scope_version"),
+        Index("ix_conversation_scopes_conversation", "conversation_id", "scope_version"),
+    )
+
+    conversation_scope_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    conversation_id: Mapped[str] = mapped_column(
+        ForeignKey("conversations.conversation_id"), nullable=False
+    )
+    scope_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    mode: Mapped[str] = mapped_column(String(30), nullable=False)
+    scope_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    knowledge_base_id: Mapped[str | None] = mapped_column(String(36))
+    index_version_id: Mapped[str | None] = mapped_column(String(36))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Message(Base):
+    __tablename__ = "messages"
+    __table_args__ = (
+        UniqueConstraint("conversation_id", "sequence_number", name="uq_message_conversation_sequence"),
+        Index("ix_messages_conversation_created", "conversation_id", "created_at"),
+        Index("ix_messages_conversation_status", "conversation_id", "status"),
+    )
+
+    message_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    conversation_id: Mapped[str] = mapped_column(
+        ForeignKey("conversations.conversation_id"), nullable=False
+    )
+    role: Mapped[str] = mapped_column(String(20), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False)
+    sequence_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    request_id: Mapped[str | None] = mapped_column(String(128))
+    mode_snapshot: Mapped[str] = mapped_column(String(30), nullable=False)
+    conversation_scope_id: Mapped[str | None] = mapped_column(
+        ForeignKey("conversation_scopes.conversation_scope_id")
+    )
+    parent_user_message_id: Mapped[str | None] = mapped_column(
+        ForeignKey("messages.message_id")
+    )
+    revision_number: Mapped[int] = mapped_column(
+        Integer, default=1, server_default=text("1"), nullable=False
+    )
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class AiOperation(Base):
+    __tablename__ = "ai_operations"
+    __table_args__ = (
+        UniqueConstraint("idempotency_key", name="uq_ai_operation_idempotency_key"),
+        UniqueConstraint("client_request_id", name="uq_ai_operation_client_request_id"),
+        UniqueConstraint("task_id", name="uq_ai_operation_task_id"),
+        Index("ix_ai_operations_conversation_status", "conversation_id", "status"),
+    )
+
+    operation_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    conversation_id: Mapped[str] = mapped_column(
+        ForeignKey("conversations.conversation_id"), nullable=False
+    )
+    user_message_id: Mapped[str] = mapped_column(
+        ForeignKey("messages.message_id"), nullable=False
+    )
+    assistant_message_id: Mapped[str] = mapped_column(
+        ForeignKey("messages.message_id"), nullable=False
+    )
+    task_id: Mapped[str | None] = mapped_column(ForeignKey("background_tasks.task_id"))
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    client_request_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    request_id: Mapped[str | None] = mapped_column(String(128))
+    status: Mapped[str] = mapped_column(String(30), nullable=False)
+    provider: Mapped[str] = mapped_column(String(50), nullable=False)
+    requested_model: Mapped[str] = mapped_column(String(100), nullable=False)
+    resolved_model: Mapped[str | None] = mapped_column(String(200))
+    prompt_template_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    usage_input_tokens: Mapped[int | None] = mapped_column(Integer)
+    usage_output_tokens: Mapped[int | None] = mapped_column(Integer)
+    usage_total_tokens: Mapped[int | None] = mapped_column(Integer)
+    provider_request_id: Mapped[str | None] = mapped_column(String(128))
+    error_code: Mapped[str | None] = mapped_column(String(100))
+    error_detail: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    row_version: Mapped[int] = mapped_column(
+        Integer, default=1, server_default=text("1"), nullable=False
+    )
+
+
+class AnswerVersion(Base):
+    __tablename__ = "answer_versions"
+    __table_args__ = (
+        UniqueConstraint(
+            "assistant_message_id", "version_number", name="uq_answer_version_message_number"
+        ),
+        Index("ix_answer_versions_assistant", "assistant_message_id", "version_number"),
+    )
+
+    answer_version_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    assistant_message_id: Mapped[str] = mapped_column(
+        ForeignKey("messages.message_id"), nullable=False
+    )
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False)
+    provider: Mapped[str] = mapped_column(String(50), nullable=False)
+    model: Mapped[str] = mapped_column(String(200), nullable=False)
+    prompt_template_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    index_version_id: Mapped[str | None] = mapped_column(String(36))
+    usage_input_tokens: Mapped[int | None] = mapped_column(Integer)
+    usage_output_tokens: Mapped[int | None] = mapped_column(Integer)
+    usage_total_tokens: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class BackgroundTask(Base):
     __tablename__ = "background_tasks"
     task_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
