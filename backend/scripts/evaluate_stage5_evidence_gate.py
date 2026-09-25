@@ -360,6 +360,23 @@ def _observed_candidates(payload: dict[str, Any]) -> list[ObservedCandidate]:
     return result
 
 
+def _gate_signal_audit(question: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Recreate the internal gate view without widening the retrieval-test DTO."""
+    from mindmate.application.evidence_gate import assess_evidence
+
+    assessment = assess_evidence(
+        _observed_candidates(payload),
+        query_text=question,
+        vector_requested=True,
+    )
+    return {
+        "question_type": assessment.question_type,
+        "reason_codes": list(assessment.reason_codes),
+        "distinct_source_count": assessment.distinct_source_count,
+        "signals": [asdict(signal) for signal in assessment.signals],
+    }
+
+
 def _offline_sensitivity(cases: list[dict[str, Any]]) -> dict[str, Any]:
     from mindmate.application.evidence_gate import DEFAULT_EVIDENCE_CONFIG, assess_evidence
 
@@ -535,6 +552,7 @@ def _run_cases(
                 "supported_without_annotated_evidence": supported_without_evidence,
                 "top8_scope_is_valid": not scope_violations,
                 "cross_scope_candidates": scope_violations,
+                "gate_signal_audit": _gate_signal_audit(item["question"], result),
                 "fts_diagnostics": _fts_diagnostics(
                     app,
                     knowledge_base_id=kb_ids[kb_key],

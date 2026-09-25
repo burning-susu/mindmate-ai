@@ -113,7 +113,7 @@ def test_short_terms_title_only_and_missing_identifier_are_not_support() -> None
 def test_weak_or_unverified_vector_signal_never_passes_the_gate() -> None:
     weak = _candidate(
         "向量数据库存储向量数据。",
-        vector_similarity=0.78,
+        vector_similarity=0.45,
     )
     unknown = replace(weak, vector_distance=None, vector_score=None)
 
@@ -124,6 +124,70 @@ def test_weak_or_unverified_vector_signal_never_passes_the_gate() -> None:
     assert "VECTOR_SIMILARITY_BELOW_THRESHOLD" in weak_result.reason_codes
     assert unknown_result.status == "insufficient"
     assert "VECTOR_SIMILARITY_UNVERIFIED" in unknown_result.signals[0].reason_codes
+
+
+def test_verified_fts_body_evidence_can_pass_below_default_vector_threshold() -> None:
+    result = assess_evidence(
+        [_candidate("向量数据库存储向量数据。", vector_similarity=0.78)],
+        query_text="什么是向量数据库？",
+    )
+
+    assert result.status == "supported"
+    assert "FTS_EVIDENCE_VERIFIED_BELOW_VECTOR_THRESHOLD" in result.signals[0].reason_codes
+
+
+def test_numeric_claim_requires_the_queried_value_and_unit() -> None:
+    wrong_value = _candidate("普通 API 请求超时时间为 30 秒。", vector_similarity=0.92)
+    wrong_result = assess_evidence(
+        [wrong_value], query_text="普通 API 请求超时上限是 29 秒吗？"
+    )
+    right_result = assess_evidence(
+        [wrong_value], query_text="普通 API 请求超时上限是多少秒？"
+    )
+
+    assert wrong_result.status == "insufficient"
+    assert "QUERY_NUMERIC_VALUE_NOT_FOUND" in wrong_result.reason_codes
+    assert right_result.status == "supported"
+
+
+def test_negative_claim_cannot_be_supported_by_a_positive_fact() -> None:
+    result = assess_evidence(
+        [_candidate("示例模块的审计记录保留期限为 12 天。")],
+        query_text="示例模块的审计记录不保留 12 天，对吗？",
+    )
+
+    assert result.status == "insufficient"
+    assert "QUERY_CLAIM_CONTRADICTED" in result.signals[0].reason_codes
+
+
+def test_composite_question_requires_each_clause_in_the_evidence() -> None:
+    full = _candidate(
+        "普通 API 查询时限为 30 秒。后台任务不使用这个请求超时值。"
+    )
+    partial = _candidate("普通 API 查询时限为 30 秒。")
+    question = "普通 API 查询时限是多少秒，以及后台任务是否共用该时限？"
+
+    assert assess_evidence([full], query_text=question).status == "supported"
+    partial_result = assess_evidence([partial], query_text=question)
+    assert partial_result.status == "insufficient"
+    assert "COMPOSITE_OR_OPEN_LIST_QUESTION" in partial_result.reason_codes
+
+
+def test_vector_only_semantic_path_requires_a_verified_floor() -> None:
+    candidate = replace(
+        _candidate(
+            "演练系统 API 单次请求超时时间为 47 秒。这个数值只属于独立演练环境。",
+            vector_similarity=0.601,
+        ),
+        fts_rank=None,
+        sources=("vector",),
+    )
+    result = assess_evidence(
+        [candidate], query_text="演练环境的一般 API 调用上限是多少秒？"
+    )
+
+    assert result.status == "supported"
+    assert "SEMANTIC_EVIDENCE_VERIFIED_BELOW_VECTOR_THRESHOLD" in result.signals[0].reason_codes
 
 
 def test_composite_questions_and_conflicting_sources_fail_closed() -> None:

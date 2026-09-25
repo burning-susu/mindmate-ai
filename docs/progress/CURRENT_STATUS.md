@@ -6,7 +6,7 @@
 - 当前远程提交：以 `git ls-remote --heads origin feat/v1-bootstrap` 为准；本文件随本批次收口提交推送
 - 最后更新时间：`2026-09-25`
 - 当前开发阶段：阶段 5 开发中，状态 `PARTIAL`
-- 当前批次状态：第二十二批 Citation 绑定因无真实 Chat/Learning owner 而 `BLOCKED` 并延期到阶段 6/7；第二十三批本地测试检索 API、第二十四批知识库详情测试检索页面、第二十五批固定 READY 资料与真实浏览器候选验证、第二十六批真实 ONNX 证据门控基线评测、第二十七批中文 FTS 召回修复与困难负例回归均为 `PASS`；阶段 5 状态 `PARTIAL`
+- 当前批次状态：第二十二批 Citation 绑定因无真实 Chat/Learning owner 而 `BLOCKED` 并延期到阶段 6/7；第二十三批本地测试检索 API、第二十四批知识库详情测试检索页面、第二十五批固定 READY 资料与真实浏览器候选验证、第二十六批真实 ONNX 证据门控基线评测、第二十七批中文 FTS 召回修复与困难负例回归、第二十八批证据门控规则校准与正负例回归均为 `PASS`；阶段 5 状态 `PARTIAL`
 
 ## 已完成阶段
 
@@ -37,7 +37,7 @@
 - 持久 FTS5：独立 `INDEX_FTS` Worker 只消费同版本有效的 `PREPARED + CHUNKED` 输入；以 `IndexVersion + Chunk` 映射隔离，逐文件 FTS5 行、映射、输入检查点和任务进度在同一主 SQLite 事务提交。支持租约接管、取消、幂等重建和显式失败重试，不修改 Chunk/Embedding 权威数据，也不激活版本。
 - 中文关键词投影：FTS5 仍使用 `unicode61` 和 BM25；中文按连续汉字生成重叠二元词及单字辅助列，支持中文短查询；拉丁词项大小写折叠。没有公开 MATCH API 或前端搜索；向量 Top-K、RRF 和证据门控只存在于内部链路及用例。
 - 内部检索排序：双路 Top 30 按 `chunk_id` 合并后使用 RRF 常量 `60`，分数为各有效通道 `1/(60 + rank)` 之和；NFKC/大小写折叠后的完整查询短语和精确词项获得最高 `0.004` 的局部奖励；相同来源及相邻高重叠 Chunk 接受有界软惩罚，确定性输出最多 Top 8。结果保留原始双路信号、排序版本/参数、精确命中字段、调整原因和显式降级状态。只读取当前活动 `READY` 版本；`BUILDING` 候选不可进入检索。第二十三批仅通过本地检索测试 API 暴露调试结果。
-- 内部证据充分性判定：排序后最多 Top 8 使用版本化规则 `evidence-gate-v1`；要求有效双路排名、校验过的余弦相似度、正文精确术语/编号覆盖和靠前排名，记录问题类型、来源覆盖与触发原因。标题、RRF 奖励和多样性分不能单独放行；复合问题或明显冲突整体拒绝。`insufficient` 只产生固定本地提示与建议；索引/范围/通道故障返回 `unavailable`，不伪装成资料不足。`supported` 只表示候选可进入后续处理，不是事实证明。检索测试 API 不生成模型回答、Citation 或持久数据。
+- 内部证据充分性判定：排序后最多 Top 8 使用版本化规则 `evidence-gate-v1`；要求有效双路排名、校验过的余弦相似度、正文精确术语/编号覆盖和靠前排名，记录问题类型、来源覆盖与触发原因。第二十八批在不改变默认 `0.82` 的前提下增加受 FTS 正文一致性和 vector-only 语义下限约束的可审计例外，并加入精确数值/单位、编号、否定断言和复合子句检查；标题、RRF 奖励、多样性分和纯余弦下降不能单独放行。冲突、缺失子句和无法定位的正文继续严格拒答。`insufficient` 只产生固定本地提示与建议；索引/范围/通道故障返回 `unavailable`，不伪装成资料不足。`supported` 只表示候选可进入后续处理，不是事实证明。检索测试 API 不生成模型回答、Citation 或持久数据。
 - 索引激活：新候选只有在最新输入快照、Chunk、Embedding/向量及 FTS 映射/倒排结构对账通过，且任务检查点与配置一致后才能进入短事务切换。构建期间继续读取当前 `READY` 版本；失败不改活动指针，不清理旧版本产物。阶段失败、空库、部分失败和过期候选分别记录 `FAILED`、`EMPTY`、`PARTIAL`/`READY` 和 `SUPERSEDED` 语义。
 - 增量索引：预处理任务持久保存 `FULL/INCREMENTAL` 计划与新增、变更、未变、移除、待解析、失败和复用数量。复用要求内容哈希、解析修订、切片配置指纹、Embedding 模型/版本/维度/归一化/距离配置和向量引擎兼容；未变 Chunk 不再解析切片，已有 EmbeddingRecord/向量按版本复制且不会调用 ONNX，FTS 投影复用后仍接受候选全量完整性复核。配置不兼容进入完整重建；复用源失效则回退到既有计算阶段。
 - 服务端来源快照：只消费内部混合检索产生且证据门控为 `supported` 的候选身份；在 SQLite 写事务中先取得写锁，再重查活动 READY 索引、知识库成员、文件版本/解析修订、Chunk、FTS 映射和 EmbeddingRecord。快照只保存数据库来源名、真实定位、受控摘录与哈希，不接受请求侧路径/正文；按知识库/索引版本/Chunk 幂等。读取动态报告回收站、范围和旧索引状态，不返回磁盘路径；永久删除文件净化摘录/正文哈希并断开文件与 Chunk 关联。
@@ -46,7 +46,7 @@
 
 - 阶段 4 无未解决功能、安全、数据一致性或迁移阻塞项；需求追踪详见 `docs/test-reports/stage-4-file-management.md`。
 - 发布候选保留：正式恶意文档集、真实资源耗尽边界、干净 Windows 安装/升级/卸载包，依据发布流程执行，不回填为阶段 4 已完成证据。
-- 阶段 5 缺口：来源快照 owner/Citation 绑定（延期到阶段 6/7）、用户级严格拒答/RAG 流程、面向验收集的证据阈值/质量校准与性能评估仍未完成。`supported` 不证明候选蕴含事实；本地调试端点和本批页面不构成 AC-KB-003、Recall@10 或聊天验收。
+- 阶段 5 缺口：来源快照 owner/Citation 绑定（延期到阶段 6/7）、用户级严格拒答/RAG 流程、固定样本之外的质量/性能评估仍未完成；第二十八批只完成固定 31+7 样本的门控校准回归。`supported` 不证明候选蕴含事实；本地调试端点和本批页面不构成 AC-KB-003、Recall@10 或聊天验收。
 
 ## 第十八批交接
 
@@ -211,3 +211,15 @@
 - 可复现评测：首次复用旧评测目录因所有权标记缺失被保护逻辑拒绝，未接管或清理旧数据；随后使用 `%TEMP%\\mindmate-ai-stage5-evidence-gate-v1-r27` 完成真实准备和评测。报告位于该隔离根的 `stage5-evidence-gate-v1-report.json`，记录查询 token、实际 MATCH 表达式、存储侧 token、关键词排名、向量候选、Top 8 和门控理由。
 - 验收：`uv run pytest` `181 passed, 143 warnings`（串行，约 2:26）；`uv run ruff check src tests scripts`、`uv run pyright src tests scripts/prepare_stage5_fixed_ready.py scripts/evaluate_stage5_evidence_gate.py`（0 errors）、`uv run python -m compileall -q src tests migrations scripts`、`uv run alembic heads`（`6b3e91a0c4d7`）和 `git diff --check` 通过。新增定向 FTS/评测测试均通过；未改前端，因此未运行前端门禁。
 - 下一开发批次唯一目标：在不放松证据门控和不引入 Provider 的前提下，针对仍保留的 16 条 FN 建立人工可解释的门控/答案质量校准方案，并继续保持阶段 5 `PARTIAL`；不得重新调整 FTS 召回范围或生产阈值而不附新证据。
+
+## 第二十八批交接
+
+- 本批状态：`PASS`；阶段 5 继续 `PARTIAL`。进场本地与 `origin/feat/v1-bootstrap` SHA 均为 `b2ddc62bade9517272e06d761fd5f30e392bee92`，工作区干净；本批未改数据库 schema、公开 API、前端、Provider 或 FTS 召回范围。
+- 根因复核：第二十七批之后，16 条 FN 的允许支持文件全部仍在 Top 8。原门控误拒由 11 条默认向量相似度下限、3 条数值答案上下文误判和 2 条复合问题整体拒答组成；不是索引缺失。固定 READY 资料中的支持片段和定位被逐条保留在隔离报告中。
+- 规则修复：保留默认 `min_vector_similarity=0.82`；仅当候选同时满足 FTS/向量原始 rank 不晚于 5、最终 rank 不晚于 3、正文至少两个查询锚点或完整短语、数值/单位/编号语境通过且相似度不低于 `min_fts_similarity=0.50` 时，记录 `FTS_EVIDENCE_VERIFIED_BELOW_VECTOR_THRESHOLD` 并允许进入后续流程。FTS 缺失时只允许 `min_semantic_similarity=0.60` 以上、至少两个语义锚点且覆盖率不低于 `0.50` 的 vector-only 例外，记录 `SEMANTIC_EVIDENCE_VERIFIED_BELOW_VECTOR_THRESHOLD`。纯余弦下降、同文件 Top 8、标题单独命中、任意短词和无语境数字不能放行。
+- 数值与语义边界：查询显式数字必须以相同单位在支持锚点附近出现；错误数值/单位返回 `QUERY_NUMERIC_VALUE_NOT_FOUND`。编号必须完整命中正文；否定断言与正文肯定事实冲突返回 `QUERY_CLAIM_CONTRADICTED`，仅有“不定义”而问题要求定义事实返回 `QUERY_NEGATIVE_FACT_ONLY`。复合问题按 `以及/并且/同时` 分解，只有每个子句均能在候选正文中定位时才支持，否则保持 `COMPOSITE_OR_OPEN_LIST_QUESTION`。冲突文件仍返回 `CONFLICTING_EVIDENCE`。
+- 16 条 FN 逐项证据：`S5-EG-001/002/003/005/011/012` 均由 `服务超时策略.txt` 行 `1-12` 的 FTS+向量双路正文通过，实际余弦 `0.5545–0.6213`；`S5-EG-010` 同一片段同时覆盖普通请求时限和后台任务排除规则，通过完整复合子句检查；`S5-EG-013` 由 `相似服务超时策略.txt` 行 `1-9` 的 47 秒片段通过；`S5-EG-014` 由同文件 vector-only 语义路径通过，余弦 `0.6013`；`S5-EG-016/018/020/029` 由 `阶段5评测_参数记录.txt` 行 `1-4` 的 OPS-R7-204、17 秒和每批 6 个文件片段通过，其中 `S5-EG-029` 通过完整复合子句检查；`S5-EG-021/022` 由 `阶段5评测_组件记录.txt` 行 `1-3` 的完整编号、组件名和 12 分钟片段通过；`S5-EG-028` 由 `阶段5评测_短词干扰.txt` 行 `1-2` 的明确否定说明通过。每条候选的 Chunk/File/IndexVersion、FTS/向量 rank、余弦、锚点、数字/编号命中和门控 reason code 均在隔离 JSON 报告中保存。
+- 真实前后混淆表：同一 manifest、同一真实 ONNX 与 READY 准备流程，第二十八批前基线（`r28-baseline`）核心 `TP 0 / FN 16 / FP 0 / TN 15`、hard negatives `TN 7 / FP 0`；校准后（`r28-final`）两轮核心均 `TP 16 / FN 0 / FP 0 / TN 15`，hard negatives 两轮均 `TN 7 / FP 0`。两轮内部结果签名稳定，评测前后资源计数均为 `9 files / 4 knowledge bases / 24 tasks`；失效索引检查两轮均为 `unavailable / INDEX_VERSION_NOT_AVAILABLE`、0 候选。该结果只证明固定合成样本回归，不代表 Recall@10、引用正确率或最终回答质量。
+- 评测与报告：最终命令为 `uv run python scripts/evaluate_stage5_evidence_gate.py --data-dir "$env:TEMP\\mindmate-ai-stage5-evidence-gate-v1-r28-final" --repeat 2`；报告为 `%TEMP%\\mindmate-ai-stage5-evidence-gate-v1-r28-final\\stage5-evidence-gate-v1-report.json`，不入 Git，模型、临时数据库和评测输出不入 Git。
+- 验收：定向门控/评测测试 `18 passed`；全量 `uv run pytest` `186 passed, 143 warnings`（142.37 秒）；`uv run ruff check src tests scripts`、`uv run pyright src tests scripts/prepare_stage5_fixed_ready.py scripts/evaluate_stage5_evidence_gate.py`（0 errors）、`uv run python -m compileall -q src tests migrations scripts`、`uv run alembic heads`（`6b3e91a0c4d7`）和 `git diff --check` 均通过。未改前端，未运行前端门禁；未调用 DeepSeek、真实凭据、付费服务或私人资料。
+- 下一开发批次唯一目标：在不生成模型回答、不绑定虚构 Citation owner 的前提下，为已通过门控的候选建立真实 Chat/Learning owner 的服务端 Citation 绑定准入；阶段 5 继续 `PARTIAL`。

@@ -45,7 +45,7 @@ $evalData = Join-Path $env:TEMP 'mindmate-ai-stage5-evidence-gate-v1'
 uv run python scripts/evaluate_stage5_evidence_gate.py --data-dir $evalData --repeat 2
 ```
 
-报告写入 `%TEMP%\mindmate-ai-stage5-evidence-gate-v1\stage5-evidence-gate-v1-report.json`。任何样本返回 `unavailable`、模型离线校验失败、索引不 READY、标注范围不符或复跑不稳定都会以非零状态退出，不会计为严格拒答。报告包含模型/切片/索引/规则版本与参数、Top 8 双路排名和分数、混淆表、按类型计数、误判原因、跨范围候选和相似度分布。另含只在已观察 Top 8 候选上离线模拟不同余弦下限的敏感性分析，不改动应用中的 `0.82` 规则参数。该 Top 8 指标不等于发布要求的 Recall@10、引用正确率或最终回答指标。
+报告写入 `%TEMP%\mindmate-ai-stage5-evidence-gate-v1\stage5-evidence-gate-v1-report.json`。任何样本返回 `unavailable`、模型离线校验失败、索引不 READY、标注范围不符或复跑不稳定都会以非零状态退出，不会计为严格拒答。报告包含模型/切片/索引/规则版本与参数、Top 8 双路排名和分数、混淆表、按类型计数、误判原因、跨范围候选、相似度分布和逐候选 `gate_signal_audit`（锚点/编号/数字语境/支持路径/reason code）。另含只在已观察 Top 8 候选上离线模拟不同余弦下限的敏感性分析，不改动应用中的 `0.82` 规则参数。该 Top 8 指标不等于发布要求的 Recall@10、引用正确率或最终回答指标。
 
 准备完成后，可启动真实 FastAPI 与 Vite，再运行实际 Chromium 浏览器检查：
 

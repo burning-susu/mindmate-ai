@@ -69,8 +69,12 @@ class EvidenceSufficiencyConfig:
     max_original_rank: int = 5
     minimum_anchor_count: int = 2
     minimum_anchor_coverage: float = 0.6
+    minimum_semantic_anchor_count: int = 2
+    minimum_semantic_anchor_coverage: float = 0.5
     minimum_phrase_characters: int = 5
     minimum_distinct_sources: int = 1
+    min_fts_similarity: float = 0.50
+    min_semantic_similarity: float = 0.60
     numeric_context_characters: int = 48
 
     def __post_init__(self) -> None:
@@ -94,12 +98,27 @@ class EvidenceSufficiencyConfig:
             or not isinstance(self.minimum_anchor_coverage, (int, float))
             or not math.isfinite(self.minimum_anchor_coverage)
             or not 0 < self.minimum_anchor_coverage <= 1
+            or isinstance(self.minimum_semantic_anchor_count, bool)
+            or not isinstance(self.minimum_semantic_anchor_count, int)
+            or not 1 <= self.minimum_semantic_anchor_count <= 20
+            or isinstance(self.minimum_semantic_anchor_coverage, bool)
+            or not isinstance(self.minimum_semantic_anchor_coverage, (int, float))
+            or not math.isfinite(self.minimum_semantic_anchor_coverage)
+            or not 0 < self.minimum_semantic_anchor_coverage <= 1
             or isinstance(self.minimum_phrase_characters, bool)
             or not isinstance(self.minimum_phrase_characters, int)
             or not 4 <= self.minimum_phrase_characters <= 128
             or isinstance(self.minimum_distinct_sources, bool)
             or not isinstance(self.minimum_distinct_sources, int)
             or not 1 <= self.minimum_distinct_sources <= MAX_EVIDENCE_CANDIDATES
+            or isinstance(self.min_fts_similarity, bool)
+            or not isinstance(self.min_fts_similarity, (int, float))
+            or not math.isfinite(self.min_fts_similarity)
+            or not -1 <= self.min_fts_similarity <= 1
+            or isinstance(self.min_semantic_similarity, bool)
+            or not isinstance(self.min_semantic_similarity, (int, float))
+            or not math.isfinite(self.min_semantic_similarity)
+            or not -1 <= self.min_semantic_similarity <= 1
             or isinstance(self.numeric_context_characters, bool)
             or not isinstance(self.numeric_context_characters, int)
             or not 0 <= self.numeric_context_characters <= 256
@@ -145,8 +164,31 @@ _IDENTIFIER_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _NUMBER_PATTERN = re.compile(
-    r"(?<![a-z0-9_])\d+(?:[.,]\d+)?\s*(?:%|％|秒|分钟|小时|天|周|月|年|个|项|条|次|元|mb|gb|kb)?",
+    r"(?<![a-z0-9_])\d+(?:[.,]\d+)?\s*(?:%|％|毫秒|摄氏度|分钟|小时|秒|天|周|月|年|个|项|条|次|元|度|种|mb|gb|kb)?",
     re.IGNORECASE,
+)
+_ANSWER_UNITS = (
+    "摄氏度",
+    "毫秒",
+    "分钟",
+    "小时",
+    "秒",
+    "天",
+    "周",
+    "月",
+    "年",
+    "个",
+    "项",
+    "条",
+    "次",
+    "元",
+    "度",
+    "种",
+    "%",
+    "％",
+    "mb",
+    "gb",
+    "kb",
 )
 _QUESTION_SCAFFOLDING = (
     "请问",
@@ -274,6 +316,49 @@ _NEGATIVE_MARKERS = (
     "不是",
 )
 _POSITIVE_MARKERS = ("允许", "支持", "可以", "能够", "应当", "可以", "是")
+_CLAIM_PREDICATES = (
+    "保留",
+    "使用",
+    "支持",
+    "允许",
+    "发送",
+    "定义",
+    "属于",
+    "共用",
+    "说明",
+    "包含",
+    "接收",
+)
+_SEMANTIC_STOPWORDS = {
+    "一般",
+    "普通",
+    "单次",
+    "请求",
+    "查询",
+    "超时",
+    "时间",
+    "时限",
+    "多少",
+    "几个",
+    "几种",
+    "多久",
+    "多长",
+    "上限",
+    "下限",
+    "调用",
+    "超过",
+    "最多",
+    "是否",
+    "以及",
+    "并且",
+    "同时",
+    "分别",
+    "这个",
+    "该值",
+    "什么",
+    "哪个",
+    "哪些",
+}
 
 
 def _normalize(text: str) -> str:
@@ -325,6 +410,136 @@ def _query_anchors(query: str) -> tuple[str, ...]:
     return tuple(dict.fromkeys(anchors))
 
 
+def _semantic_anchors(anchors: Sequence[str]) -> tuple[str, ...]:
+    return tuple(
+        dict.fromkeys(anchor for anchor in anchors if anchor not in _SEMANTIC_STOPWORDS)
+    )
+
+
+def _numeric_tokens(text: str) -> tuple[tuple[str, str | None], ...]:
+    """Extract numbers while excluding the numeric fragments inside identifiers."""
+    protected = _IDENTIFIER_PATTERN.sub(" ", unicodedata.normalize("NFKC", text))
+    tokens: list[tuple[str, str | None]] = []
+    for match in _NUMBER_PATTERN.finditer(protected):
+        raw = match.group(0).strip()
+        value_match = re.match(r"(\d+(?:[.,]\d+)?)(.*)", raw, re.IGNORECASE)
+        if value_match is None:
+            continue
+        value = value_match.group(1).replace(",", "")
+        unit = value_match.group(2).replace(" ", "").casefold() or None
+        tokens.append((value, unit))
+    return tuple(dict.fromkeys(tokens))
+
+
+def _requested_units(query: str) -> tuple[str, ...]:
+    compact = _compact(query)
+    units = [unit.casefold() for unit in _ANSWER_UNITS if unit.casefold() in compact]
+    if "几个" in compact:
+        units.append("个")
+    if "几种" in compact:
+        units.append("种")
+    return tuple(dict.fromkeys(units))
+
+
+def _nearby_number_match(
+    body: str,
+    *,
+    anchors: Sequence[str],
+    context_characters: int,
+    targets: Sequence[tuple[str, str | None]] = (),
+    required_units: Sequence[str] = (),
+) -> set[tuple[str, str | None]]:
+    matches: set[tuple[str, str | None]] = set()
+    if not anchors:
+        return matches
+    for anchor in anchors:
+        start = 0
+        while (position := body.find(anchor, start)) >= 0:
+            left = max(0, position - context_characters)
+            right = min(len(body), position + len(anchor) + context_characters)
+            for number_match in _NUMBER_PATTERN.finditer(body[left:right]):
+                raw = number_match.group(0).strip()
+                value_match = re.match(r"(\d+(?:[.,]\d+)?)(.*)", raw, re.IGNORECASE)
+                if value_match is None:
+                    continue
+                token = (
+                    value_match.group(1).replace(",", ""),
+                    value_match.group(2).replace(" ", "").casefold() or None,
+                )
+                if required_units and token[1] not in required_units:
+                    continue
+                if not targets or token in targets:
+                    matches.add(token)
+            start = position + 1
+    return matches
+
+
+def _has_nearby_number(
+    body: str,
+    anchors: Sequence[str],
+    context_characters: int,
+    *,
+    required_units: Sequence[str] = (),
+) -> bool:
+    return bool(
+        _nearby_number_match(
+            body,
+            anchors=anchors,
+            context_characters=context_characters,
+            required_units=required_units,
+        )
+    )
+
+
+def _has_nearby_query_numbers(
+    body: str,
+    query_numbers: Sequence[tuple[str, str | None]],
+    anchors: Sequence[str],
+    context_characters: int,
+    required_units: Sequence[str],
+) -> bool:
+    matched = _nearby_number_match(
+        body,
+        anchors=anchors,
+        context_characters=context_characters,
+        targets=query_numbers,
+        required_units=required_units,
+    )
+    return set(query_numbers).issubset(matched)
+
+
+def _negative_claim_predicates(query: str) -> tuple[str, ...]:
+    compact = _compact(query)
+    return tuple(
+        predicate
+        for predicate in _CLAIM_PREDICATES
+        if any(marker + predicate in compact for marker in ("不", "未", "没", "无"))
+    )
+
+
+def _contains_positive_predicate(body: str, predicate: str) -> bool:
+    compact = _compact(body)
+    start = 0
+    while (position := compact.find(predicate, start)) >= 0:
+        prefix = compact[max(0, position - 1) : position]
+        if prefix not in {"不", "未", "没", "无"}:
+            return True
+        start = position + 1
+    return False
+
+
+def _is_negative_definition_only(query: str, body: str) -> bool:
+    compact_query = _compact(query)
+    compact_body = _compact(body)
+    return "定义" in compact_query and "说明" not in compact_query and "不定义" in compact_body
+
+
+def _composite_clauses(query: str) -> tuple[str, ...]:
+    parts = re.split(r"(?:，|,|；|;)??\s*(?:以及|并且|同时|另外|还要)\s*", query)
+    cleaned = tuple(part.strip(" \t\r\n?？。") for part in parts if part.strip(" \t\r\n?？。"))
+    return cleaned if len(cleaned) >= 2 else ()
+
+
 def _contains_term(text: str, term: str) -> bool:
     if not term[0].isascii():
         return term in text
@@ -351,22 +566,6 @@ def _verified_vector_similarity(candidate: EvidenceCandidate) -> float | None:
     return similarity
 
 
-def _has_nearby_number(
-    body: str,
-    anchors: Sequence[str],
-    context_characters: int,
-) -> bool:
-    for anchor in anchors:
-        start = 0
-        while (position := body.find(anchor, start)) >= 0:
-            left = max(0, position - context_characters)
-            right = min(len(body), position + len(anchor) + context_characters)
-            if _NUMBER_PATTERN.search(body[left:right]):
-                return True
-            start = position + 1
-    return False
-
-
 def _polarity(text: str) -> str | None:
     has_negative = any(marker in text for marker in _NEGATIVE_MARKERS)
     affirmative_text = text
@@ -390,6 +589,8 @@ def _candidate_signal(
     normalized_body = _normalize(candidate.content or "")
     compact_body = _compact(candidate.content or "")
     normalized_title = _normalize(candidate.file_title or "")
+    query_numbers = _numeric_tokens(query_text)
+    required_units = _requested_units(query_text)
     exact_phrase = (
         len(_compact(query_text)) >= config.minimum_phrase_characters
         and _compact(query_text) in compact_body
@@ -419,10 +620,14 @@ def _candidate_signal(
     ranks = (candidate.ranking_rank, candidate.fts_rank, candidate.vector_rank)
     if any(rank is not None and not valid_rank(rank) for rank in ranks):
         reasons.append("RANK_UNVERIFIED")
-    if (
-        not valid_rank(candidate.ranking_rank, config.max_candidate_rank)
-        or not valid_rank(candidate.fts_rank, config.max_original_rank)
-        or not valid_rank(candidate.vector_rank, config.max_original_rank)
+    if not valid_rank(candidate.ranking_rank, config.max_candidate_rank):
+        reasons.append("RANK_BELOW_GATE")
+    if candidate.fts_rank is not None and not valid_rank(
+        candidate.fts_rank, config.max_original_rank
+    ):
+        reasons.append("RANK_BELOW_GATE")
+    if candidate.vector_rank is not None and not valid_rank(
+        candidate.vector_rank, config.max_original_rank
     ):
         reasons.append("RANK_BELOW_GATE")
     if not candidate.chunk_id or not candidate.file_id or not candidate.index_version_id:
@@ -437,10 +642,29 @@ def _candidate_signal(
         reasons.append("BODY_ANCHOR_COVERAGE_LOW")
     if identifiers and len(identifier_hits) != len(identifiers):
         reasons.append("QUERY_IDENTIFIER_NOT_IN_BODY")
-    if question_type == "numeric_fact" and not _has_nearby_number(
-        normalized_body, anchors, config.numeric_context_characters
+    if query_numbers and not _has_nearby_query_numbers(
+        normalized_body,
+        query_numbers,
+        anchors,
+        config.numeric_context_characters,
+        required_units,
+    ):
+        reasons.append("QUERY_NUMERIC_VALUE_NOT_FOUND")
+    elif question_type == "numeric_fact" and not _has_nearby_number(
+        normalized_body,
+        anchors,
+        config.numeric_context_characters,
+        required_units=required_units,
     ):
         reasons.append("NUMERIC_ANSWER_VALUE_NOT_FOUND")
+    negative_predicates = _negative_claim_predicates(query_text)
+    if negative_predicates and any(
+        _contains_positive_predicate(candidate.content or "", predicate)
+        for predicate in negative_predicates
+    ):
+        reasons.append("QUERY_CLAIM_CONTRADICTED")
+    if _is_negative_definition_only(query_text, candidate.content or ""):
+        reasons.append("QUERY_NEGATIVE_FACT_ONLY")
     if (
         not matched_anchors
         and not exact_phrase
@@ -448,7 +672,53 @@ def _candidate_signal(
     ):
         reasons.append("TITLE_ONLY_MATCH")
 
-    support_reasons = {
+    semantic_anchors = _semantic_anchors(anchors)
+    semantic_matches = tuple(
+        anchor for anchor in semantic_anchors if _contains_term(normalized_body, anchor)
+    )
+    semantic_coverage = (
+        len(semantic_matches) / len(semantic_anchors) if semantic_anchors else 0.0
+    )
+    has_numeric_block = any(
+        reason in reasons
+        for reason in ("QUERY_NUMERIC_VALUE_NOT_FOUND", "NUMERIC_ANSWER_VALUE_NOT_FOUND")
+    )
+    has_unusable_rank = any(reason in reasons for reason in ("RANK_UNVERIFIED", "RANK_BELOW_GATE"))
+    lexical_evidence_verified = (
+        "fts" in candidate.sources
+        and candidate.fts_rank is not None
+        and candidate.fts_rank <= config.max_original_rank
+        and "vector" in candidate.sources
+        and candidate.vector_rank is not None
+        and candidate.vector_rank <= config.max_original_rank
+        and similarity is not None
+        and similarity >= config.min_fts_similarity
+        and (exact_phrase or len(matched_anchors) >= config.minimum_anchor_count)
+        and not has_numeric_block
+        and not has_unusable_rank
+    )
+    semantic_evidence_verified = (
+        "fts" not in candidate.sources
+        and "vector" in candidate.sources
+        and candidate.vector_rank is not None
+        and candidate.vector_rank <= config.max_original_rank
+        and similarity is not None
+        and similarity >= config.min_semantic_similarity
+        and len(semantic_matches) >= config.minimum_semantic_anchor_count
+        and semantic_coverage >= config.minimum_semantic_anchor_coverage
+        and not has_numeric_block
+        and not has_unusable_rank
+    )
+    low_vector_exception = False
+    if similarity is not None and similarity < config.min_vector_similarity:
+        if lexical_evidence_verified:
+            reasons.append("FTS_EVIDENCE_VERIFIED_BELOW_VECTOR_THRESHOLD")
+            low_vector_exception = True
+        elif semantic_evidence_verified:
+            reasons.append("SEMANTIC_EVIDENCE_VERIFIED_BELOW_VECTOR_THRESHOLD")
+            low_vector_exception = True
+
+    blocking_reasons = {
         "FTS_SIGNAL_MISSING",
         "VECTOR_SIGNAL_MISSING",
         "VECTOR_SIMILARITY_UNVERIFIED",
@@ -459,10 +729,20 @@ def _candidate_signal(
         "QUERY_ANCHORS_INSUFFICIENT",
         "BODY_ANCHOR_COVERAGE_LOW",
         "QUERY_IDENTIFIER_NOT_IN_BODY",
+        "QUERY_NUMERIC_VALUE_NOT_FOUND",
         "NUMERIC_ANSWER_VALUE_NOT_FOUND",
+        "QUERY_CLAIM_CONTRADICTED",
+        "QUERY_NEGATIVE_FACT_ONLY",
         "TITLE_ONLY_MATCH",
     }
-    supporting = not any(reason in support_reasons for reason in reasons)
+    if not low_vector_exception:
+        blocking_reasons.add("VECTOR_SIMILARITY_BELOW_THRESHOLD")
+    else:
+        blocking_reasons.discard("VECTOR_SIMILARITY_BELOW_THRESHOLD")
+        blocking_reasons.discard("BODY_ANCHOR_COVERAGE_LOW")
+        if semantic_evidence_verified:
+            blocking_reasons.discard("FTS_SIGNAL_MISSING")
+    supporting = not any(reason in blocking_reasons for reason in reasons)
     if supporting:
         reasons.append("CANDIDATE_GATE_PASSED")
     return EvidenceCandidateSignal(
@@ -500,7 +780,7 @@ def _conflicting_values(
         return False
     if question_type == "numeric_fact":
         values = {
-            next(iter(_NUMBER_PATTERN.findall(_normalize(candidate.content or ""))), None)
+            next(iter(_numeric_tokens(candidate.content or "")), None)
             for candidate in by_file.values()
         }
         values.discard(None)
@@ -508,6 +788,79 @@ def _conflicting_values(
     polarities = {_polarity(_normalize(candidate.content or "")) for candidate in by_file.values()}
     polarities.discard(None)
     return polarities == {"negative", "positive"}
+
+
+def _clause_supported(
+    candidate: EvidenceCandidate,
+    clause: str,
+    *,
+    config: EvidenceSufficiencyConfig,
+) -> bool:
+    """Check one composite sub-question against the same auditable chunk body."""
+    normalized_body = _normalize(candidate.content or "")
+    compact_body = _compact(candidate.content or "")
+    anchors = _query_anchors(clause)
+    matched = tuple(anchor for anchor in anchors if _contains_term(normalized_body, anchor))
+    exact_phrase = (
+        len(_compact(clause)) >= config.minimum_phrase_characters
+        and _compact(clause) in compact_body
+    )
+    identifiers = tuple(
+        dict.fromkeys(_IDENTIFIER_PATTERN.findall(unicodedata.normalize("NFKC", clause).upper()))
+    )
+    if identifiers and not all(
+        _contains_term(normalized_body, _normalize(identifier)) for identifier in identifiers
+    ):
+        return False
+    required_units = _requested_units(clause)
+    query_numbers = _numeric_tokens(clause)
+    if query_numbers and not _has_nearby_query_numbers(
+        normalized_body,
+        query_numbers,
+        anchors,
+        config.numeric_context_characters,
+        required_units,
+    ):
+        return False
+    if _question_type(clause) == "numeric_fact" and not _has_nearby_number(
+        normalized_body,
+        anchors,
+        config.numeric_context_characters,
+        required_units=required_units,
+    ):
+        return False
+    if _is_negative_definition_only(clause, candidate.content or ""):
+        return False
+    negative_predicates = _negative_claim_predicates(clause)
+    if negative_predicates and any(
+        _contains_positive_predicate(candidate.content or "", predicate)
+        for predicate in negative_predicates
+    ):
+        return False
+    if exact_phrase:
+        return True
+    return len(matched) >= config.minimum_anchor_count
+
+
+def _composite_fully_supported(
+    candidates: Sequence[EvidenceCandidate],
+    signals: Sequence[EvidenceCandidateSignal],
+    query_text: str,
+    *,
+    config: EvidenceSufficiencyConfig,
+) -> bool:
+    clauses = _composite_clauses(query_text)
+    if not clauses:
+        return False
+    eligible = [
+        candidate
+        for candidate, signal in zip(candidates, signals, strict=True)
+        if signal.supporting
+    ]
+    return bool(eligible) and all(
+        any(_clause_supported(candidate, clause, config=config) for candidate in eligible)
+        for clause in clauses
+    )
 
 
 def assess_evidence(
@@ -599,19 +952,31 @@ def assess_evidence(
         replace(signal, distinct_source_count=len(supporting_sources)) for signal in signals
     )
     overall_reasons: list[str] = []
-    if question_type == "composite":
+    if question_type == "composite" and not _composite_fully_supported(
+        candidates,
+        signals,
+        query_text,
+        config=config,
+    ):
         overall_reasons.append("COMPOSITE_OR_OPEN_LIST_QUESTION")
     if not anchors and question_type != "exact_identifier":
         overall_reasons.append("QUERY_ANCHORS_INSUFFICIENT")
     if len(supporting_sources) < config.minimum_distinct_sources and not overall_reasons:
-        if any("TITLE_ONLY_MATCH" in signal.reason_codes for signal in signals):
-            overall_reasons.append("TITLE_ONLY_MATCH")
-        elif any("NUMERIC_ANSWER_VALUE_NOT_FOUND" in signal.reason_codes for signal in signals):
-            overall_reasons.append("NUMERIC_ANSWER_VALUE_NOT_FOUND")
-        elif any("VECTOR_SIMILARITY_BELOW_THRESHOLD" in signal.reason_codes for signal in signals):
-            overall_reasons.append("VECTOR_SIMILARITY_BELOW_THRESHOLD")
-        elif any("BODY_ANCHOR_COVERAGE_LOW" in signal.reason_codes for signal in signals):
-            overall_reasons.append("BODY_ANCHOR_COVERAGE_LOW")
+        reason_priority = (
+            "QUERY_IDENTIFIER_NOT_IN_BODY",
+            "QUERY_NUMERIC_VALUE_NOT_FOUND",
+            "NUMERIC_ANSWER_VALUE_NOT_FOUND",
+            "QUERY_NEGATIVE_FACT_ONLY",
+            "QUERY_CLAIM_CONTRADICTED",
+            "QUERY_ANCHORS_INSUFFICIENT",
+            "TITLE_ONLY_MATCH",
+            "BODY_ANCHOR_COVERAGE_LOW",
+            "VECTOR_SIMILARITY_BELOW_THRESHOLD",
+        )
+        for reason in reason_priority:
+            if any(reason in signal.reason_codes for signal in signals):
+                overall_reasons.append(reason)
+                break
         else:
             overall_reasons.append("NO_CANDIDATE_PASSED_GATE")
     if not overall_reasons and _conflicting_values(signals, candidates, question_type):
