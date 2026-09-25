@@ -12,6 +12,7 @@ from typing import Any
 import numpy as np
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY_ROOT = BACKEND_ROOT.parent
@@ -343,7 +344,7 @@ def _enqueue_and_wait_index_stage(
     enqueue: Any,
     key_suffix: str,
 ) -> None:
-    from mindmate.infrastructure.models import IndexVersion
+    from mindmate.infrastructure.models import BackgroundTask, IndexVersion
 
     task_id = _find_version_task(app, task_type, version_id)
     with app.state.session_factory() as session:
@@ -356,13 +357,26 @@ def _enqueue_and_wait_index_stage(
         if stage_status in {"FAILED", "CANCELLED"}:
             raise RuntimeError(f"索引阶段已失败：{task_type}/{stage_status}")
         if task_id is None:
-            task = enqueue(
-                session,
-                version_id,
-                f"index-stage:{version_id}:{key_suffix}",
-            )
-            task_id = str(task.task_id)
-            session.commit()
+            key = f"index-stage:{version_id}:{key_suffix}"
+            try:
+                task = enqueue(session, version_id, key)
+                task_id = str(task.task_id)
+                session.commit()
+            except IntegrityError:
+                # The runtime activation worker can enqueue the same stage after
+                # our read but before this insert. Reuse only its matching task.
+                session.rollback()
+                existing = session.scalar(
+                    select(BackgroundTask).where(BackgroundTask.idempotency_key == key)
+                )
+                if (
+                    existing is None
+                    or existing.task_type != task_type
+                    or not isinstance(existing.checkpoint_json, dict)
+                    or existing.checkpoint_json.get("index_version_id") != version_id
+                ):
+                    raise
+                task_id = str(existing.task_id)
     if task_id is None:
         raise RuntimeError(f"未能建立持久索引任务：{task_type}")
     print(

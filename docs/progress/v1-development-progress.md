@@ -321,3 +321,13 @@
 - 测试证据：后端全量 `220 passed`；新增 `tests/test_stage6_knowledge_chat.py` 3 项覆盖支持/不足/不可用三分支、真实 SourceSnapshot/Citation、刷新读取和 0 Provider 门禁；Ruff、Pyright、compileall、迁移往返、`git diff --check` 通过。前端 `27 tests passed`、lint、typecheck、build 通过；OpenAPI 同步为 `62 schemas / 72 operations`。
 - Provider/模型边界：自动化只使用 Mock Provider 与本地可控检索夹具。当前本机固定 ONNX 模型状态为 `MISSING_OFFLINE`，因此没有冒充真实 ONNX 支持分支或真实 DeepSeek 联通；模型缺失分支已验证独立错误和 0 Provider 调用。详见 `docs/test-reports/stage-6-knowledge-chat-citations.md`。
 - 下一开发批次唯一目标：安装并验证固定本地 ONNX 模型后，使用真实 READY 知识库完成浏览器级知识库问答、点击引用和刷新恢复；继续不扩展重新生成、学习陪练或自动 Provider 切换。
+
+### 第三十五批：真实本地 ONNX 知识库问答浏览器验收
+
+- 状态：本批求职 Demo 主流程 `PASS`；阶段 5/6 的完整 V1 仍为 `PARTIAL`。固定模型缓存与隔离 Demo 数据根经 ModelManager 离线校验均为 `READY`，没有模型下载、真实 DeepSeek 请求、真实 Key、私人资料或付费调用。
+- 隔离目录 `%TEMP%\mindmate-ai-stage35-knowledge-chat-demo` 由现有准备脚本通过文件/知识库 API 与持久 Worker 建立，主库活动 IndexVersion 为 `01a0d95b-bba5-791c-a176-426d08e57765`，预处理、切片、真实 ONNX Embedding、FTS 与原子激活均完成；2 个 Chunk 对应 2 条向量和 2 条 FTS 映射，物理完整性通过。脚本第二轮检查数据计数不变。用户 UI 文件导入/建库未在本批重验。
+- 真实 FastAPI + Vite/Chromium：从主库详情进入知识库模式，正例 `API 单次请求超时时间是多少秒？` 完成 SSE、AnswerVersion/Citation 绑定，点击 `[1]` 显示 `服务超时策略.txt` 第 1–12 行和含 `30 秒` 的摘录，刷新和重开会话后正文与 Citation ID 一致；第二轮仍在知识库模式。负例显示固定资料不足，Operation 为 `EVIDENCE_INSUFFICIENT`，Citation 0。
+- 同一数据根的受控真实检索 + Mock Provider 审计：正例 FTS rank 1 / vector rank 1、`supported`、Provider 调用 1；负例 `insufficient`、Provider 调用增量 0、Citation 0。浏览器 UI 与受控计数为分别执行的证据；Mock 正文不证明最终答案事实正确性或真实 DeepSeek 联通。
+- 首次准备遇到脚本与运行时自动索引接力争抢同一幂等键；已局部修复并补定向回归，全新隔离目录首次准备 `PASS`。另一次与全量测试并行的浏览器复核返回 `MODEL_UNAVAILABLE`，独占复跑 `1 passed`，根因未证实，已如实保留在报告。
+- 门禁：后端定向 `4 passed`、全量 pytest 退出码 0、Ruff 全通过、Pyright 0 错误、Alembic `c3d4e5f6a7b8 (head)`；前端 `27 passed`、lint/typecheck/build 通过；浏览器 E2E 独占复核 `1 passed`，`git diff --check` 通过。详见 `docs/test-reports/stage-6-real-onnx-knowledge-chat-browser.md`。
+- 下一批唯一建议：封装可重复的本地求职 Demo 演示入口，并针对并发下偶发的 `MODEL_UNAVAILABLE` 建立可复现诊断；不默认启用真实 DeepSeek 或私人资料。
