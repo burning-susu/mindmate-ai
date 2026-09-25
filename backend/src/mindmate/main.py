@@ -17,6 +17,10 @@ from uuid6 import uuid7
 
 from mindmate import __version__
 from mindmate.ai.embeddings.model_manager import ModelManager
+from mindmate.ai.providers.base import ProviderRequestError
+from mindmate.ai.providers.deepseek import DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, DeepSeekChatProvider
+from mindmate.api.ai_providers import AiProviderApiError
+from mindmate.api.ai_providers import router as ai_provider_router
 from mindmate.api.embedding_models import router as embedding_models_router
 from mindmate.api.files import FileApiError
 from mindmate.api.files import router as files_router
@@ -33,6 +37,7 @@ from mindmate.application.parse_worker_service import ParsingWorker
 from mindmate.application.retrieval_test_queries import LocalRetrievalQueryEncoder
 from mindmate.config import Settings, get_settings
 from mindmate.infrastructure.db import create_session_factory, create_sqlite_engine, quick_check
+from mindmate.security.credentials import WindowsCredentialStore
 from mindmate.security.instance import SingleInstanceLock
 from mindmate.security.session import SESSION_COOKIE, LocalSession
 
@@ -162,6 +167,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = app_settings
     app.state.retrieval_query_encoder = LocalRetrievalQueryEncoder(app_settings.model_dir)
     app.state.embedding_model_manager = ModelManager(app_settings.model_dir)
+    app.state.credential_store = WindowsCredentialStore()
+    app.state.deepseek_provider = DeepSeekChatProvider(
+        base_url=DEEPSEEK_BASE_URL,
+        model=DEEPSEEK_MODEL,
+        timeout_seconds=app_settings.provider_timeout_seconds,
+    )
 
     app.add_middleware(
         CORSMiddleware,
@@ -293,6 +304,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             current_row_version=exc.current_row_version,
         )
 
+    @app.exception_handler(AiProviderApiError)
+    async def ai_provider_api_error(request: Request, exc: AiProviderApiError) -> JSONResponse:
+        return problem(
+            request,
+            exc.status,
+            exc.code,
+            "AI 服务配置失败",
+            exc.detail,
+            retryable=exc.retryable,
+        )
+
+    @app.exception_handler(ProviderRequestError)
+    async def provider_request_error(request: Request, exc: ProviderRequestError) -> JSONResponse:
+        return problem(
+            request,
+            exc.status,
+            exc.code,
+            "DeepSeek 连接测试失败",
+            exc.detail,
+            retryable=exc.retryable,
+        )
+
     @app.post("/api/v1/system/session", tags=["system"])
     async def session(request: Request, response: Response) -> dict[str, Any]:
         local_session = getattr(request.app.state, "session", None)
@@ -367,6 +400,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(knowledge_bases_router)
     app.include_router(embedding_models_router)
+    app.include_router(ai_provider_router)
     app.include_router(files_router)
 
     return app

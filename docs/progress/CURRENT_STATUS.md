@@ -5,8 +5,8 @@
 - 当前开发分支：`feat/v1-bootstrap`
 - 当前远程提交：以 `git ls-remote --heads origin feat/v1-bootstrap` 为准；本文件随本批次收口提交推送
 - 最后更新时间：`2026-09-25`
-- 当前开发阶段：阶段 5 开发中，状态 `PARTIAL`
-- 当前批次状态：第二十二批 Citation 绑定因无真实 Chat/Learning owner 而 `BLOCKED` 并延期到阶段 6/7；第二十三至第三十批均为 `PASS`；第三十批完成固定本地 ONNX 模型用户主动安装、可恢复进度/取消/重试与真实浏览器索引闭环；阶段 5 状态仍为 `PARTIAL`
+- 当前开发阶段：阶段 6 开发中，状态 `PARTIAL`；阶段 5 继续 `PARTIAL`
+- 当前批次状态：第二十二批 Citation 绑定因无真实 Chat/Learning owner 而 `BLOCKED` 并延期到阶段 6/7；第二十三至第三十批均为 `PASS`；第三十一批完成 Windows Credential Manager 凭据生命周期、版本化外发同意、固定 DeepSeek 最小连接探测和设置页配置闭环；没有真实 Key 或真实 DeepSeek 调用；阶段 5 遗留项保持有效
 
 ## 已完成阶段
 
@@ -23,6 +23,8 @@
 - 任务与资源安全：复用 `BackgroundTask` 实现文件导入/重新处理及知识库成员准入；解析 Worker 与成员 Worker 按任务类型隔离领取，均使用原子领取、租约、过期恢复、关闭中断与取消状态；Windows 解析子进程使用 Job Object 的 `KILL_ON_JOB_CLOSE` 与进程内存上限，默认 `512 MiB`。
 - 前端：真实 API 文件工作台、嵌套目录、筛选排序、导入与重复决策、详情编辑/预览、文件和文件夹回收站操作；列表查询参数、详情返回后的筛选/排序/滚动恢复；返回前刷新列表避免旧 `row_version` 竞态；版本冲突提示并引导重新加载，不自动覆盖；第二十四批在知识库详情页增加高级“测试检索”区域，调用现有只读 API，展示三种判定、候选定位与排序信号。
 - 模型安装：第三十批在知识库详情页增加固定 ONNX 安装入口，显示来源/许可依据/大小/revision/指纹、本机下载、持久真实进度、取消和重试；仅用户主动点击下载，刷新或应用重启后从持久任务恢复。
+- AI 服务凭据：第三十一批增加 `CredentialStorePort`、Windows Credential Manager 实现和隔离假存储；SQLite 只保留非秘密 Provider profile/同意/探测状态；固定 DeepSeek Chat Completions 探测只在用户显式确认后发送短文本，失败不删除 Key，不暴露原始响应。
+- AI 服务设置：第三十一批接入 `/settings`，分开展示 Key 配置、外发同意和连接探测；保存后清空明文输入，不写入 LocalStorage 或前端全局状态；官方 Key/价格入口使用当前复核链接。
 - 数据库：SQLite/Alembic 核心实体、持久任务、内容对象引用计数和软删除字段；revision `d91f4a6b2c30` 增加 ChunkingConfig、EmbeddingConfig、IndexVersion 与逐文件输入快照；revision `f2c7a1d8e904` 增加文件级 Chunk 与切片检查点；revision `a81f3c6d2e90` 增加 EmbeddingRecord、逐输入 Embedding 检查点及 INDEX_EMBED 单运行租约约束；revision `d60f2e8a7c31` 增加逐输入 FTS 状态、映射表、FTS5 虚表和 INDEX_FTS 单运行租约约束；revision `e4a7810c9b62` 增加索引激活失败原因码；revision `6b3e91a0c4d7` 增加内部未绑定来源快照和文件永久删除净化触发器。
 - 测试与工程：第二十一批新增 10 项服务端快照生命周期/范围/删除用例；第二十四批补充知识库测试检索页面交互回归；完整串行测试与门禁结果见下方测试状态。前端 21 tests 和阶段 4/5 浏览器生命周期证据见测试状态。
 - 知识库：空库创建保持 `EMPTY`；名称/描述/颜色/图标编辑；回收站生命周期；已导入文件批量加入/移出、多库共享、幂等重加与逐项结果；成员准入完成后保持 `index_state=PENDING` 和知识库 `PREPARING`，不伪造可检索状态。
@@ -48,6 +50,7 @@
 - 阶段 4 无未解决功能、安全、数据一致性或迁移阻塞项；需求追踪详见 `docs/test-reports/stage-4-file-management.md`。
 - 发布候选保留：正式恶意文档集、真实资源耗尽边界、干净 Windows 安装/升级/卸载包，依据发布流程执行，不回填为阶段 4 已完成证据。
 - 阶段 5 缺口：来源快照 owner/Citation 绑定（延期到阶段 6/7）、用户级严格拒答/RAG 流程、固定样本之外的质量/性能评估仍未完成；第二十八批只完成固定 31+7 样本的门控校准回归。`supported` 不证明候选蕴含事实；本地调试端点和本批页面不构成 AC-KB-003、Recall@10 或聊天验收。
+- 阶段 6 缺口：普通 Chat/Learning owner、正式生成、SSE UI、RAG/Citation、学习陪练、预算执行和自动回退仍未实现；本批只验证本机凭据、fixture Provider 和用户主动最小探测，不代表真实 DeepSeek 已联通或账户余额充足。
 
 ## 第十八批交接
 
@@ -128,6 +131,16 @@
 - 状态与竞态：分别呈现 `supported`、`insufficient`、`unavailable`；无活动索引、模型缺失、通道错误、范围变化和空结果保持不同文案；请求错误保留输入并可重试。AbortController、序列号和按知识库 ID 的组件卸载保证连续请求、切换问题、切换知识库和卸载后的旧响应不会覆盖当前结果。
 - 验收证据：前端 Vitest `21 passed`；`npm run typecheck`、`npm run lint`、`npm run build`、`git diff --check` 均通过。真实浏览器仅验证空知识库和无活动索引状态，候选 Top 8/HTML 片段安全/错误重试等使用确定性 UI Mock 回归，不冒充真实索引验收。
 - 本批没有后端改动、数据库迁移或 OpenAPI schema 变化；未为凑数重跑后端全量。第二十二批 Citation owner 绑定继续延期到阶段 6/7。
+
+## 第三十一批交接
+
+- 本批结论：`PARTIAL`；阶段 6 开始，阶段 5 保持 `PARTIAL`。起始本地与 `origin/feat/v1-bootstrap` SHA 均为 `8fff8670d74784aee04eaa3a585a2f9f329050db`；结束 SHA 以本批收口提交推送结果为准。
+- 后端：新增 Windows Credential Manager 适配器、隔离假凭据存储、DeepSeek `httpx` Adapter、配置/删除/状态/同意/连接测试 API；固定地址与 `deepseek-flash`，只发送短探测文本，错误不删除 Key。
+- 前端：`/settings` 提供 Provider 配置、Key 显示/隐藏/保存/删除、版本化外发同意和显式连接探测确认；不保存明文到 LocalStorage/全局状态；配置、同意、探测三种状态分开展示。
+- 数据与契约：复用既有 `app_settings`/`provider_profiles`；数据库不保存 Key；OpenAPI 3.1 已导出 `51 schemas / 62 operations`，前端生成类型已同步；`keyring` 已提升为运行时依赖。
+- 证据：Windows Credential Manager 一次性 fixture 写读删通过；后端 fixture 覆盖 12 项，前端设置页 2 项，真实 Chromium 设置流程 1 项；后端全量 `206 passed, 158 warnings`，前端全量 `25 passed`；无真实 DeepSeek、真实 Key、用户文件或付费请求。阶段报告：`docs/test-reports/stage-6-deepseek-credentials.md`。
+- 未完成：普通 Chat/Learning owner、正式生成、SSE/RAG/Citation/学习陪练及阶段 5 遗留项均未宣称完成。
+- 下一开发批次唯一目标：建立阶段 6 普通 Chat owner 的最小服务端生成边界，继续沿用本批凭据/外发门禁，不打开 RAG/Citation/SSE UI。
 
 ## 第二十五批交接
 

@@ -9,6 +9,7 @@ import FilesPage from './pages/FilesPage'
 import KnowledgeBaseDetailPage from './pages/KnowledgeBaseDetailPage'
 import KnowledgeBaseNewPage from './pages/KnowledgeBaseNewPage'
 import KnowledgeBasesPage from './pages/KnowledgeBasesPage'
+import SettingsPage from './pages/SettingsPage'
 import TrashPage from './pages/TrashPage'
 import './App.css'
 
@@ -113,7 +114,7 @@ function AppShell() {
             <Route path="/files" element={<FilesPage />} />
             <Route path="/files/:fileId" element={<FileDetailPage />} />
             <Route path="/trash" element={<TrashPage />} />
-            <Route path="/settings" element={<Placeholder title="设置" description="运行配置和诊断入口将在后续阶段接入。" />} />
+            <Route path="/settings" element={<SettingsPage />} />
           </Routes>
         </div>
       </main>

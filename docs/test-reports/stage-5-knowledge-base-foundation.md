@@ -1151,3 +1151,17 @@ repo> git diff --check
 ```
 
 阶段 5 继续 `PARTIAL`。本批证明了真实首次固定模型下载、大小/SHA-256/config 校验、取消/重试持久状态机与一次真实本机 ONNX 索引；离线状态由可控 HTTP/Manager 测试验证，未模拟系统真实断网 UI；进程级 Windows 安装包强退/重启未验证。Citation owner 依赖真实 Chat/Learning owner，仍延期到阶段 6/7；10 万 Chunk 性能、Recall@10、最终回答质量和 AC-KB-* 全量验收仍未覆盖。下一批唯一目标：真实 Chat/Learning owner 可核验后建立服务端 Citation 绑定准入，不生成模型回答或伪造 owner。
+
+## 第三十一批交接：阶段 5 遗留项保持有效
+
+第三十一批进入阶段 6 后，阶段 5 仍为 `PARTIAL`，本批没有把凭据配置或连接探测计入知识库验收。以下遗留项继续保留：
+
+| 遗留项 | 当前状态 | 处理边界 |
+| --- | --- | --- |
+| Citation owner 绑定 | `BLOCKED/延期` | 等待真实 Chat/Learning owner；不使用 TaskAttempt 冒充 owner，不伪造 Citation |
+| 用户级 RAG 问答 | 未开始验收 | 现有检索测试只返回内部候选，不生成答案 |
+| Recall@10、最终答案质量 | 未完成 | 固定合成样本门控回归不能替代发布级评测 |
+| 10 万 Chunk 性能 | 未完成 | 后续单独建立性能门禁，不回填阶段 5 通过证据 |
+| 阶段 5 全量 AC-KB-* | 未完成 | 保持 `PARTIAL`，不因阶段 6 Key/探测成功而升级 |
+
+阶段 6 的凭据、同意和最小连接探测证据见 `docs/test-reports/stage-6-deepseek-credentials.md`；本批没有真实 DeepSeek 请求或用户资料外发。

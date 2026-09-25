@@ -272,3 +272,15 @@
 - 回归测试：新增后端安装 API/Worker 和前端显式安装/进度/取消/重试测试；另验证活动索引 READY 与模型 MISSING 可同时展示、校验忙碌时禁用重复安装。`uv run pytest` `194 passed, 152 warnings`（159.77 秒）；`uv run ruff check src tests scripts`、Pyright `0 errors`、compileall、Alembic head `6b3e91a0c4d7` 通过；OpenAPI 导出和 TypeScript 生成一致。前端 Vitest `23 passed`、lint、typecheck、build 通过；真实本地 API Playwright 首次模型安装 E2E `1 passed`，READY 模型复用/许可说明浏览器复核 `1 passed`；`git diff --check` 通过。
 - 边界：没有 DeepSeek 请求、真实凭据、付费 API、用户私人资料或模型文件入 Git。已证明本机固定模型下载、校验和一次真实索引；未覆盖真实网络断开过程中的浏览器提示、Windows 安装包进程级终止/重启、10 万 Chunk 性能、Recall@10/最终回答质量、Citation owner 与 AC-KB-* 全量验收。阶段 5 继续 `PARTIAL`。
 - 下一批唯一目标：真实 Chat/Learning owner 可核验后建立服务端 Citation 绑定准入；不生成模型答案、不伪造 owner。
+
+## 第三十一批：阶段 6 DeepSeek 凭据配置与最小连接测试
+
+- 状态：本批 `PARTIAL`；阶段 6 开始，阶段 5 继续 `PARTIAL`。进场分支为 `feat/v1-bootstrap`，本地与 `origin/feat/v1-bootstrap` 起始 SHA 均为 `8fff8670d74784aee04eaa3a585a2f9f329050db`，工作区进场干净。
+- 官方资料复核：2026-09-25 复核 DeepSeek Chat Completions 文档和模型/价格页，`https://api.deepseek.com`、`deepseek-flash` 和 OpenAI-compatible Chat Completions 仍与冻结决策一致；价格和别名背后的实际模型不写死，探测结果保存 `resolved_model`。
+- 凭据边界：新增 `CredentialStorePort`、Windows Credential Manager 实现和明确隔离的 `InMemoryCredentialStore`。非 Windows 或非 Windows keyring 后端直接报告不可用，不回退到明文磁盘；SQLite 只保存非秘密 `secret_reference`、外发同意版本和探测状态。`keyring` 从开发依赖提升为运行时依赖。
+- Provider 边界：新增 `DeepSeekChatProvider`，固定请求别名、最短探测文本、`max_tokens=8`、`temperature=0` 和流式 Chat Completions；只在用户主动点击并提交 `confirm_external_transfer=true` 后读取 Key。统一映射 401/403、402、429、5xx、连接/读取超时、网络和异常响应；失败不删除 Key，不保存原始响应或正文。
+- API/前端：新增 `/api/v1/ai/provider` 状态、`/key` 保存/删除、`/test` 连接探测和 `/ai/consent` 版本化同意 API；OpenAPI 3.1 导出 `51 schemas / 62 operations`，生成前端类型同步。`/settings` 页面分开显示 Key 配置、外发同意和探测结果；明文输入提交后清空，不写入 LocalStorage/全局状态。
+- 测试证据：`uv run pytest tests/test_stage6_provider_configuration.py -q` 为 `12 passed`，覆盖配置/覆盖/删除、并发幂等/锁、固定请求体、无用户正文、失败保留 Key、错误映射、超时、usage token、同意版本、响应/数据库/日志/备份泄露和 Windows Credential Manager 实际 fixture；后端全量 `uv run pytest` 为 `206 passed, 158 warnings`；前端 `npm run test -- --run` 为 `25 passed`，真实 Chromium 设置流程 `1 passed`；Ruff、Pyright、compileall、typecheck、lint、build 均通过。
+- 真实外部调用：没有真实 DeepSeek 请求、真实 Key、用户文件、检索片段或付费 API；不能称真实 Provider 已联通，成功 fixture 只证明 Adapter 和错误边界。
+- 阶段遗留：阶段 5 Citation owner、用户级 RAG、Recall@10、10 万 Chunk 性能、最终答案质量和 AC-KB-* 全量验收继续保留；阶段 6 普通 Chat/Learning owner、正式生成、SSE UI、预算、自动回退和学习陪练尚未实现。详见 `docs/test-reports/stage-6-deepseek-credentials.md` 和阶段 5 报告新增遗留表。
+- 下一开发批次唯一目标：建立阶段 6 普通 Chat owner 的最小服务端生成边界，继续沿用凭据/外发同意门禁，不打开 RAG/Citation/SSE UI。

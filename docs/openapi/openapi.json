@@ -1013,6 +1013,188 @@
         }
       }
     },
+    "/api/v1/ai/provider": {
+      "get": {
+        "tags": [
+          "ai-provider"
+        ],
+        "summary": "Get Ai Provider Status",
+        "operationId": "get_ai_provider_status_api_v1_ai_provider_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiProviderStatusResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ai/provider/key": {
+      "post": {
+        "tags": [
+          "ai-provider"
+        ],
+        "summary": "Save Ai Provider Key",
+        "operationId": "save_ai_provider_key_api_v1_ai_provider_key_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApiKeyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiProviderStatusResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "ai-provider"
+        ],
+        "summary": "Delete Ai Provider Key",
+        "operationId": "delete_ai_provider_key_api_v1_ai_provider_key_delete",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiProviderStatusResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ai/provider/test": {
+      "post": {
+        "tags": [
+          "ai-provider"
+        ],
+        "summary": "Test Ai Provider Connection",
+        "operationId": "test_ai_provider_connection_api_v1_ai_provider_test_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectionTestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiProviderStatusResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ai/consent": {
+      "get": {
+        "tags": [
+          "ai-provider"
+        ],
+        "summary": "Get External Ai Consent",
+        "operationId": "get_external_ai_consent_api_v1_ai_consent_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsentResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "ai-provider"
+        ],
+        "summary": "Accept External Ai Consent",
+        "operationId": "accept_external_ai_consent_api_v1_ai_consent_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConsentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsentResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/file-imports": {
       "post": {
         "tags": [
@@ -2617,6 +2799,79 @@
   },
   "components": {
     "schemas": {
+      "AiProviderStatusResponse": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "configured": {
+            "type": "boolean",
+            "title": "Configured"
+          },
+          "credential_store": {
+            "$ref": "#/components/schemas/CredentialStoreResponse"
+          },
+          "requested_model": {
+            "type": "string",
+            "title": "Requested Model"
+          },
+          "consent": {
+            "$ref": "#/components/schemas/ConsentResponse"
+          },
+          "probe": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConnectionProbeResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_url": {
+            "type": "string",
+            "title": "Source Url"
+          },
+          "pricing_url": {
+            "type": "string",
+            "title": "Pricing Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "provider",
+          "display_name",
+          "configured",
+          "credential_store",
+          "requested_model",
+          "consent",
+          "source_url",
+          "pricing_url"
+        ],
+        "title": "AiProviderStatusResponse"
+      },
+      "ApiKeyRequest": {
+        "properties": {
+          "api_key": {
+            "type": "string",
+            "maxLength": 4096,
+            "minLength": 1,
+            "format": "password",
+            "title": "Api Key",
+            "writeOnly": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "api_key"
+        ],
+        "title": "ApiKeyRequest"
+      },
       "BackgroundTaskResponse": {
         "properties": {
           "import_id": {
@@ -2798,6 +3053,238 @@
           "files"
         ],
         "title": "Body_create_file_import_api_v1_file_imports_post"
+      },
+      "ConnectionProbeResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "success",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "checked_at": {
+            "type": "string",
+            "title": "Checked At"
+          },
+          "requested_model": {
+            "type": "string",
+            "title": "Requested Model"
+          },
+          "resolved_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved Model"
+          },
+          "stream_supported": {
+            "type": "string",
+            "enum": [
+              "supported",
+              "unsupported",
+              "unknown"
+            ],
+            "title": "Stream Supported"
+          },
+          "usage_supported": {
+            "type": "string",
+            "enum": [
+              "supported",
+              "unsupported",
+              "unknown"
+            ],
+            "title": "Usage Supported"
+          },
+          "structured_output_supported": {
+            "type": "string",
+            "enum": [
+              "supported",
+              "unsupported",
+              "unknown"
+            ],
+            "title": "Structured Output Supported"
+          },
+          "provider_request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Request Id"
+          },
+          "response_fingerprint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response Fingerprint"
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usage"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "error_detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Detail"
+          },
+          "retryable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retryable"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "checked_at",
+          "requested_model",
+          "stream_supported",
+          "usage_supported",
+          "structured_output_supported"
+        ],
+        "title": "ConnectionProbeResponse"
+      },
+      "ConnectionTestRequest": {
+        "properties": {
+          "confirm_external_transfer": {
+            "type": "boolean",
+            "title": "Confirm External Transfer",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "ConnectionTestRequest"
+      },
+      "ConsentRequest": {
+        "properties": {
+          "version": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version"
+        ],
+        "title": "ConsentRequest"
+      },
+      "ConsentResponse": {
+        "properties": {
+          "current_version": {
+            "type": "string",
+            "title": "Current Version"
+          },
+          "accepted": {
+            "type": "boolean",
+            "title": "Accepted"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "accepted_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepted At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "current_version",
+          "accepted"
+        ],
+        "title": "ConsentResponse"
+      },
+      "CredentialStoreResponse": {
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "title": "Available"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "available",
+          "type"
+        ],
+        "title": "CredentialStoreResponse"
       },
       "DuplicateDecision": {
         "properties": {
