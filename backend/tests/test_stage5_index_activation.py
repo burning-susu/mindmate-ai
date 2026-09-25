@@ -889,3 +889,55 @@ def test_activation_resumes_after_interruption_and_commit_failure_rolls_back(
             session.get(KnowledgeBase, data.knowledge_base_id).active_index_version_id
             == candidate_id
         )
+
+
+def test_activation_scanner_queues_each_next_persistent_index_stage(activation_runtime) -> None:
+    data = _seed_candidate(activation_runtime)
+    version_id = data.candidate_ids[0]
+    stage_types = {CHUNK_GENERATION_TASK, INDEX_EMBED_TASK, INDEX_FTS_TASK}
+    with data.factory() as session:
+        version = session.get(IndexVersion, version_id)
+        assert version is not None
+        version.chunking_status = "NOT_STARTED"
+        version.embedding_status = "NOT_STARTED"
+        version.fts_status = "NOT_STARTED"
+        for task in session.scalars(
+            select(BackgroundTask).where(BackgroundTask.task_type.in_(stage_types))
+        ):
+            checkpoint = task.checkpoint_json or {}
+            if checkpoint.get("index_version_id") == version_id:
+                session.delete(task)
+        session.commit()
+
+    worker = IndexActivationWorker(data.factory, data.settings)
+    worker.run_once()
+    with data.factory() as session:
+        chunk_tasks = [
+            task
+            for task in session.scalars(
+                select(BackgroundTask).where(
+                    BackgroundTask.task_type == CHUNK_GENERATION_TASK
+                )
+            )
+            if (task.checkpoint_json or {}).get("index_version_id") == version_id
+        ]
+        assert len(chunk_tasks) == 1
+        assert chunk_tasks[0].status == "QUEUED"
+        version = session.get(IndexVersion, version_id)
+        assert version is not None
+        version.chunking_status = "COMPLETED"
+        session.commit()
+
+    worker.run_once()
+    with data.factory() as session:
+        version_tasks = [
+            task
+            for task in session.scalars(
+                select(BackgroundTask).where(BackgroundTask.task_type.in_(stage_types))
+            )
+            if (task.checkpoint_json or {}).get("index_version_id") == version_id
+        ]
+        queued_types = {task.task_type for task in version_tasks if task.status == "QUEUED"}
+        assert stage_types.issubset(queued_types)
+        assert sum(task.task_type == INDEX_EMBED_TASK for task in version_tasks) == 1
+        assert sum(task.task_type == INDEX_FTS_TASK for task in version_tasks) == 1

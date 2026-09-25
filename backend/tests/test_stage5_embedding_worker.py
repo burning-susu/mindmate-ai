@@ -98,6 +98,7 @@ def embedding_runtime(tmp_path: Path):
         index_worker_poll_seconds=60,
         index_chunk_worker_poll_seconds=60,
         index_embedding_worker_poll_seconds=60,
+        index_activation_worker_poll_seconds=60,
     )
     with TestClient(create_app(settings), base_url="http://127.0.0.1") as client:
         assert client.post(

@@ -28,6 +28,34 @@ function response(payload: unknown, status = 200) {
   })
 }
 
+type MockIndexStatus = {
+  knowledge_base_id: string
+  status: string
+  active_index_version_id: string | null
+  active_index_version_status: string | null
+  target_index_version_id: string | null
+  target_index_version_status: string | null
+  target_stage: string | null
+  file_counts: { total: number; available: number; processing: number; failed: number }
+  failures: Array<{ file_id: string; display_name: string; stage: string; reason_code: string; message: string; retryable: boolean; diagnostic_id: string | null }>
+  tasks: Array<{ task_id: string; task_type: string; status: string; phase: string | null; progress: number | null; diagnostic_id: string; message: string | null }>
+  embedding_model_state: string
+  embedding_model_error_code: string | null
+  operation_in_progress: boolean
+  can_retry_failed: boolean
+  can_rebuild: boolean
+}
+
+const emptyIndexStatus: MockIndexStatus = {
+  knowledge_base_id: 'kb-1', status: 'EMPTY', active_index_version_id: null,
+  active_index_version_status: null, target_index_version_id: null,
+  target_index_version_status: null, target_stage: null,
+  file_counts: { total: 0, available: 0, processing: 0, failed: 0 },
+  failures: [], tasks: [], embedding_model_state: 'MISSING_OFFLINE',
+  embedding_model_error_code: null, operation_in_progress: false,
+  can_retry_failed: false, can_rebuild: false,
+}
+
 describe('stage 5 knowledge base foundation', () => {
   afterEach(() => vi.unstubAllGlobals())
 
@@ -36,6 +64,7 @@ describe('stage 5 knowledge base foundation', () => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
       if (url.includes('/system/session')) return response({ status: 'ready' })
+      if (url.endsWith('/index-status')) return response(emptyIndexStatus)
       if (url.endsWith('/api/v1/knowledge-bases')) return response({ items: [baseItem], next_cursor: null })
       return response({ status: 'ok', version: '0.1.0' })
     }))
@@ -54,6 +83,7 @@ describe('stage 5 knowledge base foundation', () => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
       if (url.includes('/system/session')) return response({ status: 'ready' })
+      if (url.endsWith('/index-status')) return response(emptyIndexStatus)
       if (url.endsWith('/api/v1/knowledge-bases') && init?.method === 'POST') {
         createBody = JSON.parse(String(init.body)) as Record<string, unknown>
         return response({ ...baseItem, name: createBody.name, description: createBody.description }, 201)
@@ -76,6 +106,7 @@ describe('stage 5 knowledge base foundation', () => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
       if (url.includes('/system/session')) return response({ status: 'ready' })
+      if (url.endsWith('/index-status')) return response(emptyIndexStatus)
       if (url.endsWith('/api/v1/knowledge-bases/kb-1') && init?.method === 'PATCH') {
         patchBody = JSON.parse(String(init.body)) as Record<string, unknown>
         return response({ ...baseItem, ...patchBody, row_version: 4 })
@@ -115,6 +146,11 @@ describe('stage 5 knowledge base foundation', () => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
       if (url.includes('/system/session')) return response({ status: 'ready' })
+      if (url.endsWith('/index-status')) return response({
+        ...emptyIndexStatus,
+        status: 'PREPARING',
+        file_counts: { total: taskPolls > 0 && !removed ? 1 : 0, available: 0, processing: taskPolls > 0 && !removed ? 1 : 0, failed: 0 },
+      })
       if (url.endsWith('/api/v1/knowledge-bases/kb-1/files') && init?.method === 'POST') {
         addBody = JSON.parse(String(init.body)) as Record<string, unknown>
         return response({ task_id: 'task-1', status: 'QUEUED', phase: null, progress: 0, knowledge_base_id: 'kb-1', items: [], results: [], summary: null, error: null }, 202)
@@ -141,6 +177,82 @@ describe('stage 5 knowledge base foundation', () => {
     const removeButton = await screen.findByRole('button', { name: '移出知识库 讲义.txt' })
     fireEvent.click(removeButton)
     await waitFor(() => expect(removed).toBe(true))
+  })
+
+  it('retries failed files, cancels the persisted stage, and confirms full rebuild', async () => {
+    window.history.pushState({}, '', '/knowledge-bases/kb-1')
+    vi.stubGlobal('confirm', vi.fn(() => true))
+    let status = {
+      ...emptyIndexStatus,
+      status: 'FAILED',
+      file_counts: { total: 1, available: 0, processing: 0, failed: 1 },
+      failures: [{ file_id: 'failed-1', display_name: '失败资料.txt', stage: 'EMBEDDING', reason_code: 'MODEL_MISSING_OFFLINE', message: '本地模型缺失。', retryable: true, diagnostic_id: 'diag-1' }],
+      can_retry_failed: true,
+      can_rebuild: true,
+    }
+    const calls: Array<{ url: string; method?: string; body?: unknown }> = []
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.includes('/system/session')) return response({ status: 'ready' })
+      if (url.endsWith('/index-status')) return response(status)
+      if (url.endsWith('/index/retry-failed') && init?.method === 'POST') {
+        calls.push({ url, method: init.method, body: JSON.parse(String(init.body)) })
+        status = {
+          ...status,
+          operation_in_progress: true,
+          can_retry_failed: false,
+          can_rebuild: false,
+          target_index_version_id: 'version-new',
+          target_index_version_status: 'BUILDING',
+          target_stage: 'PREPROCESSING',
+          tasks: [{ task_id: 'task-retry', task_type: 'INDEX_PREPROCESS', status: 'QUEUED', phase: 'QUEUED', progress: null, diagnostic_id: 'task-retry', message: null }],
+        }
+        return response({ task_id: 'task-retry', task_type: 'INDEX_PREPROCESS', status: 'QUEUED', phase: 'QUEUED', progress: null, knowledge_base_id: 'kb-1', index_version_id: null, items: [], results: [], summary: null, error: null }, 202)
+      }
+      if (url.endsWith('/tasks/task-retry/cancel') && init?.method === 'POST') {
+        calls.push({ url, method: init.method })
+        status = {
+          ...status,
+          operation_in_progress: false,
+          can_rebuild: true,
+          target_index_version_id: null,
+          target_index_version_status: null,
+          target_stage: null,
+          tasks: [{ task_id: 'task-retry', task_type: 'INDEX_PREPROCESS', status: 'CANCELLED', phase: 'CANCELLED', progress: 0, diagnostic_id: 'task-retry', message: '任务已取消。' }],
+        }
+        return response({ task_id: 'task-retry', task_type: 'INDEX_PREPROCESS', status: 'CANCELLED', phase: 'CANCELLED', progress: 0, knowledge_base_id: 'kb-1', index_version_id: null, items: [], results: [], summary: null, error: null })
+      }
+      if (url.endsWith('/index/rebuild') && init?.method === 'POST') {
+        calls.push({ url, method: init.method })
+        status = {
+          ...status,
+          operation_in_progress: true,
+          can_rebuild: false,
+          target_index_version_id: 'version-rebuild',
+          target_index_version_status: 'BUILDING',
+          target_stage: 'PREPROCESSING',
+          tasks: [{ task_id: 'task-rebuild', task_type: 'INDEX_PREPROCESS', status: 'QUEUED', phase: 'QUEUED', progress: null, diagnostic_id: 'task-rebuild', message: null }],
+        }
+        return response({ task_id: 'task-rebuild', task_type: 'INDEX_PREPROCESS', status: 'QUEUED', phase: 'QUEUED', progress: null, knowledge_base_id: 'kb-1', index_version_id: null, items: [], results: [], summary: null, error: null }, 202)
+      }
+      if (url.endsWith('/api/v1/knowledge-bases/kb-1/files')) return response({ items: [] })
+      if (url.includes('/api/v1/files?sort=name')) return response({ items: [], next_cursor: null })
+      if (url.endsWith('/api/v1/knowledge-bases/kb-1')) return response({ ...baseItem, status: 'READY', file_count: 1 })
+      return response({ status: 'ok', version: '0.1.0' })
+    }))
+
+    render(<BrowserRouter><App /></BrowserRouter>)
+    expect(await screen.findByText('失败资料.txt')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '重试失败文件 (1)' }))
+    expect(await screen.findByText('诊断 ID：task-retry')).toBeInTheDocument()
+    expect(calls.find((call) => call.url.endsWith('/index/retry-failed'))?.body).toEqual({ file_ids: ['failed-1'] })
+
+    fireEvent.click(screen.getByRole('button', { name: '取消准备文件' }))
+    expect(await screen.findByText('任务已取消。')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '重建当前知识库索引' }))
+    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('已有活动版本会继续用于检索'))
+    expect(await screen.findByText('诊断 ID：task-rebuild')).toBeInTheDocument()
+    expect(calls.some((call) => call.url.endsWith('/index/rebuild'))).toBe(true)
   })
 
   it('loads knowledge bases in trash and restores with the persisted version', async () => {

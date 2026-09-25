@@ -10,9 +10,10 @@ from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.orm import Session
 
+from mindmate.ai.embeddings.model_manager import ModelManager, ModelStatus
 from mindmate.api.files import VERSION_CONFLICT_RESPONSES, FileApiError
 from mindmate.application.chunking import CHUNK_GENERATION_TASK
 from mindmate.application.evidence_gate import unavailable_assessment
@@ -26,7 +27,10 @@ from mindmate.application.hybrid_search import (
 )
 from mindmate.application.index_embedding import INDEX_EMBED_TASK, validate_embedding_config
 from mindmate.application.index_fts import INDEX_FTS_TASK
-from mindmate.application.index_preprocessing import INDEX_PREPROCESS_TASK
+from mindmate.application.index_preprocessing import (
+    INDEX_PREPROCESS_TASK,
+    enqueue_index_preprocessing,
+)
 from mindmate.application.knowledge_membership_worker import KNOWLEDGE_MEMBERSHIP_TASK
 from mindmate.application.retrieval_test_queries import RetrievalQueryEncoderError
 from mindmate.application.source_snapshots import purge_source_snapshots_for_knowledge_base
@@ -176,6 +180,63 @@ class KnowledgeMembershipTaskResponse(BaseModel):
     results: list[dict[str, Any]]
     summary: dict[str, Any] | None = None
     error: str | None = None
+
+
+class IndexFileFailureResponse(BaseModel):
+    file_id: str
+    display_name: str
+    stage: str
+    reason_code: str
+    message: str
+    retryable: bool
+    diagnostic_id: str | None = None
+
+
+class IndexTaskStatusResponse(BaseModel):
+    task_id: str
+    task_type: str
+    status: str
+    phase: str | None = None
+    progress: int | None = None
+    diagnostic_id: str
+    message: str | None = None
+
+
+class IndexFileCountsResponse(BaseModel):
+    total: int
+    available: int
+    processing: int
+    failed: int
+
+
+class KnowledgeBaseIndexStatusResponse(BaseModel):
+    knowledge_base_id: str
+    status: str
+    active_index_version_id: str | None = None
+    active_index_version_status: str | None = None
+    target_index_version_id: str | None = None
+    target_index_version_status: str | None = None
+    target_stage: str | None = None
+    file_counts: IndexFileCountsResponse
+    failures: list[IndexFileFailureResponse]
+    tasks: list[IndexTaskStatusResponse]
+    embedding_model_state: str
+    embedding_model_error_code: str | None = None
+    operation_in_progress: bool
+    can_retry_failed: bool
+    can_rebuild: bool
+
+
+class RetryFailedIndexRequest(BaseModel):
+    file_ids: list[str] = Field(min_length=1, max_length=500)
+
+    @field_validator("file_ids")
+    @classmethod
+    def validate_file_ids(cls, value: list[str]) -> list[str]:
+        unique = list(dict.fromkeys(value))
+        if len(unique) != len(value):
+            raise ValueError("失败文件不能重复。")
+        return unique
 
 
 class RetrievalTestRequest(BaseModel):
@@ -368,6 +429,336 @@ def _membership_task_payload(task: BackgroundTask) -> dict[str, Any]:
     }
 
 
+_INDEX_TASK_TYPES = (
+    INDEX_PREPROCESS_TASK,
+    CHUNK_GENERATION_TASK,
+    INDEX_EMBED_TASK,
+    INDEX_FTS_TASK,
+)
+_INDEX_STAGE_FIELDS = (
+    ("PREPROCESSING", "status", None),
+    ("CHUNKING", "chunk_status", "chunk_reason_code"),
+    ("EMBEDDING", "embedding_status", "embedding_reason_code"),
+    ("FTS", "fts_status", "fts_reason_code"),
+)
+_INDEX_REASON_MESSAGES = {
+    "PARSE_FAILED": "文件解析失败，请先在文件详情中重新处理文件。",
+    "PARSE_REVISION_UNAVAILABLE": "文件解析版本不可用，请重新处理文件后重试。",
+    "PARSED_CONTENT_UNAVAILABLE": "已解析内容校验失败，请重新处理文件后重试。",
+    "PARSED_TEXT_EMPTY": "文件没有可建立索引的正文，请检查文件内容。",
+    "MODEL_MISSING_OFFLINE": "本地 Embedding 模型缺失；当前操作没有触发下载。恢复模型后可重试。",
+    "MODEL_ARTIFACT_INVALID": "本地 Embedding 模型校验失败；当前操作没有触发下载。",
+    "EMBEDDING_CONFIG_INVALID": "Embedding 配置未通过校验，请检查本地模型配置后重试。",
+    "CHUNK_WRITE_RACE": "切片保存时数据发生变化，可以重试失败文件。",
+    "FTS_WRITE_RACE": "关键词索引写入时数据发生变化，可以重试失败文件。",
+    "KNOWLEDGE_BASE_IN_TRASH": "知识库已进入回收站，索引任务已跳过。",
+    "FILE_IN_TRASH": "文件已进入回收站，无法加入当前索引。",
+}
+
+
+def _safe_index_reason(value: str | None) -> str:
+    if value and re.fullmatch(r"[A-Z][A-Z0-9_]{0,79}", value):
+        return value
+    return "INDEX_BUILD_FAILED"
+
+
+def _index_failure_message(reason_code: str) -> str:
+    return _INDEX_REASON_MESSAGES.get(
+        reason_code,
+        "索引阶段未完成。可重试失败文件；如果问题持续，请重建当前知识库并记录诊断 ID。",
+    )
+
+
+def _embedding_model_status(request: Request) -> ModelStatus:
+    status = getattr(request.app.state, "embedding_model_status", None)
+    if status is None:
+        # ModelManager verifies file hashes; task polling must not rehash the model each time.
+        status = ModelManager(request.app.state.settings.model_dir).status(offline=True)
+        request.app.state.embedding_model_status = status
+    return status
+
+
+def _index_status_payload(
+    session: Session,
+    record: KnowledgeBase,
+    request: Request,
+) -> dict[str, Any]:
+    knowledge_base_id = record.knowledge_base_id
+    members = session.execute(
+        select(KnowledgeBaseFile, FileRecord)
+        .join(FileRecord, FileRecord.file_id == KnowledgeBaseFile.file_id)
+        .where(
+            KnowledgeBaseFile.knowledge_base_id == knowledge_base_id,
+            KnowledgeBaseFile.membership_status == "ACTIVE",
+            FileRecord.deleted_at.is_(None),
+        )
+    ).all()
+    member_by_file = {file.file_id: (member, file) for member, file in members}
+    versions = list(
+        session.scalars(
+            select(IndexVersion)
+            .where(
+                IndexVersion.scope_type == "KNOWLEDGE_BASE",
+                IndexVersion.scope_id == knowledge_base_id,
+            )
+            .order_by(IndexVersion.created_at.desc(), IndexVersion.index_version_id.desc())
+        )
+    )
+    active = (
+        session.get(IndexVersion, record.active_index_version_id)
+        if record.active_index_version_id
+        else None
+    )
+    target = next((version for version in versions if version.status == "BUILDING"), None)
+    visible_target = target or (
+        versions[0]
+        if versions
+        and versions[0].index_version_id != record.active_index_version_id
+        and versions[0].status in {"FAILED", "SUPERSEDED"}
+        else None
+    )
+    diagnostic_version = visible_target or active or (versions[0] if versions else None)
+    task_scope_conditions = [
+        BackgroundTask.checkpoint_json["knowledge_base_id"].as_string() == knowledge_base_id
+    ]
+    relevant_version_ids = {
+        version.index_version_id
+        for version in (active, visible_target)
+        if version is not None
+    }
+    if relevant_version_ids:
+        task_scope_conditions.append(
+            BackgroundTask.checkpoint_json["index_version_id"]
+            .as_string()
+            .in_(relevant_version_ids)
+        )
+    tasks = list(
+        session.scalars(
+            select(BackgroundTask)
+            .where(
+                BackgroundTask.task_type.in_((*_INDEX_TASK_TYPES, KNOWLEDGE_MEMBERSHIP_TASK)),
+                or_(*task_scope_conditions),
+            )
+            .order_by(BackgroundTask.created_at.desc(), BackgroundTask.task_id.desc())
+            .limit(64)
+        )
+    )
+    relevant_tasks = tasks
+    task_by_version_and_type: dict[tuple[str, str], BackgroundTask] = {}
+    for task in relevant_tasks:
+        checkpoint = task.checkpoint_json if isinstance(task.checkpoint_json, dict) else {}
+        version_id = checkpoint.get("index_version_id")
+        if isinstance(version_id, str):
+            key = (version_id, task.task_type)
+            current = task_by_version_and_type.get(key)
+            if current is None or (task.created_at, task.task_id) > (
+                current.created_at,
+                current.task_id,
+            ):
+                task_by_version_and_type[key] = task
+
+    version_inputs: list[IndexVersionInput] = []
+    if diagnostic_version is not None:
+        version_inputs = list(
+            session.scalars(
+                select(IndexVersionInput).where(
+                    IndexVersionInput.index_version_id == diagnostic_version.index_version_id
+                )
+            )
+        )
+    failures_by_file: dict[str, dict[str, Any]] = {}
+    for item in version_inputs:
+        if item.file_id not in member_by_file:
+            continue
+        failure_stage: str | None = None
+        reason: str | None = None
+        if item.status == "FAILED":
+            failure_stage, reason = "PREPROCESSING", item.reason_code
+        else:
+            for stage, state_field, reason_field in _INDEX_STAGE_FIELDS[1:]:
+                if getattr(item, state_field) == "FAILED":
+                    failure_stage = stage
+                    reason = getattr(item, reason_field) if reason_field else None
+                    break
+        if failure_stage is not None and diagnostic_version is not None:
+            task_type = {
+                "PREPROCESSING": INDEX_PREPROCESS_TASK,
+                "CHUNKING": CHUNK_GENERATION_TASK,
+                "EMBEDDING": INDEX_EMBED_TASK,
+                "FTS": INDEX_FTS_TASK,
+            }[failure_stage]
+            diagnostic_task = task_by_version_and_type.get(
+                (diagnostic_version.index_version_id, task_type)
+            )
+            reason_code = _safe_index_reason(reason)
+            failures_by_file[item.file_id] = {
+                "stage": failure_stage,
+                "reason_code": reason_code,
+                "diagnostic_id": diagnostic_task.task_id if diagnostic_task else None,
+            }
+
+    for member, file in members:
+        if file.deleted_at is not None:
+            continue
+        if file.status == "PARSE_FAILED" and file.file_id not in failures_by_file:
+            failures_by_file[file.file_id] = {
+                "stage": "PARSING",
+                "reason_code": "PARSE_FAILED",
+                "diagnostic_id": None,
+            }
+        elif member.index_state == "FAILED" and file.file_id not in failures_by_file:
+            failures_by_file[file.file_id] = {
+                "stage": "INDEXING",
+                "reason_code": "INDEX_BUILD_FAILED",
+                "diagnostic_id": None,
+            }
+
+    failures = []
+    for file_id, failure in failures_by_file.items():
+        member, file = member_by_file[file_id]
+        reason_code = str(failure["reason_code"])
+        failures.append(
+            {
+                "file_id": file_id,
+                "display_name": file.display_name,
+                "stage": str(failure["stage"]),
+                "reason_code": reason_code,
+                "message": _index_failure_message(reason_code),
+                "retryable": file.deleted_at is None and file.status == "PARSED",
+                "diagnostic_id": failure["diagnostic_id"],
+            }
+        )
+    failures.sort(key=lambda item: (item["display_name"].casefold(), item["file_id"]))
+
+    available_ids = {
+        file.file_id
+        for member, file in members
+        if member.index_state == "READY" and file.deleted_at is None and file.status == "PARSED"
+    }
+    failed_ids = set(failures_by_file)
+    processing_ids = {
+        file.file_id
+        for member, file in members
+        if (
+            file.deleted_at is None
+            and (
+                file.status in {"QUEUED", "PARSING"}
+                or (
+                    member.index_state in {"PENDING", "PROCESSING"}
+                    and file.status != "PARSE_FAILED"
+                )
+            )
+        )
+    }
+    if target is not None:
+        for item in version_inputs:
+            if item.file_id not in member_by_file or item.file_id in failed_ids:
+                continue
+            if item.status in {"PENDING", "RUNNING"} or any(
+                getattr(item, field) in {"PENDING", "RUNNING"}
+                for _stage, field, _reason in _INDEX_STAGE_FIELDS[1:]
+            ):
+                processing_ids.add(item.file_id)
+    processing_ids.difference_update(failed_ids)
+    active_index_tasks = [
+        task
+        for task in relevant_tasks
+        if task.task_type in _INDEX_TASK_TYPES
+        and task.status in {"QUEUED", "RUNNING", "INTERRUPTED"}
+    ]
+    membership_task_running = any(
+        task.task_type == KNOWLEDGE_MEMBERSHIP_TASK
+        and task.status in {"QUEUED", "RUNNING", "INTERRUPTED"}
+        for task in relevant_tasks
+    )
+    operation_in_progress = bool(active_index_tasks or membership_task_running or target)
+
+    if not members:
+        status = "EMPTY"
+    elif len(available_ids) == len(members):
+        status = "READY"
+    elif available_ids:
+        status = "PARTIAL"
+    elif operation_in_progress or processing_ids:
+        status = "PREPARING"
+    elif len(failed_ids) >= len(members):
+        status = "FAILED"
+    elif record.status == "NEEDS_REBUILD":
+        status = "NEEDS_REBUILD"
+    else:
+        status = "PREPARING"
+
+    target_task = None
+    if visible_target is not None:
+        target_tasks = [
+            task_by_version_and_type[(visible_target.index_version_id, task_type)]
+            for task_type in _INDEX_TASK_TYPES
+            if (visible_target.index_version_id, task_type) in task_by_version_and_type
+        ]
+        target_task = next(
+            (task for task in target_tasks if task.status in {"QUEUED", "RUNNING", "INTERRUPTED"}),
+            None,
+        ) or next((task for task in target_tasks if task.status == "FAILED"), None)
+    target_stage = target_task.phase if target_task is not None else None
+    if visible_target is not None and target_stage is None:
+        for stage, field, _reason in _INDEX_STAGE_FIELDS:
+            stage_field = {
+                "status": "preprocessing_status",
+                "chunk_status": "chunking_status",
+                "embedding_status": "embedding_status",
+                "fts_status": "fts_status",
+            }.get(field, field)
+            if getattr(visible_target, stage_field) not in {"COMPLETED", "PARTIAL"}:
+                target_stage = stage
+                break
+        if target_stage is None and visible_target.status in {"FAILED", "SUPERSEDED"}:
+            target_stage = visible_target.activation_error_code or "ACTIVATION_FAILED"
+
+    recent_tasks = []
+    for task in relevant_tasks[:16]:
+        message = None
+        if task.status == "FAILED":
+            message = "任务失败。展开失败文件查看可安全展示的原因和诊断 ID。"
+        elif task.status == "CANCELLED":
+            message = "任务已取消。"
+        recent_tasks.append(
+            {
+                "task_id": task.task_id,
+                "task_type": task.task_type,
+                "status": task.status,
+                "phase": task.phase,
+                "progress": task.progress,
+                "diagnostic_id": task.task_id,
+                "message": message,
+            }
+        )
+
+    model_status = _embedding_model_status(request)
+    return {
+        "knowledge_base_id": knowledge_base_id,
+        "status": status,
+        "active_index_version_id": active.index_version_id if active else None,
+        "active_index_version_status": active.status if active else None,
+        "target_index_version_id": visible_target.index_version_id if visible_target else None,
+        "target_index_version_status": visible_target.status if visible_target else None,
+        "target_stage": target_stage,
+        "file_counts": {
+            "total": len(members),
+            "available": len(available_ids),
+            "processing": len(processing_ids),
+            "failed": len(failed_ids),
+        },
+        "failures": failures,
+        "tasks": recent_tasks,
+        "embedding_model_state": model_status.state.value,
+        "embedding_model_error_code": model_status.error_code,
+        "operation_in_progress": operation_in_progress,
+        "can_retry_failed": any(failure["retryable"] for failure in failures)
+        and not operation_in_progress,
+        "can_rebuild": bool(members) and not operation_in_progress,
+    }
+
+
 def _atomic_update(
     session: Session,
     knowledge_base_id: str,
@@ -404,6 +795,65 @@ def _atomic_update(
     if updated is None:
         raise FileApiError("KNOWLEDGE_BASE_NOT_FOUND", "知识库不存在。", 404)
     return updated
+
+
+def _create_index_operation(
+    knowledge_base_id: str,
+    request: Request,
+    session: Session,
+    *,
+    operation: Literal["RETRY_FAILED_FILES", "REBUILD"],
+    file_ids: list[str] | None = None,
+) -> dict[str, Any]:
+    record = _get(session, knowledge_base_id)
+    request_key = request.headers.get("idempotency-key") or new_id()
+    idempotency_key = "kb-index-op:" + sha256(
+        f"{knowledge_base_id}:{operation}:{request_key}".encode()
+    ).hexdigest()
+    existing = session.scalar(
+        select(BackgroundTask).where(BackgroundTask.idempotency_key == idempotency_key)
+    )
+    if existing is not None:
+        return _membership_task_payload(existing)
+
+    status = _index_status_payload(session, record, request)
+    if status["file_counts"]["total"] == 0:
+        raise FileApiError("INDEX_INPUT_REQUIRED", "当前知识库没有可用成员，无法建立索引。", 409)
+    if status["operation_in_progress"]:
+        raise FileApiError(
+            "INDEX_OPERATION_IN_PROGRESS",
+            "当前知识库已有索引或成员任务正在处理，请等待该任务结束。",
+            409,
+        )
+    if operation == "RETRY_FAILED_FILES":
+        retryable = {
+            failure["file_id"]
+            for failure in status["failures"]
+            if failure["retryable"]
+        }
+        requested = set(file_ids or [])
+        if not requested or not requested.issubset(retryable):
+            raise FileApiError(
+                "INDEX_RETRY_SCOPE_INVALID",
+                "只能重试当前知识库中仍有效、已解析且确实失败的成员文件。请刷新失败列表后重试。",
+                409,
+            )
+
+    task = enqueue_index_preprocessing(
+        session,
+        knowledge_base_id,
+        idempotency_key,
+        force_new=True,
+        full_rebuild=operation == "REBUILD",
+    )
+    checkpoint = task.checkpoint_json if isinstance(task.checkpoint_json, dict) else {}
+    task.checkpoint_json = {
+        **checkpoint,
+        "operation": operation,
+        "requested_failed_file_ids": sorted(file_ids or []),
+    }
+    session.commit()
+    return _membership_task_payload(task)
 
 
 @router.get("/knowledge-bases", response_model=KnowledgeBaseListResponse, tags=["knowledge-bases"])
@@ -451,6 +901,59 @@ def get_knowledge_base(
     knowledge_base_id: str, session: Session = Depends(get_session)
 ) -> dict[str, Any]:
     return _payload(session, _get(session, knowledge_base_id))
+
+
+@router.get(
+    "/knowledge-bases/{knowledge_base_id}/index-status",
+    response_model=KnowledgeBaseIndexStatusResponse,
+    tags=["knowledge-bases"],
+)
+def get_knowledge_base_index_status(
+    knowledge_base_id: str,
+    request: Request,
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    return _index_status_payload(session, _get(session, knowledge_base_id), request)
+
+
+@router.post(
+    "/knowledge-bases/{knowledge_base_id}/index/retry-failed",
+    status_code=202,
+    response_model=KnowledgeMembershipTaskResponse,
+    tags=["knowledge-bases"],
+)
+def retry_failed_knowledge_base_index_files(
+    knowledge_base_id: str,
+    payload: RetryFailedIndexRequest,
+    request: Request,
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    return _create_index_operation(
+        knowledge_base_id,
+        request,
+        session,
+        operation="RETRY_FAILED_FILES",
+        file_ids=payload.file_ids,
+    )
+
+
+@router.post(
+    "/knowledge-bases/{knowledge_base_id}/index/rebuild",
+    status_code=202,
+    response_model=KnowledgeMembershipTaskResponse,
+    tags=["knowledge-bases"],
+)
+def rebuild_knowledge_base_index(
+    knowledge_base_id: str,
+    request: Request,
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    return _create_index_operation(
+        knowledge_base_id,
+        request,
+        session,
+        operation="REBUILD",
+    )
 
 
 @router.get(

@@ -270,6 +270,9 @@ class IndexPreprocessingWorker:
             incremental_compatible, compatibility_reason = self._reuse_compatibility(
                 session, active_version, chunking, embedding
             )
+            if (task.checkpoint_json or {}).get("full_rebuild") is True:
+                incremental_compatible = False
+                compatibility_reason = "FULL_REBUILD_REQUESTED"
             reuse_by_file: dict[str, str] = {}
             change_by_file: dict[str, str] = {}
             active_by_file = {item.file_id: item for item in active_inputs}

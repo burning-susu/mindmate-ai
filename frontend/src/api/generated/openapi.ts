@@ -124,6 +124,30 @@ export interface components {
     "knowledge_base_id"?: string | null;
     "error"?: string | null
   };
+  "IndexFileCountsResponse": {
+    "total": number;
+    "available": number;
+    "processing": number;
+    "failed": number
+  };
+  "IndexFileFailureResponse": {
+    "file_id": string;
+    "display_name": string;
+    "stage": string;
+    "reason_code": string;
+    "message": string;
+    "retryable": boolean;
+    "diagnostic_id"?: string | null
+  };
+  "IndexTaskStatusResponse": {
+    "task_id": string;
+    "task_type": string;
+    "status": string;
+    "phase"?: string | null;
+    "progress"?: number | null;
+    "diagnostic_id": string;
+    "message"?: string | null
+  };
   "KnowledgeBaseCreate": {
     "name": string;
     "description"?: string | null;
@@ -132,6 +156,23 @@ export interface components {
   };
   "KnowledgeBaseFilesAdd": {
     "file_ids": Array<string>
+  };
+  "KnowledgeBaseIndexStatusResponse": {
+    "knowledge_base_id": string;
+    "status": string;
+    "active_index_version_id"?: string | null;
+    "active_index_version_status"?: string | null;
+    "target_index_version_id"?: string | null;
+    "target_index_version_status"?: string | null;
+    "target_stage"?: string | null;
+    "file_counts": components["IndexFileCountsResponse"];
+    "failures": Array<components["IndexFileFailureResponse"]>;
+    "tasks": Array<components["IndexTaskStatusResponse"]>;
+    "embedding_model_state": string;
+    "embedding_model_error_code"?: string | null;
+    "operation_in_progress": boolean;
+    "can_retry_failed": boolean;
+    "can_rebuild": boolean
   };
   "KnowledgeBaseListResponse": {
     "items": Array<components["KnowledgeBaseResponse"]>;
@@ -254,6 +295,9 @@ export interface components {
     "local_message"?: string | null;
     "suggestions": Array<string>
   };
+  "RetryFailedIndexRequest": {
+    "file_ids": Array<string>
+  };
   "ServiceStatus": {
     "status": string;
     "service": string;
@@ -340,6 +384,15 @@ export interface operations {
   };
   "DELETE /api/v1/knowledge-bases/{knowledge_base_id}": {
     operationId: "trash_knowledge_base_api_v1_knowledge_bases__knowledge_base_id__delete"
+  };
+  "GET /api/v1/knowledge-bases/{knowledge_base_id}/index-status": {
+    operationId: "get_knowledge_base_index_status_api_v1_knowledge_bases__knowledge_base_id__index_status_get"
+  };
+  "POST /api/v1/knowledge-bases/{knowledge_base_id}/index/retry-failed": {
+    operationId: "retry_failed_knowledge_base_index_files_api_v1_knowledge_bases__knowledge_base_id__index_retry_failed_post"
+  };
+  "POST /api/v1/knowledge-bases/{knowledge_base_id}/index/rebuild": {
+    operationId: "rebuild_knowledge_base_index_api_v1_knowledge_bases__knowledge_base_id__index_rebuild_post"
   };
   "GET /api/v1/knowledge-bases/{knowledge_base_id}/files": {
     operationId: "list_knowledge_base_files_api_v1_knowledge_bases__knowledge_base_id__files_get"

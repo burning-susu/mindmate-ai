@@ -1,14 +1,26 @@
 from __future__ import annotations
 
 import threading
+from datetime import UTC, datetime
 from pathlib import Path
 from time import monotonic, sleep
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
+from mindmate.application.index_preprocessing import get_or_create_default_configs
 from mindmate.application.knowledge_membership_worker import KnowledgeMembershipWorker
 from mindmate.config import Settings
+from mindmate.infrastructure.models import (
+    BackgroundTask,
+    FileRecord,
+    IndexVersion,
+    IndexVersionInput,
+    KnowledgeBase,
+    KnowledgeBaseFile,
+    new_id,
+)
 from mindmate.main import create_app
 
 
@@ -104,6 +116,288 @@ def test_empty_knowledge_base_crud_and_duplicate_hint(knowledge_client) -> None:
         "description"
     ] == "更新后的说明"
 
+
+def test_index_status_reports_empty_and_pending_member_state(knowledge_client) -> None:
+    client, _ = knowledge_client
+    knowledge_base = create_kb(client, "索引状态")
+    empty_status = client.get(
+        f"/api/v1/knowledge-bases/{knowledge_base['knowledge_base_id']}/index-status"
+    )
+    assert empty_status.status_code == 200
+    assert empty_status.json()["status"] == "EMPTY"
+    assert empty_status.json()["file_counts"] == {
+        "total": 0,
+        "available": 0,
+        "processing": 0,
+        "failed": 0,
+    }
+    assert empty_status.json()["active_index_version_id"] is None
+    assert empty_status.json()["failures"] == []
+
+    file_id = import_text(
+        client, "状态讲义.txt", "可观察的索引状态。".encode(), "index-status-file"
+    )
+    membership_task = client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base['knowledge_base_id']}/files",
+        headers=write_headers("index-status-member"),
+        json={"file_ids": [file_id]},
+    ).json()
+    assert wait_for_task(client, membership_task["task_id"])["status"] == "COMPLETED"
+    status = client.get(
+        f"/api/v1/knowledge-bases/{knowledge_base['knowledge_base_id']}/index-status"
+    ).json()
+    assert status["status"] == "PREPARING"
+    assert status["file_counts"] == {"total": 1, "available": 0, "processing": 1, "failed": 0}
+    assert status["target_index_version_id"] is None
+    assert status["embedding_model_state"] in {"MISSING_OFFLINE", "READY", "CORRUPT"}
+
+
+def test_index_retry_is_persisted_and_rejects_files_outside_failed_members(
+    knowledge_client,
+) -> None:
+    client, _ = knowledge_client
+    first = create_kb(client, "失败文件所在库")
+    second = create_kb(client, "另一个库")
+    file_id = import_text(client, "失败讲义.txt", "失败后可重试。".encode(), "retry-failed-file")
+    for knowledge_base, key in ((first, "retry-member-first"), (second, "retry-member-second")):
+        task = client.post(
+            f"/api/v1/knowledge-bases/{knowledge_base['knowledge_base_id']}/files",
+            headers=write_headers(key),
+            json={"file_ids": [file_id]},
+        ).json()
+        assert wait_for_task(client, task["task_id"])["status"] == "COMPLETED"
+
+    factory = client.app.state.session_factory
+    with factory() as session:
+        member = session.scalar(
+            select(KnowledgeBaseFile).where(
+                KnowledgeBaseFile.knowledge_base_id == first["knowledge_base_id"],
+                KnowledgeBaseFile.file_id == file_id,
+            )
+        )
+        assert member is not None
+        member.index_state = "FAILED"
+        session.commit()
+
+    failed_status = client.get(
+        f"/api/v1/knowledge-bases/{first['knowledge_base_id']}/index-status"
+    ).json()
+    assert failed_status["failures"][0]["file_id"] == file_id
+    assert failed_status["failures"][0]["retryable"] is True
+    assert failed_status["can_retry_failed"] is True
+
+    outside_scope = client.post(
+        f"/api/v1/knowledge-bases/{second['knowledge_base_id']}/index/retry-failed",
+        headers=write_headers("retry-cross-kb"),
+        json={"file_ids": [file_id]},
+    )
+    assert outside_scope.status_code == 409
+    assert outside_scope.json()["code"] == "INDEX_RETRY_SCOPE_INVALID"
+
+    headers = write_headers("retry-failed-index-operation")
+    retry = client.post(
+        f"/api/v1/knowledge-bases/{first['knowledge_base_id']}/index/retry-failed",
+        headers=headers,
+        json={"file_ids": [file_id]},
+    )
+    assert retry.status_code == 202
+    assert retry.json()["task_type"] == "INDEX_PREPROCESS"
+    assert retry.json()["task_id"]
+    repeated = client.post(
+        f"/api/v1/knowledge-bases/{first['knowledge_base_id']}/index/retry-failed",
+        headers=headers,
+        json={"file_ids": [file_id]},
+    )
+    assert repeated.status_code == 202
+    assert repeated.json()["task_id"] == retry.json()["task_id"]
+    with factory() as session:
+        persisted = session.get(BackgroundTask, retry.json()["task_id"])
+        assert persisted is not None
+        assert persisted.checkpoint_json["operation"] == "RETRY_FAILED_FILES"
+        assert persisted.checkpoint_json["requested_failed_file_ids"] == [file_id]
+
+
+def test_failed_rebuild_status_keeps_the_active_index_available(knowledge_client) -> None:
+    client, _ = knowledge_client
+    knowledge_base = create_kb(client, "保留活动版本")
+    file_id = import_text(client, "活动文件.txt", "活动索引仍可用。".encode(), "active-index-file")
+    task = client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base['knowledge_base_id']}/files",
+        headers=write_headers("active-index-member"),
+        json={"file_ids": [file_id]},
+    ).json()
+    assert wait_for_task(client, task["task_id"])["status"] == "COMPLETED"
+
+    factory = client.app.state.session_factory
+    active_version_id = new_id()
+    failed_version_id = new_id()
+    failed_task_id = new_id()
+    now = datetime.now(UTC)
+    with factory() as session:
+        record = session.get(KnowledgeBase, knowledge_base["knowledge_base_id"])
+        member = session.scalar(
+            select(KnowledgeBaseFile).where(
+                KnowledgeBaseFile.knowledge_base_id == knowledge_base["knowledge_base_id"],
+                KnowledgeBaseFile.file_id == file_id,
+            )
+        )
+        file = session.get(FileRecord, file_id)
+        assert record is not None and member is not None and file is not None
+        chunking, embedding = get_or_create_default_configs(session)
+        record.active_index_version_id = active_version_id
+        record.status = "READY"
+        member.index_state = "READY"
+        versions = []
+        for version_id, version_status, embedding_status, created_at in (
+            (active_version_id, "READY", "COMPLETED", now),
+            (failed_version_id, "FAILED", "FAILED", datetime.fromtimestamp(now.timestamp() + 1, UTC)),
+        ):
+            versions.append(
+                IndexVersion(
+                    index_version_id=version_id,
+                    scope_type="KNOWLEDGE_BASE",
+                    scope_id=record.knowledge_base_id,
+                    parse_revision_set_hash=file.content_hash,
+                    chunking_config_id=chunking.chunking_config_id,
+                    embedding_config_id=embedding.embedding_config_id,
+                    vector_engine="sqlite-vec",
+                    vector_engine_version="test",
+                    status=version_status,
+                    preprocessing_status="COMPLETED",
+                    chunking_status="COMPLETED",
+                    embedding_status=embedding_status,
+                    fts_status="COMPLETED",
+                    input_count=1,
+                    prepared_count=1,
+                    created_at=created_at,
+                    activated_at=now if version_status == "READY" else None,
+                )
+            )
+        session.add_all(versions)
+        session.flush()
+        session.add_all(
+            [
+                IndexVersionInput(
+                    index_version_input_id=new_id(),
+                    index_version_id=active_version_id,
+                    knowledge_base_file_id=member.knowledge_base_file_id,
+                    file_id=file_id,
+                    content_hash=file.content_hash,
+                    parse_revision_id=file.parse_revision_id,
+                    membership_added_at=member.added_at,
+                    ordinal=0,
+                    status="PREPARED",
+                    chunk_status="CHUNKED",
+                    embedding_status="EMBEDDED",
+                    fts_status="INDEXED",
+                ),
+                IndexVersionInput(
+                    index_version_input_id=new_id(),
+                    index_version_id=failed_version_id,
+                    knowledge_base_file_id=member.knowledge_base_file_id,
+                    file_id=file_id,
+                    content_hash=file.content_hash,
+                    parse_revision_id=file.parse_revision_id,
+                    membership_added_at=member.added_at,
+                    ordinal=0,
+                    status="PREPARED",
+                    chunk_status="CHUNKED",
+                    embedding_status="FAILED",
+                    embedding_reason_code="MODEL_MISSING_OFFLINE",
+                    fts_status="INDEXED",
+                ),
+            ]
+        )
+        session.add(
+            BackgroundTask(
+                task_id=failed_task_id,
+                task_type="INDEX_EMBED",
+                status="FAILED",
+                phase="EMBEDDING_FAILED",
+                idempotency_key=new_id(),
+                checkpoint_json={
+                    "knowledge_base_id": record.knowledge_base_id,
+                    "index_version_id": failed_version_id,
+                },
+                created_at=now,
+                updated_at=now,
+                completed_at=now,
+            )
+        )
+        session.commit()
+
+    status = client.get(
+        f"/api/v1/knowledge-bases/{knowledge_base['knowledge_base_id']}/index-status"
+    ).json()
+    assert status["status"] == "READY"
+    assert status["active_index_version_id"] == active_version_id
+    assert status["target_index_version_id"] == failed_version_id
+    assert status["target_index_version_status"] == "FAILED"
+    assert status["operation_in_progress"] is False
+    assert status["failures"] == [
+        {
+            "file_id": file_id,
+            "display_name": "活动文件.txt",
+            "stage": "EMBEDDING",
+            "reason_code": "MODEL_MISSING_OFFLINE",
+            "message": "本地 Embedding 模型缺失；当前操作没有触发下载。恢复模型后可重试。",
+            "retryable": True,
+            "diagnostic_id": failed_task_id,
+        }
+    ]
+
+
+def test_rebuild_is_full_and_rejects_empty_or_trashed_inputs(knowledge_client) -> None:
+    client, _ = knowledge_client
+    empty = create_kb(client, "不可重建空库")
+    rejected = client.post(
+        f"/api/v1/knowledge-bases/{empty['knowledge_base_id']}/index/rebuild",
+        headers=write_headers("rebuild-empty-kb"),
+    )
+    assert rejected.status_code == 409
+    assert rejected.json()["code"] == "INDEX_INPUT_REQUIRED"
+
+    knowledge_base = create_kb(client, "可重建知识库")
+    file_id = import_text(client, "重建资料.txt", "完整重建验证。".encode(), "rebuild-input")
+    membership_task = client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base['knowledge_base_id']}/files",
+        headers=write_headers("rebuild-member"),
+        json={"file_ids": [file_id]},
+    ).json()
+    assert wait_for_task(client, membership_task["task_id"])["status"] == "COMPLETED"
+    rebuilt = client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base['knowledge_base_id']}/index/rebuild",
+        headers=write_headers("rebuild-current-kb"),
+    )
+    assert rebuilt.status_code == 202
+    with client.app.state.session_factory() as session:
+        task = session.get(BackgroundTask, rebuilt.json()["task_id"])
+        assert task is not None
+        assert task.checkpoint_json["operation"] == "REBUILD"
+        assert task.checkpoint_json["full_rebuild"] is True
+
+    other = create_kb(client, "回收站成员知识库")
+    trashed_file_id = import_text(
+        client, "已回收资料.txt", "已进入回收站。".encode(), "trash-index-source"
+    )
+    add = client.post(
+        f"/api/v1/knowledge-bases/{other['knowledge_base_id']}/files",
+        headers=write_headers("trash-index-member"),
+        json={"file_ids": [trashed_file_id]},
+    ).json()
+    assert wait_for_task(client, add["task_id"])["status"] == "COMPLETED"
+    file = client.get(f"/api/v1/files/{trashed_file_id}").json()
+    trash = client.delete(
+        f"/api/v1/files/{trashed_file_id}?expected_version={file['row_version']}",
+        headers=write_headers("trash-index-source-now"),
+    )
+    assert trash.status_code == 200
+    denied = client.post(
+        f"/api/v1/knowledge-bases/{other['knowledge_base_id']}/index/rebuild",
+        headers=write_headers("rebuild-trashed-member"),
+    )
+    assert denied.status_code == 409
+    assert denied.json()["code"] == "INDEX_INPUT_REQUIRED"
 
 def test_trash_restore_and_purge_keep_source_files(knowledge_client) -> None:
     client, _ = knowledge_client

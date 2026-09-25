@@ -359,7 +359,7 @@ def _enqueue_and_wait_index_stage(
             task = enqueue(
                 session,
                 version_id,
-                f"stage5-fixed-ready-{key_suffix}-{hashlib.sha256(knowledge_base_id.encode()).hexdigest()[:20]}",
+                f"index-stage:{version_id}:{key_suffix}",
             )
             task_id = str(task.task_id)
             session.commit()
@@ -518,7 +518,7 @@ def _ensure_index_ready(
         task_type="INDEX_EMBED",
         status_field="embedding_status",
         enqueue=enqueue_index_embedding,
-        key_suffix="embed",
+        key_suffix="embedding",
     )
     _enqueue_and_wait_index_stage(
         app,

@@ -1,7 +1,7 @@
 # 阶段 5：知识库基础与成员准入测试报告
 
 > 阶段：`5`
-> 批次：`第八批至第二十八批`
+> 批次：`第八批至第二十九批`
 > 验证日期：`2026-09-25`
 > 第八批结论：`PASS`
 > 第九批结论：`PASS`
@@ -21,6 +21,7 @@
 > 第二十四批结论：`PASS`
 > 第二十七批结论：`PASS`
 > 第二十八批结论：`PASS`
+> 第二十九批结论：`PASS`
 > 阶段 5 状态：`PARTIAL`
 > 分支：`feat/v1-bootstrap`
 > 起始提交：`75a0653877b7f627bc254a859232689c19872777`
@@ -36,6 +37,8 @@
 第八至第十六批完成知识库成员、索引预处理、Chunk、Embedding、FTS5、向量 Top-K 与双路候选基础；第十七批完成内部 RRF/多样性 Top 8；第十八批完成内部证据判定；第十九批完成产物完整性复核与原子激活；第二十批完成同一知识库增量构建；第二十一批建立未绑定服务端来源快照；第二十三批增加受本地会话保护的本地测试检索 API；第二十四批将该 API 接入知识库详情页高级诊断区域；第二十七批修复中文自然问句 FTS5 召回并加入困难负例回归。空库保持 `EMPTY`；此端点和页面不提供聊天答案或 Citation。
 
 第十批 `INDEX_PREPROCESS` 的 `COMPLETED` 只证明输入快照与预处理结果已持久化；第十一批 `INDEX_CHUNK` 只证明切片阶段结束；第十三批 `INDEX_EMBED` 只证明向量已持久化；第十四批 `INDEX_FTS` 只证明 FTS5 投影已建立。第十五至十八批提供内部召回、排序与证据判定；`supported` 只表示候选可进入后续处理，不证明最终答案获事实支持。第十九批验证完整候选后才允许原子激活；第二十批增量候选沿用同一完整性复核；第二十一批从活动版本内部检索结果创建经服务端复核的未绑定来源快照。第二十二批因真实 owner 不存在而 `BLOCKED`，Citation 绑定延期至阶段 6/7；第二十三批只开放本地测试检索端点，第二十四批完成详情页诊断界面。阶段 5 仍为 `PARTIAL`：Citation 绑定、聊天/RAG 与验收集质量评估仍未完成。
+
+第二十九批在知识库详情页增加基于持久索引版本和任务检查点的运维工作台，并通过真实后台任务完成一个 READY 知识库的索引版本重建。页面状态和操作不替代 Citation/Chat owner；阶段 5 仍为 `PARTIAL`。
 
 ## 实现范围
 
@@ -1016,3 +1019,60 @@ repo> git diff --check
 ```
 
 没有前端改动，因此未运行前端门禁；没有 DeepSeek、真实凭据、付费 API 或私人资料。下一批唯一目标：在真实 Chat/Learning owner 可核验后建立服务端 Citation 绑定准入，不生成模型回答、不伪造 owner；阶段 5 保持 `PARTIAL`。
+
+## 第二十九批验收追踪：索引状态与失败重试工作台
+
+> 本批结论：`PASS`；阶段 5 继续 `PARTIAL`。批次开始时本地/远端 SHA 均为 `cf0853e3c80a71b64c65d60ae8b8fb4e0b057707`，分支 `feat/v1-bootstrap`，工作区干净。
+
+### 能力盘点与契约
+
+- 进场已有知识库详情/成员只读 API、`GET /api/v1/tasks/{task_id}`、`POST /api/v1/tasks/{task_id}/cancel` 和内部持久 Worker 入队函数；没有索引状态 DTO/路由、用户可调用的失败重试/整库重建命令，也没有生产 Worker 之间的阶段接力。
+- 新增 `GET /api/v1/knowledge-bases/{knowledge_base_id}/index-status`，返回服务端真实知识库状态、活动版本、构建/最近失败目标版本、有效文件计数、失败文件、阶段任务状态/进度/诊断 ID 和本地模型校验状态。失败原因以安全码映射可读文字，不返回绝对路径、原文或堆栈。模型校验结果在单个应用进程内缓存，轮询不重复哈希模型文件。
+- 新增 `POST /api/v1/knowledge-bases/{knowledge_base_id}/index/retry-failed`，只接受当前库内仍有效、已解析、在状态 DTO 中确实失败的成员 ID；不存在、跨库、非失败和回收站文件被拒绝。新增 `POST /api/v1/knowledge-bases/{knowledge_base_id}/index/rebuild`，入队带 `full_rebuild=true` 的持久预处理任务。两操作都受现有本地 Host/Origin/Session/幂等约束保护，均只改当前知识库，不新增数据库迁移或任务类型。
+- `IndexActivationWorker` 在持久阶段检查点达到成功/部分成功后，幂等接力入队 `INDEX_CHUNK`，随后并行入队 `INDEX_EMBED` 与 `INDEX_FTS`，最终由现有激活器进行完整性复核和原子切换。完整重建生成 FULL 输入计划；可复用的内容寻址 Chunk/Embedding 仍按已批准的缓存语义复用。旧版本在新候选构建和校验期间维持活动状态。
+- `backend/scripts/prepare_stage5_fixed_ready.py` 使用与生产接力一致的阶段幂等键，消除验证脚本和激活扫描器并发入队时重复创建阶段任务的情况。
+- `docs/openapi/openapi.json` 与 `frontend/src/api/generated/openapi.ts` 已从 FastAPI schema 重新生成，包含新三个路由和状态 DTO。
+
+### 前端与真实浏览器
+
+- `/knowledge-bases/:id` 页面增加索引工作台：展示 `EMPTY/PREPARING/PARTIAL/READY/FAILED/NEEDS_REBUILD` 实际状态，当前活动版本、构建或失败目标版本、可用/处理中/失败数、逐文件错误、任务阶段、持久任务进度及诊断 ID；明确展示本地 Embedding 模型缺失/损坏，页面不自动下载。保留原“测试检索”面板。
+- 页面提供真实“重试失败文件”“重建当前知识库索引”操作，并只对后端支持取消的持久阶段任务显示取消按钮。重建需确认会耗时、旧版本继续可查、失败时保留旧版本。任务提交后从服务端轮询，不用前端时间或静态文件数推断索引进度；轮询频率 1.5 秒、页面隐藏时暂停，按 KB ID 隔离并在卸载时清理请求。
+- 固定 READY 样本准备命令：`uv run python scripts/prepare_stage5_fixed_ready.py --data-dir "$env:TEMP\mindmate-ai-stage5-r29-index-ops-e2e-02" --model-cache model-cache/manager-validation`；返回 `PASS`，准备了 `9 files / 4 knowledge bases / 24 tasks`。隔离模型来自已校验离线缓存；数据根自带所有权标记，不使用个人数据库，无外部 Provider 调用。
+- 浏览器命令：`npm run test:e2e -- --workers=1 e2e/stage5-index-operations.spec.ts`，配合隔离后端 8001、Vite 5174 和 `STAGE5_INDEX_OPS_KB_ID=01a0d6a1-583b-7360-b0bb-2546fc3f85ec`；结果 `1 passed`。真实活动版本 `01a0d6b2-1b26-7afb-a599-0366cd1c8602` 切换到 `01a0d6c4-b88c-7a8f-b67d-bd64993daf9d`；重建预处理任务 `01a0d6c4-b849-7696-9e66-49b0eb299ae5`、切片任务 `01a0d6c4-b8ce-756d-b58a-02d4846bf888`、Embedding 任务 `01a0d6c4-b9cb-7969-8318-83f2b659f4c3`、FTS 任务 `01a0d6c4-b9cc-70f9-825a-92b6d87f1872` 均为 `COMPLETED`，目标版本四个阶段均为 `COMPLETED`，知识库最终 `READY`。Chromium `390x844` 未发生水平溢出；截图保留在 `%TEMP%\mindmate-ai-stage5-r29-index-ops-e2e-02\evidence\index-operations-mobile.png`，不进入 Git。
+- `test_failed_rebuild_status_keeps_the_active_index_available` 覆盖状态 API 在新候选 Embedding 失败时显示失败目标和诊断，同时保持旧活动版本 `READY` 并允许失败成员重试；`test_incomplete_artifacts_fail_candidate_and_keep_old_version` 延续验证候选完整性失败不替换旧指针。Vitest 覆盖失败重试提交、重复操作禁用、阶段取消和整库重建确认。浏览器用例证明真实 READY 库重建成功；没有把 mock/UI 行为表述成浏览器级模型缺失失败恢复。
+
+### 验收结果与边界
+
+```text
+backend> uv run pytest
+191 passed, 148 warnings（143.94 秒）
+
+backend> uv run ruff check src tests scripts
+All checks passed
+
+backend> uv run pyright src tests scripts/prepare_stage5_fixed_ready.py scripts/evaluate_stage5_evidence_gate.py
+0 errors, 0 warnings, 0 informations
+
+backend> uv run python -m compileall -q src tests migrations scripts
+通过
+
+backend> uv run alembic heads
+6b3e91a0c4d7 (head)
+
+frontend> npm test -- --run
+22 passed
+
+frontend> npm run lint
+通过
+
+frontend> npm run build
+通过
+
+frontend> npm run test:e2e -- --workers=1 e2e/stage5-index-operations.spec.ts
+1 passed（真实本地 API/持久 Worker）
+
+repo> git diff --check
+通过
+```
+
+阶段 5 继续 `PARTIAL`。当前产品没有模型下载安装页面；Citation owner 依赖真实 Chat/Learning owner，留到阶段 6/7；10 万 Chunk 性能、Recall@10/最终回答质量和 AC-KB-* 全量验收未覆盖。本批唯一下一目标：在真实 Chat/Learning owner 可验证后完成 Citation 绑定准入，不生成模型答案或伪造 owner。

@@ -37,7 +37,7 @@
 .placeholder-panel p { max-width: 620px; margin: 0; color: var(--muted); line-height: 1.7; }
 
 @media (max-width: 1023px) {
-  .sidebar { width: 72px; }
+  .sidebar { width: 72px; min-width: 0; flex: 0 0 72px; }
   .sidebar .brand-block { justify-content: center; padding-left: 0; padding-right: 0; }
   .sidebar .nav-item { justify-content: center; padding: 0; }
   .brand-block > div:not(.brand-mark), .nav-item span { display: none; }
@@ -150,6 +150,31 @@
 .member-options small { color: var(--muted); font-size: 11px; }
 .task-summary { display: grid; gap: 3px; padding: 10px 12px; border-left: 3px solid var(--primary); background: #f1fafb; font-size: 12px; }
 .task-summary span, .task-summary small { color: var(--muted); }
+.index-workbench { display: grid; gap: 16px; margin-top: 18px; border-radius: 8px; }
+.index-workbench__counts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.index-workbench__counts > div { display: grid; gap: 3px; min-width: 0; padding: 12px 14px; border-right: 1px solid var(--border); }
+.index-workbench__counts > div:last-child { border-right: 0; }
+.index-workbench__counts strong { color: var(--text); font-size: 20px; line-height: 1.2; }
+.index-workbench__counts span, .index-workbench__versions dt, .index-workbench__model-state { color: var(--muted); font-size: 11px; }
+.index-workbench__versions { display: grid; gap: 10px; margin: 0; }
+.index-workbench__versions > div { display: grid; grid-template-columns: 100px minmax(0, 1fr); gap: 12px; }
+.index-workbench__versions dd { min-width: 0; margin: 0; color: var(--text); font-size: 12px; overflow-wrap: anywhere; }
+.index-workbench__note { margin: 0; color: #246a50; font-size: 12px; }
+.index-workbench__model { display: flex; align-items: flex-start; gap: 9px; padding: 10px 12px; border-left: 3px solid #aa741d; background: #fff8e8; color: #71511c; font-size: 12px; line-height: 1.5; }
+.index-workbench__model svg { flex: 0 0 auto; margin-top: 1px; }
+.index-workbench__failures, .index-workbench__tasks { display: grid; gap: 9px; padding-top: 14px; border-top: 1px solid var(--border); }
+.index-workbench__failures h3, .index-workbench__tasks h3 { margin: 0; color: var(--text); font-size: 13px; }
+.index-workbench__failure, .index-workbench__task { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; padding: 9px 0; border-bottom: 1px solid var(--border); }
+.index-workbench__failure > div, .index-workbench__task > div { display: grid; gap: 4px; min-width: 0; }
+.index-workbench__failure strong, .index-workbench__task strong { color: var(--text); font-size: 12px; overflow-wrap: anywhere; }
+.index-workbench__failure span, .index-workbench__task span { color: var(--muted); font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; }
+.index-workbench__failure small, .index-workbench__task small { color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
+.index-workbench__failure > span { flex: 0 0 auto; }
+.index-workbench__retryable { color: #267653 !important; }
+.index-workbench__blocked { color: #9a5a27 !important; }
+.index-workbench__task > svg { flex: 0 0 auto; color: #267653; }
+.index-workbench__actions { padding-top: 2px; }
+.index-workbench__model-state { margin: -10px 0 0; }
 .task-result { padding: 7px 9px; border: 1px solid #cce4d8; border-radius: 6px; background: #f3faf6; color: #267653; font-size: 11px; }
 .task-result--failed { border-color: #efd0cd; background: #fff7f6; color: var(--danger); }
 .metadata-list { display: grid; gap: 14px; margin: 0; }
@@ -254,6 +279,11 @@
 }
 
 @media (max-width: 560px) {
+  .index-workbench { padding: 16px; }
+  .index-workbench__counts > div { padding: 10px 8px; }
+  .index-workbench__versions > div { grid-template-columns: 82px minmax(0, 1fr); gap: 8px; }
+  .index-workbench__actions { align-items: stretch; }
+  .index-workbench__actions > button { flex: 1 1 100%; white-space: normal; }
   .content-area { padding: 20px 14px; }
   .files-main { padding: 12px; }
   .folder-panel { grid-template-columns: 1fr; }

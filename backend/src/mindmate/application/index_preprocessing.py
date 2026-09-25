@@ -110,7 +110,12 @@ def get_or_create_default_configs(session: Session) -> tuple[ChunkingConfig, Emb
 
 
 def enqueue_index_preprocessing(
-    session: Session, knowledge_base_id: str, idempotency_key: str
+    session: Session,
+    knowledge_base_id: str,
+    idempotency_key: str,
+    *,
+    force_new: bool = False,
+    full_rebuild: bool = False,
 ):
     """Create one internal preprocessing task for the current KB snapshot.
 
@@ -165,7 +170,7 @@ def enqueue_index_preprocessing(
         version = session.get(IndexVersion, version_id)
         if version is None or version.status != "BUILDING":
             continue
-        if (
+        if not force_new and (
             current_hash == version.parse_revision_set_hash
             and checkpoint.get("chunking_config_fingerprint") == current_chunking_fingerprint
             and checkpoint.get("embedding_config_fingerprint") == current_embedding_fingerprint
@@ -180,6 +185,7 @@ def enqueue_index_preprocessing(
             "schema_version": 1,
             "knowledge_base_id": knowledge_base_id,
             "index_version_id": None,
+            "full_rebuild": full_rebuild,
             "next_ordinal": 0,
             "results": [],
         },

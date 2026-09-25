@@ -401,6 +401,142 @@
         }
       }
     },
+    "/api/v1/knowledge-bases/{knowledge_base_id}/index-status": {
+      "get": {
+        "tags": [
+          "knowledge-bases"
+        ],
+        "summary": "Get Knowledge Base Index Status",
+        "operationId": "get_knowledge_base_index_status_api_v1_knowledge_bases__knowledge_base_id__index_status_get",
+        "parameters": [
+          {
+            "name": "knowledge_base_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Knowledge Base Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeBaseIndexStatusResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/knowledge-bases/{knowledge_base_id}/index/retry-failed": {
+      "post": {
+        "tags": [
+          "knowledge-bases"
+        ],
+        "summary": "Retry Failed Knowledge Base Index Files",
+        "operationId": "retry_failed_knowledge_base_index_files_api_v1_knowledge_bases__knowledge_base_id__index_retry_failed_post",
+        "parameters": [
+          {
+            "name": "knowledge_base_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Knowledge Base Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetryFailedIndexRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeMembershipTaskResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/knowledge-bases/{knowledge_base_id}/index/rebuild": {
+      "post": {
+        "tags": [
+          "knowledge-bases"
+        ],
+        "summary": "Rebuild Knowledge Base Index",
+        "operationId": "rebuild_knowledge_base_index_api_v1_knowledge_bases__knowledge_base_id__index_rebuild_post",
+        "parameters": [
+          {
+            "name": "knowledge_base_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Knowledge Base Id"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeMembershipTaskResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/knowledge-bases/{knowledge_base_id}/files": {
       "get": {
         "tags": [
@@ -3326,6 +3462,144 @@
         ],
         "title": "ImportTaskResponse"
       },
+      "IndexFileCountsResponse": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "available": {
+            "type": "integer",
+            "title": "Available"
+          },
+          "processing": {
+            "type": "integer",
+            "title": "Processing"
+          },
+          "failed": {
+            "type": "integer",
+            "title": "Failed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "available",
+          "processing",
+          "failed"
+        ],
+        "title": "IndexFileCountsResponse"
+      },
+      "IndexFileFailureResponse": {
+        "properties": {
+          "file_id": {
+            "type": "string",
+            "title": "File Id"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "stage": {
+            "type": "string",
+            "title": "Stage"
+          },
+          "reason_code": {
+            "type": "string",
+            "title": "Reason Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "retryable": {
+            "type": "boolean",
+            "title": "Retryable"
+          },
+          "diagnostic_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diagnostic Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file_id",
+          "display_name",
+          "stage",
+          "reason_code",
+          "message",
+          "retryable"
+        ],
+        "title": "IndexFileFailureResponse"
+      },
+      "IndexTaskStatusResponse": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "title": "Task Id"
+          },
+          "task_type": {
+            "type": "string",
+            "title": "Task Type"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "phase": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phase"
+          },
+          "progress": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Progress"
+          },
+          "diagnostic_id": {
+            "type": "string",
+            "title": "Diagnostic Id"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_id",
+          "task_type",
+          "status",
+          "diagnostic_id"
+        ],
+        "title": "IndexTaskStatusResponse"
+      },
       "KnowledgeBaseCreate": {
         "properties": {
           "name": {
@@ -3393,6 +3667,130 @@
           "file_ids"
         ],
         "title": "KnowledgeBaseFilesAdd"
+      },
+      "KnowledgeBaseIndexStatusResponse": {
+        "properties": {
+          "knowledge_base_id": {
+            "type": "string",
+            "title": "Knowledge Base Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "active_index_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Index Version Id"
+          },
+          "active_index_version_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Index Version Status"
+          },
+          "target_index_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Index Version Id"
+          },
+          "target_index_version_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Index Version Status"
+          },
+          "target_stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Stage"
+          },
+          "file_counts": {
+            "$ref": "#/components/schemas/IndexFileCountsResponse"
+          },
+          "failures": {
+            "items": {
+              "$ref": "#/components/schemas/IndexFileFailureResponse"
+            },
+            "type": "array",
+            "title": "Failures"
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/IndexTaskStatusResponse"
+            },
+            "type": "array",
+            "title": "Tasks"
+          },
+          "embedding_model_state": {
+            "type": "string",
+            "title": "Embedding Model State"
+          },
+          "embedding_model_error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Embedding Model Error Code"
+          },
+          "operation_in_progress": {
+            "type": "boolean",
+            "title": "Operation In Progress"
+          },
+          "can_retry_failed": {
+            "type": "boolean",
+            "title": "Can Retry Failed"
+          },
+          "can_rebuild": {
+            "type": "boolean",
+            "title": "Can Rebuild"
+          }
+        },
+        "type": "object",
+        "required": [
+          "knowledge_base_id",
+          "status",
+          "file_counts",
+          "failures",
+          "tasks",
+          "embedding_model_state",
+          "operation_in_progress",
+          "can_retry_failed",
+          "can_rebuild"
+        ],
+        "title": "KnowledgeBaseIndexStatusResponse"
       },
       "KnowledgeBaseListResponse": {
         "properties": {
@@ -4266,6 +4664,24 @@
           "suggestions"
         ],
         "title": "RetrievalTestResponse"
+      },
+      "RetryFailedIndexRequest": {
+        "properties": {
+          "file_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "File Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file_ids"
+        ],
+        "title": "RetryFailedIndexRequest"
       },
       "ServiceStatus": {
         "properties": {

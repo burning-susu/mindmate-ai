@@ -6,7 +6,7 @@
 - 当前远程提交：以 `git ls-remote --heads origin feat/v1-bootstrap` 为准；本文件随本批次收口提交推送
 - 最后更新时间：`2026-09-25`
 - 当前开发阶段：阶段 5 开发中，状态 `PARTIAL`
-- 当前批次状态：第二十二批 Citation 绑定因无真实 Chat/Learning owner 而 `BLOCKED` 并延期到阶段 6/7；第二十三批本地测试检索 API、第二十四批知识库详情测试检索页面、第二十五批固定 READY 资料与真实浏览器候选验证、第二十六批真实 ONNX 证据门控基线评测、第二十七批中文 FTS 召回修复与困难负例回归、第二十八批证据门控规则校准与正负例回归均为 `PASS`；阶段 5 状态 `PARTIAL`
+- 当前批次状态：第二十二批 Citation 绑定因无真实 Chat/Learning owner 而 `BLOCKED` 并延期到阶段 6/7；第二十三至第二十九批均为 `PASS`；第二十九批完成索引运维状态、失败诊断、持久重试/重建操作与真实浏览器重建闭环；阶段 5 状态仍为 `PARTIAL`
 
 ## 已完成阶段
 
@@ -223,3 +223,14 @@
 - 评测与报告：最终命令为 `uv run python scripts/evaluate_stage5_evidence_gate.py --data-dir "$env:TEMP\\mindmate-ai-stage5-evidence-gate-v1-r28-final" --repeat 2`；报告为 `%TEMP%\\mindmate-ai-stage5-evidence-gate-v1-r28-final\\stage5-evidence-gate-v1-report.json`，不入 Git，模型、临时数据库和评测输出不入 Git。
 - 验收：定向门控/评测测试 `18 passed`；全量 `uv run pytest` `186 passed, 143 warnings`（142.37 秒）；`uv run ruff check src tests scripts`、`uv run pyright src tests scripts/prepare_stage5_fixed_ready.py scripts/evaluate_stage5_evidence_gate.py`（0 errors）、`uv run python -m compileall -q src tests migrations scripts`、`uv run alembic heads`（`6b3e91a0c4d7`）和 `git diff --check` 均通过。未改前端，未运行前端门禁；未调用 DeepSeek、真实凭据、付费服务或私人资料。
 - 下一开发批次唯一目标：在不生成模型回答、不绑定虚构 Citation owner 的前提下，为已通过门控的候选建立真实 Chat/Learning owner 的服务端 Citation 绑定准入；阶段 5 继续 `PARTIAL`。
+
+## 第二十九批交接
+
+- 本批状态：`PASS`；阶段 5 继续 `PARTIAL`。进场本地与远端 `origin/feat/v1-bootstrap` SHA 均为 `cf0853e3c80a71b64c65d60ae8b8fb4e0b057707`，工作区干净。
+- 后端真实契约：新增 `GET /api/v1/knowledge-bases/{knowledge_base_id}/index-status`、`POST /api/v1/knowledge-bases/{knowledge_base_id}/index/retry-failed` 和 `POST /api/v1/knowledge-bases/{knowledge_base_id}/index/rebuild`。状态基于当前有效成员、活动/目标 `IndexVersion`、逐文件阶段检查点及 `BackgroundTask`；失败仅返回安全原因码、可读说明和诊断 ID。重试校验成员确属当前库、仍有效、已解析且当前确实失败；回收站文件、非成员和未知 ID 均拒绝。操作沿用持久 `INDEX_PREPROCESS` 任务和现有任务取消 API，无数据库迁移。
+- Worker 接力：激活扫描器在上游阶段达到 `COMPLETED/PARTIAL` 检查点后幂等入队 `INDEX_CHUNK`，再并行入队 `INDEX_EMBED` 与 `INDEX_FTS`；现有激活器负责候选完整性复核与活动指针切换。固定 READY 准备脚本与运行时共用阶段幂等键，避免并发重复任务。
+- 页面：知识库详情新增索引运维工作台，显示真实索引状态、活动/目标版本、有效文件计数、失败列表、后台阶段/进度/诊断 ID、本机模型状态；连接失败文件重试、确认重建和持久任务取消。操作中按 KB ID 隔离并每 1.5 秒轮询，页面不可见时暂停，刷新后从 API 恢复。原“测试检索”区域保留；不自动下载模型，不生成回答或 Citation。
+- 浏览器证据：固定 READY 隔离根 `%TEMP%\mindmate-ai-stage5-r29-index-ops-e2e-02` 中，知识库 `01a0d6a1-583b-7360-b0bb-2546fc3f85ec` 活动版本由 `01a0d6b2-1b26-7afb-a599-0366cd1c8602` 切换为 `01a0d6c4-b88c-7a8f-b67d-bd64993daf9d`；新 `INDEX_PREPROCESS`、`INDEX_CHUNK`、`INDEX_EMBED`、`INDEX_FTS` 任务均为 `COMPLETED`，最终状态 `READY`。Playwright 在 390px 视口验证无水平溢出；截图 `evidence/index-operations-mobile.png` 留在临时根，不入 Git。模型来自已校验离线副本，未下载或调用外部 Provider。
+- 验收：`uv run pytest` `191 passed, 148 warnings`（143.94 秒）；`uv run ruff check src tests scripts`、Pyright（0 errors）、compileall、Alembic head `6b3e91a0c4d7` 和 `git diff --check` 通过。前端 Vitest `22 passed`、`npm run lint`、`npm run build`、真实 API Playwright E2E `1 passed`。
+- 边界：本批浏览器验证真实 READY 库重建成功；失败原因展示、失败文件范围校验和保留活动版本由 API/激活器测试覆盖，未宣称浏览器级模型缺失失败恢复。模型下载安装页面、Citation owner、10 万 Chunk 性能、Recall@10/最终问答质量和 AC-KB-* 全量验收仍未完成。
+- 下一批唯一目标：真实 Chat/Learning owner 可核验后完成服务端 Citation 绑定准入；不伪造 owner 或模型答案。

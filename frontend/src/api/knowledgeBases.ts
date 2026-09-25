@@ -7,6 +7,9 @@ export type KnowledgeBaseCreate = components['KnowledgeBaseCreate']
 export type KnowledgeBaseMember = components['KnowledgeBaseMemberResponse']
 export type KnowledgeBaseMemberList = components['KnowledgeBaseMemberListResponse']
 export type KnowledgeMembershipTask = components['KnowledgeMembershipTaskResponse']
+export type KnowledgeBaseIndexStatus = components['KnowledgeBaseIndexStatusResponse']
+export type IndexFileFailure = components['IndexFileFailureResponse']
+export type IndexTaskStatus = components['IndexTaskStatusResponse']
 export type RetrievalTestRequest = components['RetrievalTestRequest']
 export type RetrievalTestResponse = components['RetrievalTestResponse']
 export type RetrievalTestCandidate = components['RetrievalTestCandidateResponse']
@@ -81,6 +84,35 @@ export function removeKnowledgeBaseMember(
 
 export function getKnowledgeMembershipTask(taskId: string): Promise<KnowledgeMembershipTask> {
   return apiRequest(`/api/v1/tasks/${taskId}`)
+}
+
+export function getKnowledgeBaseIndexStatus(
+  knowledgeBaseId: string,
+  signal?: AbortSignal,
+): Promise<KnowledgeBaseIndexStatus> {
+  return apiRequest(`/api/v1/knowledge-bases/${knowledgeBaseId}/index-status`, { signal })
+}
+
+export function retryFailedIndexFiles(
+  knowledgeBaseId: string,
+  fileIds: string[],
+): Promise<KnowledgeMembershipTask> {
+  return apiRequest(`/api/v1/knowledge-bases/${knowledgeBaseId}/index/retry-failed`, {
+    method: 'POST',
+    body: JSON.stringify({ file_ids: fileIds }),
+  })
+}
+
+export function rebuildKnowledgeBaseIndex(
+  knowledgeBaseId: string,
+): Promise<KnowledgeMembershipTask> {
+  return apiRequest(`/api/v1/knowledge-bases/${knowledgeBaseId}/index/rebuild`, {
+    method: 'POST',
+  })
+}
+
+export function cancelKnowledgeBaseTask(taskId: string): Promise<KnowledgeMembershipTask> {
+  return apiRequest(`/api/v1/tasks/${taskId}/cancel`, { method: 'POST' })
 }
 
 export function runKnowledgeBaseRetrievalTest(

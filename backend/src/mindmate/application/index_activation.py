@@ -11,9 +11,13 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session, sessionmaker
 from uuid6 import uuid7
 
-from mindmate.application.chunking import CHUNK_GENERATION_TASK
-from mindmate.application.index_embedding import INDEX_EMBED_TASK, validate_embedding_config
-from mindmate.application.index_fts import INDEX_FTS_TASK
+from mindmate.application.chunking import CHUNK_GENERATION_TASK, enqueue_index_chunking
+from mindmate.application.index_embedding import (
+    INDEX_EMBED_TASK,
+    enqueue_index_embedding,
+    validate_embedding_config,
+)
+from mindmate.application.index_fts import INDEX_FTS_TASK, enqueue_index_fts
 from mindmate.application.index_preprocessing import (
     INDEX_PREPROCESS_TASK,
     fingerprint,
@@ -920,9 +924,93 @@ class IndexActivationWorker:
                     .order_by(IndexVersion.created_at, IndexVersion.index_version_id)
                 )
             )
-        return [
-            (version_id, self._service.activate_if_ready(version_id)) for version_id in version_ids
-        ]
+        results = []
+        for version_id in version_ids:
+            self._enqueue_next_stages(version_id)
+            results.append((version_id, self._service.activate_if_ready(version_id)))
+        return results
+
+    def _enqueue_next_stages(self, index_version_id: str) -> None:
+        with self._session_factory() as session:
+            version = session.get(IndexVersion, index_version_id)
+            if version is None or version.status != "BUILDING":
+                return
+            knowledge_base = session.get(KnowledgeBase, version.scope_id)
+            if (
+                knowledge_base is None
+                or knowledge_base.deleted_at is not None
+                or version.input_count == 0
+            ):
+                return
+
+            tasks = list(
+                session.scalars(
+                    select(BackgroundTask).where(BackgroundTask.task_type.in_(_TASK_TYPES))
+                )
+            )
+            by_type = {task_type: [] for task_type in _TASK_TYPES}
+            for task in tasks:
+                checkpoint = task.checkpoint_json if isinstance(task.checkpoint_json, dict) else {}
+                if checkpoint.get("index_version_id") == index_version_id:
+                    by_type[task.task_type].append(task)
+
+            if version.preprocessing_status in _SUCCESS_STAGE_STATUSES:
+                if version.chunking_status == "NOT_STARTED" and not by_type[CHUNK_GENERATION_TASK]:
+                    try:
+                        enqueue_index_chunking(
+                            session,
+                            index_version_id,
+                            f"index-stage:{index_version_id}:chunk",
+                        )
+                    except ValueError:
+                        version.chunking_status = "FAILED"
+                        for item in session.scalars(
+                            select(IndexVersionInput).where(
+                                IndexVersionInput.index_version_id == index_version_id,
+                                IndexVersionInput.status == "PREPARED",
+                            )
+                        ):
+                            item.chunk_status = "FAILED"
+                            item.chunk_reason_code = "CHUNKING_CONFIG_INVALID"
+
+            if version.chunking_status in _SUCCESS_STAGE_STATUSES:
+                if version.embedding_status == "NOT_STARTED" and not by_type[INDEX_EMBED_TASK]:
+                    try:
+                        enqueue_index_embedding(
+                            session,
+                            index_version_id,
+                            f"index-stage:{index_version_id}:embedding",
+                        )
+                    except ValueError:
+                        version.embedding_status = "FAILED"
+                        for item in session.scalars(
+                            select(IndexVersionInput).where(
+                                IndexVersionInput.index_version_id == index_version_id,
+                                IndexVersionInput.status == "PREPARED",
+                                IndexVersionInput.chunk_status == "CHUNKED",
+                            )
+                        ):
+                            item.embedding_status = "FAILED"
+                            item.embedding_reason_code = "EMBEDDING_CONFIG_INVALID"
+                if version.fts_status == "NOT_STARTED" and not by_type[INDEX_FTS_TASK]:
+                    try:
+                        enqueue_index_fts(
+                            session,
+                            index_version_id,
+                            f"index-stage:{index_version_id}:fts",
+                        )
+                    except ValueError:
+                        version.fts_status = "FAILED"
+                        for item in session.scalars(
+                            select(IndexVersionInput).where(
+                                IndexVersionInput.index_version_id == index_version_id,
+                                IndexVersionInput.status == "PREPARED",
+                                IndexVersionInput.chunk_status == "CHUNKED",
+                            )
+                        ):
+                            item.fts_status = "FAILED"
+                            item.fts_reason_code = "FTS_CONFIGURATION_INVALID"
+            session.commit()
 
     def _run(self) -> None:
         while not self._stop_event.is_set():
