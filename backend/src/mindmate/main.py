@@ -102,6 +102,7 @@ async def lifespan(app: FastAPI):
             settings,
             lambda: app.state.chat_provider,
             lambda: app.state.credential_store,
+            retrieval_query_encoder_getter=lambda: app.state.retrieval_query_encoder,
         )
         app.state.chat_worker.start()
         app.state.embedding_model_install_worker = EmbeddingModelInstallWorker(

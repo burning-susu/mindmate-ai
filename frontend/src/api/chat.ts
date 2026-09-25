@@ -7,6 +7,8 @@ export type Conversation = components['ConversationResponse']
 export type Message = components['MessageResponse']
 export type Operation = components['AiOperationResponse']
 export type Submission = components['ConversationSubmissionResponse']
+export type Citation = components['CitationResponse']
+export type ChatMode = 'GENERAL_CHAT' | 'KNOWLEDGE_CHAT'
 
 export type ChatEvent = {
   event: string
@@ -35,11 +37,27 @@ export async function getOperation(operationId: string): Promise<Operation> {
   return apiRequest(`/api/v1/ai-operations/${operationId}`)
 }
 
-export async function createConversation(content: string, idempotencyKey = uuidv7()): Promise<Submission> {
+export async function createConversation(
+  content: string,
+  options: {
+    mode?: ChatMode
+    knowledgeBaseId?: string
+    idempotencyKey?: string
+  } = {},
+): Promise<Submission> {
+  const idempotencyKey = options.idempotencyKey ?? uuidv7()
+  const mode = options.mode ?? 'GENERAL_CHAT'
   return apiRequest('/api/v1/conversations', {
     method: 'POST',
     headers: { 'Idempotency-Key': idempotencyKey },
-    body: JSON.stringify({ first_message: content, client_request_id: idempotencyKey }),
+    body: JSON.stringify({
+      first_message: content,
+      client_request_id: idempotencyKey,
+      mode,
+      source_scope: mode === 'KNOWLEDGE_CHAT' && options.knowledgeBaseId
+        ? { scope_type: 'KNOWLEDGE_BASE', knowledge_base_id: options.knowledgeBaseId }
+        : null,
+    }),
   })
 }
 

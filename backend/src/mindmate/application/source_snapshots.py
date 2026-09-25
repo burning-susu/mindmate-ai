@@ -296,6 +296,9 @@ def purge_source_snapshots_for_files(
     if not file_ids:
         return
     stamp = deleted_at or datetime.now(UTC)
+    from mindmate.application.citations import sanitize_citations_for_file_purge
+
+    sanitize_citations_for_file_purge(session, file_ids, deleted_at=stamp)
     empty_excerpt_hash = hashlib.sha256(b"").hexdigest()
     session.execute(
         update(SourceSnapshot)
@@ -314,6 +317,9 @@ def purge_source_snapshots_for_files(
 
 
 def purge_source_snapshots_for_knowledge_base(session: Session, knowledge_base_id: str) -> None:
+    from mindmate.application.citations import sanitize_citations_for_knowledge_base_purge
+
+    sanitize_citations_for_knowledge_base_purge(session, knowledge_base_id)
     session.execute(
         delete(SourceSnapshot).where(SourceSnapshot.knowledge_base_id == knowledge_base_id)
     )

@@ -22,11 +22,15 @@ from mindmate.application.chat_generation import (
     create_first_chat,
     request_chat_stop,
 )
+from mindmate.application.citations import citation_payload, list_answer_citations
 from mindmate.infrastructure.models import (
     AiOperation,
     AnswerVersion,
     BackgroundTask,
+    Citation,
     Conversation,
+    ConversationScope,
+    KnowledgeBase,
     Message,
     TaskEvent,
 )
@@ -63,6 +67,33 @@ class MessageCreateRequest(BaseModel):
     expected_conversation_version: int | None = Field(default=None, ge=1)
 
 
+class CitationResponse(BaseModel):
+    citation_id: str
+    answer_version_id: str
+    source_snapshot_id: str | None
+    display_number: int
+    knowledge_base_id: str
+    index_version_id: str
+    file_id: str | None
+    chunk_id: str | None
+    file_name: str
+    file_version: str | None
+    heading_path: list[str]
+    page_start: int | None
+    page_end: int | None
+    slide_number: int | None
+    line_start: int | None
+    line_end: int | None
+    excerpt: str | None
+    source_status: str
+    can_open_source: bool
+    created_at: datetime
+
+
+class CitationListResponse(BaseModel):
+    items: list[CitationResponse]
+
+
 class MessageResponse(BaseModel):
     message_id: str
     conversation_id: str
@@ -79,6 +110,7 @@ class MessageResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     completed_at: datetime | None
+    citations: list[CitationResponse] = Field(default_factory=list)
 
 
 class ConversationResponse(BaseModel):
@@ -88,6 +120,8 @@ class ConversationResponse(BaseModel):
     current_mode: str
     current_scope_type: str
     current_scope_id_list: list[str]
+    current_scope_name: str | None = None
+    current_index_version_id: str | None = None
     status: str
     message_count: int
     created_at: datetime
@@ -116,10 +150,12 @@ class AnswerVersionResponse(BaseModel):
     provider: str
     model: str
     prompt_template_version: str
+    index_version_id: str | None = None
     usage_input_tokens: int | None
     usage_output_tokens: int | None
     usage_total_tokens: int | None
     created_at: datetime
+    citations: list[CitationResponse] = Field(default_factory=list)
 
 
 class AiOperationResponse(BaseModel):
@@ -181,9 +217,22 @@ def _command_error(exc: ChatCommandError) -> ChatApiError:
     )
 
 
-def _message_payload(message: Message | None) -> dict[str, Any] | None:
+def _message_payload(session: Session, message: Message | None) -> dict[str, Any] | None:
     if message is None:
         return None
+    citations: list[dict[str, Any]] = []
+    if message.role == "ASSISTANT":
+        answer = session.scalar(
+            select(AnswerVersion)
+            .where(AnswerVersion.assistant_message_id == message.message_id)
+            .order_by(AnswerVersion.version_number.desc())
+            .limit(1)
+        )
+        if answer is not None:
+            citations = [
+                citation_payload(session, citation)
+                for citation in list_answer_citations(session, answer.answer_version_id)
+            ]
     return {
         "message_id": message.message_id,
         "conversation_id": message.conversation_id,
@@ -200,6 +249,7 @@ def _message_payload(message: Message | None) -> dict[str, Any] | None:
         "created_at": message.created_at,
         "updated_at": message.updated_at,
         "completed_at": message.completed_at,
+        "citations": citations,
     }
 
 
@@ -218,6 +268,22 @@ def _conversation_payload(session: Session, conversation: Conversation) -> dict[
         .order_by(AiOperation.created_at.desc())
         .limit(1)
     )
+    scope = session.scalar(
+        select(ConversationScope)
+        .where(
+            ConversationScope.conversation_id == conversation.conversation_id,
+            ConversationScope.ended_at.is_(None),
+        )
+        .order_by(ConversationScope.scope_version.desc())
+        .limit(1)
+    )
+    scope_name = None
+    index_version_id = None
+    if scope is not None:
+        index_version_id = scope.index_version_id
+        if scope.knowledge_base_id:
+            knowledge_base = session.get(KnowledgeBase, scope.knowledge_base_id)
+            scope_name = knowledge_base.name if knowledge_base is not None else None
     return {
         "conversation_id": conversation.conversation_id,
         "title": conversation.title,
@@ -225,6 +291,8 @@ def _conversation_payload(session: Session, conversation: Conversation) -> dict[
         "current_mode": conversation.current_mode,
         "current_scope_type": conversation.current_scope_type,
         "current_scope_id_list": list(conversation.current_scope_id_list or []),
+        "current_scope_name": scope_name,
+        "current_index_version_id": index_version_id,
         "status": conversation.status,
         "message_count": int(count),
         "created_at": conversation.created_at,
@@ -255,10 +323,15 @@ def _operation_payload(session: Session, operation: AiOperation) -> dict[str, An
             "provider": answer.provider,
             "model": answer.model,
             "prompt_template_version": answer.prompt_template_version,
+            "index_version_id": answer.index_version_id,
             "usage_input_tokens": answer.usage_input_tokens,
             "usage_output_tokens": answer.usage_output_tokens,
             "usage_total_tokens": answer.usage_total_tokens,
             "created_at": answer.created_at,
+            "citations": [
+                citation_payload(session, citation)
+                for citation in list_answer_citations(session, answer.answer_version_id)
+            ],
         }
     task = session.get(BackgroundTask, operation.task_id) if operation.task_id else None
     checkpoint = (task.checkpoint_json or {}) if task is not None else {}
@@ -287,8 +360,8 @@ def _operation_payload(session: Session, operation: AiOperation) -> dict[str, An
         "event_sequence": int(checkpoint.get("event_sequence", 0) or 0),
         "snapshot_content": snapshot_content,
         "stop_requested": bool(checkpoint.get("stop_requested", False)),
-        "user_message": _message_payload(user),
-        "assistant_message": _message_payload(assistant),
+        "user_message": _message_payload(session, user),
+        "assistant_message": _message_payload(session, assistant),
         "answer_version": answer_payload,
     }
 
@@ -308,8 +381,8 @@ def _submission_payload(session: Session, operation: AiOperation, request: Reque
         "status_url": f"/api/v1/ai-operations/{operation.operation_id}",
         "events_url": f"/api/v1/ai-operations/{operation.operation_id}/events",
         "conversation": _conversation_payload(session, conversation),
-        "user_message": _message_payload(user),
-        "assistant_message": _message_payload(assistant),
+        "user_message": _message_payload(session, user),
+        "assistant_message": _message_payload(session, assistant),
         "operation": _operation_payload(session, operation),
     }
 
@@ -435,7 +508,7 @@ def list_messages(
     rows = rows[:limit]
     rows.reverse()
     return {
-        "items": [_message_payload(row) for row in rows],
+        "items": [_message_payload(session, row) for row in rows],
         "next_cursor": str(rows[0].sequence_number) if has_more and rows else None,
     }
 
@@ -453,6 +526,62 @@ def get_ai_operation(
     if operation is None:
         raise ChatApiError("AI_OPERATION_NOT_FOUND", "AI Operation 不存在。", 404)
     return _operation_payload(session, operation)
+
+
+@router.get(
+    "/answer-versions/{answer_version_id}/citations",
+    response_model=CitationListResponse,
+    tags=["chat"],
+)
+def list_citations_for_answer(
+    answer_version_id: str, session: Session = Depends(get_session)
+) -> dict[str, Any]:
+    answer = session.get(AnswerVersion, answer_version_id)
+    if answer is None:
+        raise ChatApiError("ANSWER_VERSION_NOT_FOUND", "回答版本不存在。", 404)
+    return {
+        "items": [
+            citation_payload(session, citation)
+            for citation in list_answer_citations(session, answer_version_id)
+        ]
+    }
+
+
+@router.get(
+    "/messages/{message_id}/citations",
+    response_model=CitationListResponse,
+    include_in_schema=False,
+    tags=["chat"],
+)
+def list_citations_for_message(
+    message_id: str, session: Session = Depends(get_session)
+) -> dict[str, Any]:
+    answer = session.scalar(
+        select(AnswerVersion)
+        .where(AnswerVersion.assistant_message_id == message_id)
+        .order_by(AnswerVersion.version_number.desc())
+        .limit(1)
+    )
+    if answer is None:
+        raise ChatApiError("ANSWER_VERSION_NOT_FOUND", "回答版本不存在。", 404)
+    return {
+        "items": [
+            citation_payload(session, citation)
+            for citation in list_answer_citations(session, answer.answer_version_id)
+        ]
+    }
+
+
+@router.get(
+    "/citations/{citation_id}",
+    response_model=CitationResponse,
+    tags=["chat"],
+)
+def get_citation(citation_id: str, session: Session = Depends(get_session)) -> dict[str, Any]:
+    citation = session.get(Citation, citation_id)
+    if citation is None:
+        raise ChatApiError("CITATION_NOT_FOUND", "引用不存在。", 404)
+    return citation_payload(session, citation)
 
 
 def _sse_line(event: TaskEvent, operation_id: str) -> str:

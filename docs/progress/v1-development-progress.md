@@ -310,3 +310,14 @@
 - 真实联调：独立临时数据目录中完成 Mock `创建 → 多个 SNAPSHOT → 完成 → 游标后重订阅`，Provider 调用 `1` 次；延迟 Mock 完成 `创建 → 中途停止` 并保留已生成正文；浏览器 `http://127.0.0.1:5174/chat` 实际发送并显示完成回答，页面错误日志为空。没有真实 DeepSeek Key、真实外部请求、付费调用或私人资料。
 - 未完成：阶段 5 Citation owner/RAG 和发布级检索质量仍为 `PARTIAL`；阶段 6 的重试/重新生成与答案版本切换、Learning owner、预算执行和自动回退仍未实现。本批不宣称最终产品验收或真实 Provider 已联通。详见 `docs/test-reports/stage-6-chat-streaming.md`。
 - 下一开发批次唯一目标：在本批普通 Chat owner、事件快照和停止状态之上完成重试/重新生成与答案版本切换契约，继续不打开 RAG、Citation、学习陪练或自动 Provider 切换。
+
+### 第三十四批：求职 Demo 知识库问答与真实引用闭环
+
+- 状态：`PASS`（求职 Demo 主流程）；阶段 5、阶段 6 继续 `PARTIAL`。本批不宣称完整 V1 阶段验收或模型回答事实正确性。
+- 数据与范围：新增 Alembic revision `c3d4e5f6a7b8` 和 `Citation` 持久化表。首条知识库消息服务端验证活动 `READY` 索引并在同一事务创建 `KNOWLEDGE_CHAT/KNOWLEDGE_BASE` 范围快照；后续消息只读取服务端知识库范围。活动索引切换后，下一轮在同一知识库内创建新范围版本并记录本轮 `index_version_id`。普通聊天数据和行为保持兼容。
+- RAG Worker：复用本地查询向量、FTS5/sqlite-vec、混合排序和 `evidence-gate-v1`。支持时只发送长度受限的服务端批准证据块；资料不足保存固定本地拒答、0 Provider 调用和 0 Citation；Embedding/索引/范围竞态单独返回不可用错误，不改走普通聊天。
+- Citation：服务端从 gate-approved `HybridAssessmentResult` 创建 `SourceSnapshot`，再绑定真实 `AnswerVersion`，顺序稳定为 `[n]`；新增回答版本/消息/引用读取接口和动态来源状态。回收站、版本失效和永久删除会限制打开能力并清理永久删除摘录，不泄露绝对路径。
+- 前端：知识库详情新增“基于此知识库提问”入口；聊天页显示知识库模式、范围名称、索引不可用/资料不足提示、回答内可点击引用、来源定位/摘录/文件详情入口；刷新通过持久消息和 Citation 恢复。普通聊天继续不显示知识库引用。
+- 测试证据：后端全量 `220 passed`；新增 `tests/test_stage6_knowledge_chat.py` 3 项覆盖支持/不足/不可用三分支、真实 SourceSnapshot/Citation、刷新读取和 0 Provider 门禁；Ruff、Pyright、compileall、迁移往返、`git diff --check` 通过。前端 `27 tests passed`、lint、typecheck、build 通过；OpenAPI 同步为 `62 schemas / 72 operations`。
+- Provider/模型边界：自动化只使用 Mock Provider 与本地可控检索夹具。当前本机固定 ONNX 模型状态为 `MISSING_OFFLINE`，因此没有冒充真实 ONNX 支持分支或真实 DeepSeek 联通；模型缺失分支已验证独立错误和 0 Provider 调用。详见 `docs/test-reports/stage-6-knowledge-chat-citations.md`。
+- 下一开发批次唯一目标：安装并验证固定本地 ONNX 模型后，使用真实 READY 知识库完成浏览器级知识库问答、点击引用和刷新恢复；继续不扩展重新生成、学习陪练或自动 Provider 切换。

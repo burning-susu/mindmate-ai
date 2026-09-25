@@ -1484,6 +1484,90 @@
         }
       }
     },
+    "/api/v1/answer-versions/{answer_version_id}/citations": {
+      "get": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "List Citations For Answer",
+        "operationId": "list_citations_for_answer_api_v1_answer_versions__answer_version_id__citations_get",
+        "parameters": [
+          {
+            "name": "answer_version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Answer Version Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CitationListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/citations/{citation_id}": {
+      "get": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Get Citation",
+        "operationId": "get_citation_api_v1_citations__citation_id__get",
+        "parameters": [
+          {
+            "name": "citation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Citation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CitationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/ai-operations/{operation_id}/stop": {
       "post": {
         "tags": [
@@ -3486,6 +3570,17 @@
             "type": "string",
             "title": "Prompt Template Version"
           },
+          "index_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Index Version Id"
+          },
           "usage_input_tokens": {
             "anyOf": [
               {
@@ -3523,6 +3618,13 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/CitationResponse"
+            },
+            "type": "array",
+            "title": "Citations"
           }
         },
         "type": "object",
@@ -3740,6 +3842,204 @@
           "files"
         ],
         "title": "Body_create_file_import_api_v1_file_imports_post"
+      },
+      "CitationListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CitationResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "CitationListResponse"
+      },
+      "CitationResponse": {
+        "properties": {
+          "citation_id": {
+            "type": "string",
+            "title": "Citation Id"
+          },
+          "answer_version_id": {
+            "type": "string",
+            "title": "Answer Version Id"
+          },
+          "source_snapshot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Snapshot Id"
+          },
+          "display_number": {
+            "type": "integer",
+            "title": "Display Number"
+          },
+          "knowledge_base_id": {
+            "type": "string",
+            "title": "Knowledge Base Id"
+          },
+          "index_version_id": {
+            "type": "string",
+            "title": "Index Version Id"
+          },
+          "file_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Id"
+          },
+          "chunk_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunk Id"
+          },
+          "file_name": {
+            "type": "string",
+            "title": "File Name"
+          },
+          "file_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Version"
+          },
+          "heading_path": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Heading Path"
+          },
+          "page_start": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Start"
+          },
+          "page_end": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page End"
+          },
+          "slide_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slide Number"
+          },
+          "line_start": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line Start"
+          },
+          "line_end": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line End"
+          },
+          "excerpt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Excerpt"
+          },
+          "source_status": {
+            "type": "string",
+            "title": "Source Status"
+          },
+          "can_open_source": {
+            "type": "boolean",
+            "title": "Can Open Source"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "citation_id",
+          "answer_version_id",
+          "source_snapshot_id",
+          "display_number",
+          "knowledge_base_id",
+          "index_version_id",
+          "file_id",
+          "chunk_id",
+          "file_name",
+          "file_version",
+          "heading_path",
+          "page_start",
+          "page_end",
+          "slide_number",
+          "line_start",
+          "line_end",
+          "excerpt",
+          "source_status",
+          "can_open_source",
+          "created_at"
+        ],
+        "title": "CitationResponse"
       },
       "ConnectionProbeResponse": {
         "properties": {
@@ -3999,6 +4299,28 @@
             },
             "type": "array",
             "title": "Current Scope Id List"
+          },
+          "current_scope_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Scope Name"
+          },
+          "current_index_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Index Version Id"
           },
           "status": {
             "type": "string",
@@ -5941,6 +6263,13 @@
               }
             ],
             "title": "Completed At"
+          },
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/CitationResponse"
+            },
+            "type": "array",
+            "title": "Citations"
           }
         },
         "type": "object",

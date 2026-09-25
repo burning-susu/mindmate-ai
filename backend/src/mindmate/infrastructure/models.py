@@ -550,6 +550,57 @@ class AnswerVersion(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class Citation(Base):
+    """A server-bound source reference owned by one answer version.
+
+    SourceSnapshot remains an immutable, private retrieval snapshot. Citation
+    copies the display fields needed to keep historical answers readable while
+    retaining a nullable link for live source-state checks.
+    """
+
+    __tablename__ = "citations"
+    __table_args__ = (
+        UniqueConstraint(
+            "answer_version_id", "display_number", name="uq_citation_answer_number"
+        ),
+        UniqueConstraint(
+            "answer_version_id", "source_snapshot_id", name="uq_citation_answer_snapshot"
+        ),
+        Index("ix_citations_answer_version", "answer_version_id", "display_number"),
+        Index("ix_citations_source_snapshot", "source_snapshot_id"),
+    )
+
+    citation_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    answer_version_id: Mapped[str] = mapped_column(
+        ForeignKey("answer_versions.answer_version_id", ondelete="CASCADE"), nullable=False
+    )
+    source_snapshot_id: Mapped[str | None] = mapped_column(
+        ForeignKey("source_snapshots.source_snapshot_id", ondelete="SET NULL")
+    )
+    display_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    knowledge_base_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    index_version_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    file_id: Mapped[str | None] = mapped_column(ForeignKey("files.file_id", ondelete="SET NULL"))
+    chunk_id: Mapped[str | None] = mapped_column(
+        ForeignKey("chunks.chunk_id", ondelete="SET NULL")
+    )
+    file_name_snapshot: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_version_snapshot: Mapped[str | None] = mapped_column(String(64))
+    heading_path_snapshot: Mapped[list[str] | None] = mapped_column(JSON)
+    page_start: Mapped[int | None] = mapped_column(Integer)
+    page_end: Mapped[int | None] = mapped_column(Integer)
+    slide_number: Mapped[int | None] = mapped_column(Integer)
+    line_start: Mapped[int | None] = mapped_column(Integer)
+    line_end: Mapped[int | None] = mapped_column(Integer)
+    excerpt: Mapped[str | None] = mapped_column(Text)
+    excerpt_sha256: Mapped[str | None] = mapped_column(String(64))
+    source_status: Mapped[str] = mapped_column(
+        String(40), default="AVAILABLE", server_default=text("'AVAILABLE'"), nullable=False
+    )
+    source_deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class BackgroundTask(Base):
     __tablename__ = "background_tasks"
     task_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)

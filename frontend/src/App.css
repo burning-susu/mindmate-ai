@@ -415,6 +415,21 @@
 .chat-markdown { padding: 1px 0; white-space: pre-wrap; }
 .chat-markdown p { margin: 0 0 12px; }
 .chat-markdown p:last-child { margin-bottom: 0; }
+.citation-link { display: inline; padding: 0 3px; border: 0; background: transparent; color: var(--primary); font: inherit; font-weight: 700; cursor: pointer; }
+.citation-link:hover { text-decoration: underline; }
+.citation-strip { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 2px; color: var(--muted); font-size: 11px; }
+.citation-strip > span { color: var(--text); font-weight: 700; }
+.citation-chip { max-width: 260px; overflow: hidden; padding: 3px 7px; border: 1px solid #c9dfe3; border-radius: 5px; background: #f5fbfb; color: var(--primary); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.citation-chip:hover { background: #eaf5f6; }
+.citation-panel { display: grid; gap: 9px; margin-top: 5px; padding: 12px; border-left: 3px solid var(--primary); background: #f7fbfb; }
+.citation-panel__header { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.citation-panel__header > div { display: grid; gap: 3px; min-width: 0; }
+.citation-panel__header strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.citation-panel__location { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; }
+.citation-panel__excerpt, .citation-panel__unavailable { margin: 0; color: var(--text); font-size: 12px; line-height: 1.6; white-space: pre-wrap; }
+.citation-panel__unavailable { color: var(--danger); }
+.citation-panel__open { width: fit-content; text-decoration: none; }
+.detail-heading__actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .chat-message__placeholder { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; }
 .chat-message__placeholder::after { width: 6px; height: 6px; border-radius: 50%; background: var(--primary); content: ''; animation: chat-pulse 1s ease-in-out infinite; }
 @keyframes chat-pulse { 50% { opacity: .35; } }

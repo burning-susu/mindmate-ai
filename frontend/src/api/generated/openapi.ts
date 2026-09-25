@@ -48,10 +48,12 @@ export interface components {
     "provider": string;
     "model": string;
     "prompt_template_version": string;
+    "index_version_id"?: string | null;
     "usage_input_tokens": number | null;
     "usage_output_tokens": number | null;
     "usage_total_tokens": number | null;
-    "created_at": string
+    "created_at": string;
+    "citations"?: Array<components["CitationResponse"]>
   };
   "ApiKeyRequest": {
     "api_key": string
@@ -77,6 +79,31 @@ export interface components {
     "folder_id"?: string | null;
     "tag_ids"?: string | null;
     "knowledge_base_id"?: string | null
+  };
+  "CitationListResponse": {
+    "items": Array<components["CitationResponse"]>
+  };
+  "CitationResponse": {
+    "citation_id": string;
+    "answer_version_id": string;
+    "source_snapshot_id": string | null;
+    "display_number": number;
+    "knowledge_base_id": string;
+    "index_version_id": string;
+    "file_id": string | null;
+    "chunk_id": string | null;
+    "file_name": string;
+    "file_version": string | null;
+    "heading_path": Array<string>;
+    "page_start": number | null;
+    "page_end": number | null;
+    "slide_number": number | null;
+    "line_start": number | null;
+    "line_end": number | null;
+    "excerpt": string | null;
+    "source_status": string;
+    "can_open_source": boolean;
+    "created_at": string
   };
   "ConnectionProbeResponse": {
     "status": "success" | "failed";
@@ -116,6 +143,8 @@ export interface components {
     "current_mode": string;
     "current_scope_type": string;
     "current_scope_id_list": Array<string>;
+    "current_scope_name"?: string | null;
+    "current_index_version_id"?: string | null;
     "status": string;
     "message_count": number;
     "created_at": string;
@@ -401,7 +430,8 @@ export interface components {
     "archived_at": string | null;
     "created_at": string;
     "updated_at": string;
-    "completed_at": string | null
+    "completed_at": string | null;
+    "citations"?: Array<components["CitationResponse"]>
   };
   "ProblemDetail": {
     "type": string;
@@ -636,6 +666,12 @@ export interface operations {
   };
   "GET /api/v1/ai-operations/{operation_id}": {
     operationId: "get_ai_operation_api_v1_ai_operations__operation_id__get"
+  };
+  "GET /api/v1/answer-versions/{answer_version_id}/citations": {
+    operationId: "list_citations_for_answer_api_v1_answer_versions__answer_version_id__citations_get"
+  };
+  "GET /api/v1/citations/{citation_id}": {
+    operationId: "get_citation_api_v1_citations__citation_id__get"
   };
   "POST /api/v1/ai-operations/{operation_id}/stop": {
     operationId: "stop_ai_operation_api_v1_ai_operations__operation_id__stop_post"
