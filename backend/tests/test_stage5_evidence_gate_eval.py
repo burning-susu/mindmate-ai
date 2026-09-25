@@ -32,6 +32,15 @@ def test_fixed_labels_have_at_least_twenty_core_cases_and_review_is_unlabeled() 
     )
 
 
+def test_hard_negative_labels_are_independent_and_all_rejecting() -> None:
+    hard_negatives = evaluation._load_hard_negatives()
+    assert len(hard_negatives["items"]) >= 6
+    assert all(
+        item["review_status"] == "hard_negative" and item["expected_sufficient"] is False
+        for item in hard_negatives["items"]
+    )
+
+
 def test_confusion_summary_excludes_needs_review_and_totals_core_cases() -> None:
     cases = [
         {
@@ -90,3 +99,28 @@ def test_confusion_summary_excludes_needs_review_and_totals_core_cases() -> None
     assert summary["needs_review_count"] == 1
     assert summary["confusion_total"] == 3
     assert summary["false_negative_kinds"] == {"annotated_evidence_missing_from_top8": 1}
+
+
+def test_confusion_summary_counts_independently_labeled_hard_negatives() -> None:
+    summary = evaluation._summarize(
+        [
+            {
+                "review_status": "hard_negative",
+                "expected_sufficient": False,
+                "actual_status": "insufficient",
+                "classification": "true_negative",
+                "top8_contains_annotated_evidence": None,
+                "supported_without_annotated_evidence": False,
+                "cross_scope_candidates": [],
+                "category": "wrong_numeric_value",
+                "actual_result": {"reason_codes": [], "candidates": []},
+            }
+        ]
+    )
+    assert summary["core_count"] == 1
+    assert summary["confusion_matrix"] == {
+        "true_positive": 0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "true_negative": 1,
+    }

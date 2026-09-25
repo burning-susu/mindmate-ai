@@ -6,7 +6,7 @@
 - 当前远程提交：以 `git ls-remote --heads origin feat/v1-bootstrap` 为准；本文件随本批次收口提交推送
 - 最后更新时间：`2026-09-25`
 - 当前开发阶段：阶段 5 开发中，状态 `PARTIAL`
-- 当前批次状态：第二十二批 Citation 绑定因无真实 Chat/Learning owner 而 `BLOCKED` 并延期到阶段 6/7；第二十三批本地测试检索 API、第二十四批知识库详情测试检索页面、第二十五批固定 READY 资料与真实浏览器候选验证、第二十六批真实 ONNX 证据门控基线评测均为 `PASS`；阶段 5 状态 `PARTIAL`
+- 当前批次状态：第二十二批 Citation 绑定因无真实 Chat/Learning owner 而 `BLOCKED` 并延期到阶段 6/7；第二十三批本地测试检索 API、第二十四批知识库详情测试检索页面、第二十五批固定 READY 资料与真实浏览器候选验证、第二十六批真实 ONNX 证据门控基线评测、第二十七批中文 FTS 召回修复与困难负例回归均为 `PASS`；阶段 5 状态 `PARTIAL`
 
 ## 已完成阶段
 
@@ -199,3 +199,15 @@
 
 - 新对话必须读取：`AGENTS.md`、`docs/project/requirements/v1/18_最终决策表.md`、`16_Codex开发任务书.md`、`05_知识库与RAG详细需求.md`、本文件、`v1-development-progress.md` 和阶段 5 测试报告。
 - 从远程 `origin/feat/v1-bootstrap` 最新提交继续；先核对 `git status --short` 和本地/远程 SHA，不依赖旧对话。
+
+## 第二十七批交接
+
+- 本批状态：`PASS`；阶段 5 继续 `PARTIAL`。进场本地与 `origin/feat/v1-bootstrap` SHA 均为 `2f8025692580f69de4e3f57598efd39d8abc17de`，工作区干净；本批未改数据库 schema、公开 API、前端、证据门控阈值或 Provider。
+- FTS 根因：索引侧已经把连续汉字投影为重叠二元词和单字辅助列，但查询侧把整段中文自然问句放进一个带空格的 FTS5 引号短语，要求所有二元词连续且全部存在。问句中的“是多少/是否/等多久”等不在原文时，精确标题、编号和关键中文词项因此全部失配；这与索引损坏、模型或版本不一致无关。
+- 具体修复：`backend/src/mindmate/infrastructure/fts5.py` 保留 NFKC、SQLite 参数绑定和逐词引号转义；ASCII 词项/数字继续精确 `AND`，每段中文使用有界二元词 `OR` 组，去除仅用于 FTS fallback 的疑问脚手架和句末语气词；MATCH 后按每段至少 2 个中文二元词（含数字/编号时至少 1 个）过滤，再返回 FTS Top 30。原有 FTS5 表结构、`unicode61`、索引 Worker、映射和旧索引兼容路径无需迁移或重建。
+- 真实前后对比：同一固定 READY 数据、同一真实本地 ONNX 与 `--repeat 2` 复跑，旧基线 Top 8 为 101 条候选、FTS 命中 2（Vector-only 99）；修复后仍为 101 条候选，FTS 命中 20、双路命中 20、Vector-only 81、FTS-only 0。`API 单次请求超时时间是多少秒？`、自然改写、演练库标题/编号、`CACHE-PROXY-K3` 均出现真实 FTS 候选；错误数字/错误编号仍无 FTS 命中。
+- 旧核心集：31 条人工标注仍为 TP `0` / FN `16` / FP `0` / TN `15`；16 条 FN 均在 Top 8 找到标注支持文件，仍由现有严格 `evidence-gate-v1`（主要是 `VECTOR_SIMILARITY_BELOW_THRESHOLD`）拒答，没有把召回修复冒充成门控通过。两轮内部签名稳定，查询前后资源计数不变。
+- 困难负例：新增 `docs/test-data/stage5-fixed-ready/evidence-gate-v1-hard-negatives.json`，独立人工标注 7 条，覆盖同名跨库 30/47 秒、错误数字、相同术语无事实、相反表述和回收站；混淆表 TN `7` / FP `0`，跨范围候选 `0`。失效索引另做两轮可用性检查，均为 `unavailable / INDEX_VERSION_NOT_AVAILABLE`、0 候选，不计入混淆表。
+- 可复现评测：首次复用旧评测目录因所有权标记缺失被保护逻辑拒绝，未接管或清理旧数据；随后使用 `%TEMP%\\mindmate-ai-stage5-evidence-gate-v1-r27` 完成真实准备和评测。报告位于该隔离根的 `stage5-evidence-gate-v1-report.json`，记录查询 token、实际 MATCH 表达式、存储侧 token、关键词排名、向量候选、Top 8 和门控理由。
+- 验收：`uv run pytest` `181 passed, 143 warnings`（串行，约 2:26）；`uv run ruff check src tests scripts`、`uv run pyright src tests scripts/prepare_stage5_fixed_ready.py scripts/evaluate_stage5_evidence_gate.py`（0 errors）、`uv run python -m compileall -q src tests migrations scripts`、`uv run alembic heads`（`6b3e91a0c4d7`）和 `git diff --check` 通过。新增定向 FTS/评测测试均通过；未改前端，因此未运行前端门禁。
+- 下一开发批次唯一目标：在不放松证据门控和不引入 Provider 的前提下，针对仍保留的 16 条 FN 建立人工可解释的门控/答案质量校准方案，并继续保持阶段 5 `PARTIAL`；不得重新调整 FTS 召回范围或生产阈值而不附新证据。

@@ -19,7 +19,7 @@ from mindmate.application.index_preprocessing import enqueue_index_preprocessing
 from mindmate.application.index_preprocessing_worker import IndexPreprocessingWorker
 from mindmate.application.tasks import cancel_task
 from mindmate.config import Settings
-from mindmate.infrastructure.fts5 import Fts5Error, Fts5Projection
+from mindmate.infrastructure.fts5 import Fts5Error, Fts5Projection, match_expression
 from mindmate.infrastructure.models import (
     BackgroundTask,
     Chunk,
@@ -164,6 +164,12 @@ def test_fts5_is_versioned_chinese_short_query_bm25_and_rebuildable(fts_app) -> 
     assert len(_query(factory, first_version, "能")) == 1
     assert len(_query(factory, first_version, "sqlite")) == 1
     assert len(_query(factory, first_version, "A-12")) == 1
+    assert len(_query(factory, first_version, "人工智能知识检索的编号是 A-12 吗？")) == 1
+    assert len(_query(factory, first_version, "人工智能资料的编号是多少？")) == 1
+    assert _query(factory, first_version, "人工智能知识检索的编号是 A-13 吗？") == []
+    assert '"人工智能知识检索的编号是 A-12"' not in match_expression(
+        "人工智能知识检索的编号是 A-12 吗？"
+    )
     assert _query(factory, first_version, "!!!") == []
     assert _query(factory, first_version, "   \t  ") == []
     assert _query(factory, first_version, '" OR *') == []

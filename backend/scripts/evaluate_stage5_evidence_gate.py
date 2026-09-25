@@ -14,11 +14,12 @@ from typing import Any
 
 import prepare_stage5_fixed_ready as fixed_ready
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import bindparam, select, text
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY_ROOT = BACKEND_ROOT.parent
 ANNOTATIONS_PATH = REPOSITORY_ROOT / "docs" / "test-data" / "stage5-fixed-ready" / "evidence-gate-v1-queries.json"
+HARD_NEGATIVES_PATH = REPOSITORY_ROOT / "docs" / "test-data" / "stage5-fixed-ready" / "evidence-gate-v1-hard-negatives.json"
 REPORT_NAME = "stage5-evidence-gate-v1-report.json"
 DEFAULT_EVALUATION_DATA_DIR = fixed_ready.DEFAULT_DATA_DIR.parent / "mindmate-ai-stage5-evidence-gate-v1"
 SIMULATED_THRESHOLDS = (0.65, 0.70, 0.75, 0.82, 0.85)
@@ -82,6 +83,35 @@ def _load_annotations() -> dict[str, Any]:
     return payload
 
 
+def _load_hard_negatives() -> dict[str, Any]:
+    payload = json.loads(HARD_NEGATIVES_PATH.read_text(encoding="utf-8"))
+    if (
+        payload.get("schema_version") != 1
+        or payload.get("dataset_id") != "stage5-evidence-gate-v1-hard-negatives"
+    ):
+        raise EvaluationError("hard-negative 标注文件版本或数据集 ID 不匹配。")
+    items = payload.get("items")
+    if not isinstance(items, list) or len(items) < 6:
+        raise EvaluationError("hard-negative 标注少于 6 条。")
+    item_ids: set[str] = set()
+    for item in items:
+        if not isinstance(item, dict):
+            raise EvaluationError("hard-negative 标注项不是对象。")
+        item_id = item.get("id")
+        if not isinstance(item_id, str) or item_id in item_ids:
+            raise EvaluationError(f"hard-negative ID 缺失或重复：{item_id}")
+        item_ids.add(item_id)
+        if item.get("knowledge_base") not in {"primary", "decoy", "evaluation"}:
+            raise EvaluationError(f"hard-negative 知识库范围未知：{item_id}")
+        if item.get("review_status") != "hard_negative":
+            raise EvaluationError(f"hard-negative review_status 无效：{item_id}")
+        if item.get("expected_sufficient") is not False:
+            raise EvaluationError(f"hard-negative 必须人工标注为拒答：{item_id}")
+        if not item.get("rejection_reason"):
+            raise EvaluationError(f"hard-negative 缺少拒答理由：{item_id}")
+    return payload
+
+
 def _empty_confusion() -> dict[str, int]:
     return dict.fromkeys(CONFUSION_KEYS, 0)
 
@@ -97,7 +127,7 @@ def _classify(expected_sufficient: bool, actual_status: str) -> str:
 
 
 def _add_case_to_summary(summary: dict[str, Any], case: dict[str, Any]) -> None:
-    if case["review_status"] != "core":
+    if case.get("classification") is None:
         summary["needs_review_count"] += 1
         return
     confusion_key = case["classification"]
@@ -190,10 +220,10 @@ def _summarize(cases: list[dict[str, Any]]) -> dict[str, Any]:
         / sum(
             case["expected_sufficient"] is True
             for case in cases
-            if case["review_status"] == "core"
+            if case.get("classification") is not None
         )
         if any(
-            case["expected_sufficient"] is True and case["review_status"] == "core"
+            case["expected_sufficient"] is True and case.get("classification") is not None
             for case in cases
         )
         else None
@@ -369,6 +399,65 @@ def _offline_sensitivity(cases: list[dict[str, Any]]) -> dict[str, Any]:
     return output
 
 
+def _fts_diagnostics(
+    app: Any,
+    *,
+    knowledge_base_id: str,
+    index_version_id: str,
+    question: str,
+) -> dict[str, Any]:
+    """Capture query tokens and the actual stored FTS tokens for each hit."""
+    from mindmate.infrastructure.fts5 import Fts5Projection, query_debug
+
+    query_tokens = query_debug(question)
+    with app.state.session_factory() as session:
+        hits = Fts5Projection().match_version(
+            session,
+            index_version_id,
+            question,
+            limit=30,
+            knowledge_base_id=knowledge_base_id,
+            require_active_version=True,
+        )
+        chunk_ids = [str(hit["chunk_id"]) for hit in hits]
+        stored: dict[str, dict[str, list[str]]] = {}
+        if chunk_ids:
+            rows = session.execute(
+                text(
+                    """
+                    SELECT m.chunk_id, f.han_bigrams, f.han_unigrams, f.terms
+                    FROM fts_chunk_map AS m
+                    JOIN index_chunk_fts AS f ON f.rowid = m.fts_row_id
+                    WHERE m.index_version_id = :version_id
+                      AND m.chunk_id IN :chunk_ids
+                    """
+                ).bindparams(bindparam("chunk_ids", expanding=True)),
+                {"version_id": index_version_id, "chunk_ids": chunk_ids},
+            ).mappings()
+            stored = {
+                str(row["chunk_id"]): {
+                    "han_bigrams": str(row["han_bigrams"] or "").split(),
+                    "han_unigrams": str(row["han_unigrams"] or "").split(),
+                    "terms": str(row["terms"] or "").split(),
+                }
+                for row in rows
+            }
+    return {
+        **query_tokens,
+        "match_count": len(hits),
+        "keyword_candidates": [
+            {
+                "chunk_id": hit["chunk_id"],
+                "file_id": hit["file_id"],
+                "fts_rank": hit["fts_rank"],
+                "bm25": hit["bm25"],
+                "index_tokens": stored.get(str(hit["chunk_id"]), {}),
+            }
+            for hit in hits
+        ],
+    }
+
+
 def _result_signature(cases: list[dict[str, Any]]) -> str:
     stable_fields = []
     for case in cases:
@@ -388,6 +477,7 @@ def _result_signature(cases: list[dict[str, Any]]) -> str:
 
 def _run_cases(
     client: TestClient,
+    app: Any,
     annotations: dict[str, Any],
     kb_ids: dict[str, str],
     metadata: dict[str, dict[str, Any]],
@@ -408,7 +498,7 @@ def _run_cases(
         if not isinstance(actual_status, str):
             raise EvaluationError(f"检索响应缺少状态字段：{item['id']}")
         classification = None
-        if item["review_status"] == "core":
+        if isinstance(item.get("expected_sufficient"), bool):
             classification = _classify(item["expected_sufficient"], actual_status)
         active_ids = set(metadata[kb_key]["active_scope_files"])
         scope_violations = [
@@ -435,7 +525,7 @@ def _run_cases(
                 "question": item["question"],
                 "review_status": item["review_status"],
                 "expected_sufficient": item["expected_sufficient"],
-                "expected_fact": item["expected_fact"],
+                "expected_fact": item.get("expected_fact"),
                 "allowed_support_files": allowed_files,
                 "rejection_reason": item["rejection_reason"],
                 "review_reason": item.get("review_reason"),
@@ -445,6 +535,12 @@ def _run_cases(
                 "supported_without_annotated_evidence": supported_without_evidence,
                 "top8_scope_is_valid": not scope_violations,
                 "cross_scope_candidates": scope_violations,
+                "fts_diagnostics": _fts_diagnostics(
+                    app,
+                    knowledge_base_id=kb_ids[kb_key],
+                    index_version_id=str(result.get("index_version_id") or metadata[kb_key]["index_version_id"]),
+                    question=item["question"],
+                ),
                 "actual_result": result,
             }
         )
@@ -548,6 +644,7 @@ def run(data_dir: Path, model_cache: Path, repetitions: int) -> dict[str, Any]:
     if repetitions < 2 or repetitions > 5:
         raise EvaluationError("复跑次数必须在 2 到 5 之间。")
     annotations = _load_annotations()
+    hard_negatives = _load_hard_negatives()
     preparation = fixed_ready.run(data_dir, model_cache)
     resolved_data_dir = data_dir.expanduser().resolve()
     model_status = ModelManager(resolved_data_dir / "models").status(offline=True)
@@ -563,6 +660,9 @@ def run(data_dir: Path, model_cache: Path, repetitions: int) -> dict[str, Any]:
         "schema_version": 1,
         "dataset_id": annotations["dataset_id"],
         "annotation_source": "docs/test-data/stage5-fixed-ready/evidence-gate-v1-queries.json",
+        "hard_negative_annotation_source": (
+            "docs/test-data/stage5-fixed-ready/evidence-gate-v1-hard-negatives.json"
+        ),
         "annotation_policy": annotations["annotation_policy"],
         "provider_mode": "mock",
         "deepseek_called": False,
@@ -576,6 +676,7 @@ def run(data_dir: Path, model_cache: Path, repetitions: int) -> dict[str, Any]:
             item["review_status"] == "needs_review" for item in annotations["items"]
         ),
         "runs": [],
+        "hard_negative_runs": [],
     }
 
     started = time.monotonic()
@@ -599,8 +700,11 @@ def run(data_dir: Path, model_cache: Path, repetitions: int) -> dict[str, Any]:
         report["knowledge_bases"] = metadata
         before_counts = fixed_ready._resource_counts(app)
         run_signatures: list[str] = []
+        hard_run_signatures: list[str] = []
+        not_ready_id = str(preparation["knowledge_bases"]["not_ready_probe"]["knowledge_base_id"])
+        availability_checks: list[dict[str, Any]] = []
         for repetition in range(1, repetitions + 1):
-            cases = _run_cases(client, annotations, kb_ids, metadata, repetition)
+            cases = _run_cases(client, app, annotations, kb_ids, metadata, repetition)
             unavailable = [case for case in cases if case["actual_status"] == "unavailable"]
             if unavailable:
                 raise EvaluationError(
@@ -635,6 +739,62 @@ def run(data_dir: Path, model_cache: Path, repetitions: int) -> dict[str, Any]:
                     "cases": cases,
                 }
             )
+            hard_cases = _run_cases(
+                client,
+                app,
+                hard_negatives,
+                kb_ids,
+                metadata,
+                repetition,
+            )
+            hard_unavailable = [
+                case for case in hard_cases if case["actual_status"] == "unavailable"
+            ]
+            if hard_unavailable:
+                raise EvaluationError(
+                    "hard-negative READY 查询返回 unavailable："
+                    + json.dumps(
+                        [{"id": case["id"], "result": case["actual_result"]} for case in hard_unavailable],
+                        ensure_ascii=False,
+                    )
+                )
+            hard_summary = _summarize(hard_cases)
+            hard_run_signatures.append(_result_signature(hard_cases))
+            report["hard_negative_runs"].append(
+                {
+                    "repetition": repetition,
+                    "confusion_summary": hard_summary,
+                    "false_positives": [
+                        case for case in hard_cases if case["classification"] == "false_positive"
+                    ],
+                    "cross_scope_candidates": [
+                        case for case in hard_cases if case["cross_scope_candidates"]
+                    ],
+                    "cases": hard_cases,
+                }
+            )
+            not_ready = fixed_ready._request_json(
+                client.post(
+                    f"/api/v1/knowledge-bases/{not_ready_id}/retrieval-tests",
+                    headers=fixed_ready._headers(f"stage5-hard-not-ready-{repetition}"),
+                    json={"question": "失效索引中的 API 超时时间是多少？"},
+                )
+            )
+            availability_checks.append(
+                {
+                    "repetition": repetition,
+                    "knowledge_base": "not_ready_probe",
+                    "status": not_ready.get("status"),
+                    "retrieval_error_code": not_ready.get("retrieval_error_code"),
+                    "candidate_count": len(not_ready.get("candidates", [])),
+                }
+            )
+            if (
+                not_ready.get("status") != "unavailable"
+                or not_ready.get("retrieval_error_code") != "INDEX_VERSION_NOT_AVAILABLE"
+                or not_ready.get("candidates")
+            ):
+                raise EvaluationError(f"失效索引安全检查未明确 unavailable：{not_ready}")
         after_counts = fixed_ready._resource_counts(app)
         if before_counts != after_counts:
             raise EvaluationError(
@@ -642,20 +802,31 @@ def run(data_dir: Path, model_cache: Path, repetitions: int) -> dict[str, Any]:
             )
         report["resource_counts_before_queries"] = before_counts
         report["resource_counts_after_queries"] = after_counts
+        report["availability_checks"] = availability_checks
     report["reproducibility"] = {
         "requested_repetitions": repetitions,
         "result_signatures": run_signatures,
-        "stable": len(set(run_signatures)) == 1,
+        "hard_negative_result_signatures": hard_run_signatures,
+        "stable": len(set(run_signatures)) == 1 and len(set(hard_run_signatures)) == 1,
         "resource_counts_unchanged": True,
     }
     if not report["reproducibility"]["stable"]:
         raise EvaluationError("同一进程内复跑结果不稳定。")
     first_run_cases = report["runs"][0]["cases"]
     report["offline_threshold_sensitivity"] = _offline_sensitivity(first_run_cases)
+    hard_first = report["hard_negative_runs"][0]["confusion_summary"]
+    report["hard_negative_status"] = (
+        "PASS"
+        if hard_first["confusion_matrix"]["false_positive"] == 0
+        and hard_first["cross_scope_candidate_count"] == 0
+        else "FAIL"
+    )
     report["elapsed_seconds"] = round(time.monotonic() - started, 3)
     report["evaluation_status"] = "COMPLETED"
     report_path = resolved_data_dir / REPORT_NAME
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    if report["hard_negative_status"] != "PASS":
+        raise EvaluationError("hard-negative 出现假阳性或跨范围候选，阻止本批验收。")
     return report
 
 
@@ -684,6 +855,8 @@ def main() -> int:
                 "core_sample_count": report["core_sample_count"],
                 "needs_review_count": report["needs_review_count"],
                 "confusion_matrix": first["confusion_summary"]["confusion_matrix"],
+                "hard_negative_confusion_matrix": report["hard_negative_runs"][0]["confusion_summary"]["confusion_matrix"],
+                "hard_negative_status": report["hard_negative_status"],
                 "result_stable": report["reproducibility"]["stable"],
                 "elapsed_seconds": report["elapsed_seconds"],
             },

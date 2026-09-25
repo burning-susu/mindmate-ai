@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unicodedata
+from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy import bindparam, text
@@ -11,6 +12,38 @@ from mindmate.infrastructure.models import Chunk, FtsChunkMap
 FTS_TABLE = "index_chunk_fts"
 DEFAULT_FTS_TOP_K = 30
 MAX_FTS_TOP_K = 30
+MAX_RAW_FTS_MATCHES = MAX_FTS_TOP_K * 4
+
+# These are query scaffolding rather than facts users are likely to search for.
+# They are removed only from the Han-token fallback; the original query is still
+# used by the later evidence gate and is never rewritten for display.
+_IGNORED_HAN_TOKENS = frozenset(
+    {
+        "多少",
+        "几个",
+        "几种",
+        "什么",
+        "是否",
+        "是不是",
+        "如何",
+        "怎么",
+        "怎样",
+        "为什么",
+        "哪些",
+        "哪种",
+        "哪个",
+        "么是",
+        "是什",
+        "什叫",
+        "叫什",
+        "的什",
+        "以及",
+        "并且",
+        "同时",
+        "分别",
+    }
+)
+_TRAILING_HAN_PARTICLES = frozenset("吗呢嘛呀啊")
 
 
 class Fts5Error(RuntimeError):
@@ -66,33 +99,107 @@ def normalize_query(query: str) -> str:
     return " ".join(unicodedata.normalize("NFKC", query).split())
 
 
-def match_expression(query: str) -> str:
-    """Build safe FTS5 phrases, using overlapping Han bigrams for short Chinese terms."""
-    query = normalize_query(query)
-    clauses: list[str] = []
+@dataclass(frozen=True, slots=True)
+class _HanQueryRun:
+    bigrams: tuple[str, ...]
+    unigrams: tuple[str, ...]
+
+
+def _query_parts(query: str) -> tuple[tuple[str, ...], tuple[_HanQueryRun, ...]]:
+    normalized = normalize_query(query)
+    terms: list[str] = []
+    runs: list[_HanQueryRun] = []
     index = 0
-    while index < len(query):
-        if _is_han(query[index]):
+    while index < len(normalized):
+        if _is_han(normalized[index]):
             end = index + 1
-            while end < len(query) and _is_han(query[end]):
+            while end < len(normalized) and _is_han(normalized[end]):
                 end += 1
-            run = query[index:end]
-            if len(run) == 1:
-                clauses.append(f"han_unigrams : {_quoted(run)}")
-            else:
-                tokens = " ".join(run[offset : offset + 2] for offset in range(len(run) - 1))
-                clauses.append(f"han_bigrams : {_quoted(tokens)}")
+            run = normalized[index:end].rstrip("".join(_TRAILING_HAN_PARTICLES))
+            if run:
+                bigrams = tuple(
+                    dict.fromkeys(
+                        run[offset : offset + 2]
+                        for offset in range(len(run) - 1)
+                        if run[offset : offset + 2] not in _IGNORED_HAN_TOKENS
+                    )
+                )
+                # A one-character run needs the auxiliary unigram field. For
+                # longer runs, using unigrams as an OR fallback would turn
+                # common characters into a whole-corpus query.
+                unigrams = (run,) if len(run) == 1 and not bigrams else ()
+                if bigrams or unigrams:
+                    runs.append(_HanQueryRun(bigrams, unigrams))
             index = end
             continue
-        if query[index].isalnum():
+        if normalized[index].isalnum():
             end = index + 1
-            while end < len(query) and query[end].isalnum() and not _is_han(query[end]):
+            while (
+                end < len(normalized)
+                and normalized[end].isalnum()
+                and not _is_han(normalized[end])
+            ):
                 end += 1
-            clauses.append(f"terms : {_quoted(query[index:end].casefold())}")
+            terms.append(normalized[index:end].casefold())
             index = end
-        else:
-            index += 1
+            continue
+        index += 1
+    return tuple(dict.fromkeys(terms)), tuple(runs)
+
+
+def match_expression(query: str) -> str:
+    """Build a bounded, escaped FTS expression for mixed Chinese queries.
+
+    The index stores overlapping Han bigrams as separate tokens. Joining a
+    complete Chinese question inside one quoted phrase requires every query
+    bigram to occur contiguously in the document, so natural paraphrases never
+    reach the keyword channel. Each run is therefore an OR group of its safe
+    bigrams, while ASCII words/numbers remain exact AND terms. ``match_version``
+    applies a minimum per-run match count after MATCH to keep this fallback from
+    becoming a one-common-character whole-corpus query.
+    """
+    terms, runs = _query_parts(query)
+    clauses: list[str] = []
+    clauses.extend(f"terms : {_quoted(term)}" for term in terms)
+    for run in runs:
+        tokens = [
+            f"han_bigrams : {_quoted(token)}"
+            for token in run.bigrams
+        ] or [f"han_unigrams : {_quoted(token)}" for token in run.unigrams]
+        clauses.append("(" + " OR ".join(tokens) + ")")
     return " AND ".join(clauses)
+
+
+def query_debug(query: str) -> dict[str, Any]:
+    """Return deterministic query-side token evidence for local diagnostics."""
+    terms, runs = _query_parts(query)
+    return {
+        "normalized_query": normalize_query(query),
+        "terms": list(terms),
+        "han_runs": [
+            {"bigrams": list(run.bigrams), "unigrams": list(run.unigrams)}
+            for run in runs
+        ],
+        "match_expression": match_expression(query),
+    }
+
+
+def _passes_query_filter(row: Any, terms: tuple[str, ...], runs: tuple[_HanQueryRun, ...]) -> bool:
+    index_terms = set(str(row["index_terms"] or "").split())
+    if any(term not in index_terms for term in terms):
+        return False
+    strong_identifier = any(any(character.isdigit() for character in term) for term in terms)
+    index_bigrams = set(str(row["index_han_bigrams"] or "").split())
+    index_unigrams = set(str(row["index_han_unigrams"] or "").split())
+    for run in runs:
+        if run.bigrams:
+            matched = len(index_bigrams.intersection(run.bigrams))
+            minimum = 1 if strong_identifier else min(2, len(run.bigrams))
+            if matched < minimum:
+                return False
+        elif run.unigrams and not index_unigrams.intersection(run.unigrams):
+            return False
+    return True
 
 
 class Fts5Projection:
@@ -317,16 +424,21 @@ class Fts5Projection:
             or not 1 <= limit <= MAX_FTS_TOP_K
         ):
             raise Fts5Error("FTS_TOP_K_INVALID")
+        terms, runs = _query_parts(query)
         expression = match_expression(query)
         if not expression:
             return []
         try:
-            rows = session.execute(
+            rows = list(
+                session.execute(
                 text(
                     f"""
                     SELECT m.chunk_id, m.file_id, :version_id AS index_version_id,
                            m.parse_revision_id, m.chunking_config_id, m.content_hash,
                            index_chunk_fts.content AS content,
+                           index_chunk_fts.han_bigrams AS index_han_bigrams,
+                           index_chunk_fts.han_unigrams AS index_han_unigrams,
+                           index_chunk_fts.terms AS index_terms,
                            bm25(index_chunk_fts, 0.0, 1.0, 1.0, 1.0) AS score
                     FROM {FTS_TABLE} AS index_chunk_fts
                     JOIN fts_chunk_map AS m ON m.fts_row_id = index_chunk_fts.rowid
@@ -362,28 +474,38 @@ class Fts5Projection:
                       AND c.file_id = m.file_id AND c.parse_revision_id = m.parse_revision_id
                       AND c.chunking_config_id = m.chunking_config_id
                       AND m.chunking_config_id = v.chunking_config_id
-                    ORDER BY score ASC, m.chunk_id ASC
-                    LIMIT :limit
+                     ORDER BY score ASC, m.chunk_id ASC
+                     LIMIT :raw_limit
                     """
                 ),
                 {
                     "query": expression,
                     "version_id": index_version_id,
                     "knowledge_base_id": knowledge_base_id,
-                    "limit": limit,
+                    # The post-MATCH token filter may remove common-token hits;
+                    # keep the expansion bounded before returning FTS Top-K.
+                    "raw_limit": min(MAX_RAW_FTS_MATCHES, max(limit, limit * 4)),
                     "require_active": int(require_active_version),
                 },
-            ).mappings()
+                ).mappings()
+            )
         except Exception as error:
             if "fts5" in str(error).casefold() or "match" in str(error).casefold():
                 raise Fts5Error("FTS_QUERY_FAILED") from error
             raise
         hits: list[dict[str, Any]] = []
-        for rank, row in enumerate(rows, 1):
+        for row in rows:
+            if not _passes_query_filter(row, terms, runs):
+                continue
             hit = dict(row)
             hit["bm25"] = float(hit["score"])
-            hit["fts_rank"] = rank
+            hit["fts_rank"] = len(hits) + 1
+            hit.pop("index_han_bigrams", None)
+            hit.pop("index_han_unigrams", None)
+            hit.pop("index_terms", None)
             hits.append(hit)
+            if len(hits) >= limit:
+                break
         return hits
 
     @staticmethod

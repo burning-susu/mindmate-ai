@@ -1,8 +1,8 @@
 # 阶段 5：知识库基础与成员准入测试报告
 
 > 阶段：`5`
-> 批次：`第八批至第二十四批`
-> 验证日期：`2026-09-24`
+> 批次：`第八批至第二十七批`
+> 验证日期：`2026-09-25`
 > 第八批结论：`PASS`
 > 第九批结论：`PASS`
 > 第十批结论：`PASS`
@@ -19,6 +19,7 @@
 > 第二十二批结论：`BLOCKED`（真实 Chat/Learning owner 前置缺失，延期到阶段 6/7）
 > 第二十三批结论：`PASS`
 > 第二十四批结论：`PASS`
+> 第二十七批结论：`PASS`
 > 阶段 5 状态：`PARTIAL`
 > 分支：`feat/v1-bootstrap`
 > 起始提交：`75a0653877b7f627bc254a859232689c19872777`
@@ -31,7 +32,7 @@
 
 ## 结论
 
-第八至第十六批完成知识库成员、索引预处理、Chunk、Embedding、FTS5、向量 Top-K 与双路候选基础；第十七批完成内部 RRF/多样性 Top 8；第十八批完成内部证据判定；第十九批完成产物完整性复核与原子激活；第二十批完成同一知识库增量构建；第二十一批建立未绑定服务端来源快照；第二十三批增加受本地会话保护的本地测试检索 API；第二十四批将该 API 接入知识库详情页高级诊断区域。空库保持 `EMPTY`；此端点和页面不提供聊天答案或 Citation。
+第八至第十六批完成知识库成员、索引预处理、Chunk、Embedding、FTS5、向量 Top-K 与双路候选基础；第十七批完成内部 RRF/多样性 Top 8；第十八批完成内部证据判定；第十九批完成产物完整性复核与原子激活；第二十批完成同一知识库增量构建；第二十一批建立未绑定服务端来源快照；第二十三批增加受本地会话保护的本地测试检索 API；第二十四批将该 API 接入知识库详情页高级诊断区域；第二十七批修复中文自然问句 FTS5 召回并加入困难负例回归。空库保持 `EMPTY`；此端点和页面不提供聊天答案或 Citation。
 
 第十批 `INDEX_PREPROCESS` 的 `COMPLETED` 只证明输入快照与预处理结果已持久化；第十一批 `INDEX_CHUNK` 只证明切片阶段结束；第十三批 `INDEX_EMBED` 只证明向量已持久化；第十四批 `INDEX_FTS` 只证明 FTS5 投影已建立。第十五至十八批提供内部召回、排序与证据判定；`supported` 只表示候选可进入后续处理，不证明最终答案获事实支持。第十九批验证完整候选后才允许原子激活；第二十批增量候选沿用同一完整性复核；第二十一批从活动版本内部检索结果创建经服务端复核的未绑定来源快照。第二十二批因真实 owner 不存在而 `BLOCKED`，Citation 绑定延期至阶段 6/7；第二十三批只开放本地测试检索端点，第二十四批完成详情页诊断界面。阶段 5 仍为 `PARTIAL`：Citation 绑定、聊天/RAG 与验收集质量评估仍未完成。
 
@@ -873,3 +874,71 @@ repo> git diff --check
 ~~~
 
 这套小样本用于诊断现有证据门控，不宣称达到发布门槛 Recall@10 `>=0.85`、引用定位正确率、资料不足拒答召回率或最终回答质量。没有调整检索规则、索引架构或 Citation；没有 DeepSeek、真实凭据、付费 API 或个人资料。
+
+## 第二十七批：中文 FTS 召回修复与困难负例回归
+
+> 本批结论：`PASS`；阶段 5 继续 `PARTIAL`。本节记录第二十六批基线之后的最小 FTS 查询修复与真实 ONNX 回归，不改变证据门控生产参数。
+
+### 根因与修复
+
+第二十六批已经证明 16 条 FN 的人工支持文件都在向量 Top 8，且没有召回缺失型 FN；但 101 条 Top 8 候选只有 2 条带 FTS 信号。复核真实 SQLite FTS5 行后确认，索引侧的连续汉字二元词投影是正确的，问题在查询侧：整段中文自然问句被拼成一个带空格的引号短语。FTS5 因而要求每个问句二元词连续且全部出现，原文没有“是多少/是否/等多久”等问句脚手架时整段失配。
+
+修复位于 `backend/src/mindmate/infrastructure/fts5.py`：
+
+- 保留 NFKC 规范化、SQLite 参数绑定和逐词引号转义；拉丁词项、数字和编号片段继续精确 `AND`，错误数字不会被中文 OR 组绕过。
+- 连续中文段改为有界二元词 `OR` 组，句末语气词与问题脚手架只从 FTS fallback 中移除；原始问题仍传给排序和证据门控。
+- MATCH 结果在 SQL 读取实际索引侧 token 后做确定性最低命中过滤：普通中文段至少命中 2 个二元词，含数字/编号的查询段至少命中 1 个；原始扩展最多为请求 Top-K 的四倍且不超过 120 行，最终仍返回 FTS Top 30。
+- 没有新增 schema/Alembic 迁移；索引构建、`unicode61`、FTS 映射、旧 READY 索引读取和原子激活边界保持不变。
+
+### 真实 FTS 前后数据
+
+使用同一固定 READY 数据、同一真实本地 ONNX 模型和同一 `evidence-gate-v1` 配置，第二十六批基线与本批首轮 Top 8 对比如下：
+
+| 指标 | 修复前 | 修复后 |
+| --- | ---: | ---: |
+| Top 8 候选总数 | 101 | 101 |
+| 含 FTS 排名候选 | 2 | 20 |
+| 双路命中 | 2 | 20 |
+| Vector-only | 99 | 81 |
+| FTS-only | 0 | 0 |
+| 核心混淆表 TP/FN/FP/TN | 0/16/0/15 | 0/16/0/15 |
+
+代表案例实际从 FTS5 返回正确范围候选：`API 单次请求超时时间是多少秒？` 返回主库 `服务超时策略.txt`；`演练系统 API 单次请求超时时间是多少秒？` 返回干扰库 `相似服务超时策略.txt`；`演示作业的编号是什么？` 和 `CACHE-PROXY-K3 指什么组件？` 返回对应评测文件。`31 秒`、`18 秒`、错误编号等近失配查询没有 FTS 命中。报告在隔离根 `%TEMP%\\mindmate-ai-stage5-evidence-gate-v1-r27\\stage5-evidence-gate-v1-report.json` 保存查询 token、实际 MATCH 表达式、实际存储 token、关键词排名、向量候选、最终 Top 8 和门控理由。
+
+### 核心集与困难负例
+
+- 旧 31 条核心人工标注保持 TP `0`、FN `16`、FP `0`、TN `15`。16 条 FN 都在 Top 8 找到标注支持文件，仍由严格 `evidence-gate-v1` 拒答；本批没有调低 `0.82` 向量阈值，也没有修改门控判定策略。两次独立运行各执行 `--repeat 2`，核心结果签名稳定。
+- 新增 `docs/test-data/stage5-fixed-ready/evidence-gate-v1-hard-negatives.json`，7 条独立人工标注 hard negatives 覆盖同名跨库 `30/47 秒`、错误数字、相同术语但无事实、相反表述和回收站。独立混淆表 TN `7`、FP `0`，跨范围候选 `0`；所有 READY hard-negative 查询均为 `insufficient`，没有 `unavailable`。
+- 失效索引安全检查不混入混淆表：空诊断库两轮均为 `unavailable / INDEX_VERSION_NOT_AVAILABLE`，候选数 `0`。
+
+### 验收命令与结果
+
+```text
+backend> uv run python scripts/evaluate_stage5_evidence_gate.py --data-dir "$env:TEMP\\mindmate-ai-stage5-evidence-gate-v1-r27" --repeat 2
+COMPLETED；核心 0/16/0/15；hard-negative TN 7 / FP 0；两套签名 stable=True；失效索引检查通过
+
+backend> uv run pytest tests/test_stage5_fts_worker.py tests/test_stage5_evidence_gate_eval.py -q
+通过
+
+backend> uv run pytest
+181 passed, 143 warnings（串行，约 2:26）
+
+backend> uv run ruff check src tests scripts
+All checks passed
+
+backend> uv run pyright src tests scripts/prepare_stage5_fixed_ready.py scripts/evaluate_stage5_evidence_gate.py
+0 errors, 0 warnings, 0 informations
+
+backend> uv run python -m compileall -q src tests migrations scripts
+通过
+
+backend> uv run alembic heads
+6b3e91a0c4d7 (head)
+
+repo> git diff --check
+通过
+```
+
+首次尝试复用旧评测目录因其所有权标记已缺失而被保护逻辑拒绝，未接管、删除或覆盖旧数据；随后使用带新所有权标记的 `r27` 隔离根完成准备和评测。未改前端，因此未运行前端门禁；未调用 DeepSeek、真实凭据、付费 API 或私人资料。固定小集不替代 Recall@10、引用定位、10 万 Chunk 性能或 AC-KB-* 全量验收。
+
+下一批唯一目标：在不放松证据门控、不引入 Provider 的前提下，针对仍保留的 16 条 FN 建立人工可解释的门控/答案质量校准方案；阶段 5 保持 `PARTIAL`。

@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "dataset_id": "stage5-evidence-gate-v1-hard-negatives",
+  "annotation_policy": "独立于 31 条核心样本的人工拒答集；所有 READY hard-negative 真值均为 false，失效索引另作为 availability 安全检查，不计入混淆表。",
+  "items": [
+    {
+      "id": "S5-HN-001",
+      "category": "same_title_cross_kb_numeric",
+      "knowledge_base": "primary",
+      "question": "演练系统 API 单次请求超时时间是 47 秒吗？",
+      "review_status": "hard_negative",
+      "expected_sufficient": false,
+      "rejection_reason": "47 秒只存在于相似干扰库，主库同名资料是 30 秒且不能跨库引用。"
+    },
+    {
+      "id": "S5-HN-002",
+      "category": "wrong_numeric_value",
+      "knowledge_base": "primary",
+      "question": "本地服务普通 API 请求的超时上限是 29 秒吗？",
+      "review_status": "hard_negative",
+      "expected_sufficient": false,
+      "rejection_reason": "主库原文记录 30 秒，错误数字不得被近似匹配放行。"
+    },
+    {
+      "id": "S5-HN-003",
+      "category": "same_terms_without_fact",
+      "knowledge_base": "evaluation",
+      "question": "短词标签 API 是否定义了请求超时时限？",
+      "review_status": "hard_negative",
+      "expected_sufficient": false,
+      "rejection_reason": "短词干扰资料只列缩写标签，明确没有定义 API 请求时限。"
+    },
+    {
+      "id": "S5-HN-004",
+      "category": "contradictory_polarity",
+      "knowledge_base": "evaluation",
+      "question": "示例模块的审计记录不保留 12 天，对吗？",
+      "review_status": "hard_negative",
+      "expected_sufficient": false,
+      "rejection_reason": "资料中的 12 天是肯定表述，问题的相反表述不能由该资料直接支持。"
+    },
+    {
+      "id": "S5-HN-005",
+      "category": "wrong_numeric_value",
+      "knowledge_base": "evaluation",
+      "question": "示例模块的审计记录保留期限是 30 天吗？",
+      "review_status": "hard_negative",
+      "expected_sufficient": false,
+      "rejection_reason": "评测库只有 12 天和 18 天两条冲突记录，没有 30 天。"
+    },
+    {
+      "id": "S5-HN-006",
+      "category": "trashed_source",
+      "knowledge_base": "primary",
+      "question": "回收站专属校验编号 TRASH-9274 仍属于当前主库资料吗？",
+      "review_status": "hard_negative",
+      "expected_sufficient": false,
+      "rejection_reason": "对应文件已进入回收站，即使旧 READY 物理产物保留也不能返回或引用。"
+    },
+    {
+      "id": "S5-HN-007",
+      "category": "same_title_cross_kb_numeric",
+      "knowledge_base": "decoy",
+      "question": "本地服务 API 单次请求超时是 30 秒吗？",
+      "review_status": "hard_negative",
+      "expected_sufficient": false,
+      "rejection_reason": "相似干扰库中的同名资料记录 47 秒，主库的 30 秒不能跨库使用。"
+    }
+  ]
+}
