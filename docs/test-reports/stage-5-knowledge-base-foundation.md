@@ -1076,3 +1076,78 @@ repo> git diff --check
 ```
 
 阶段 5 继续 `PARTIAL`。当前产品没有模型下载安装页面；Citation owner 依赖真实 Chat/Learning owner，留到阶段 6/7；10 万 Chunk 性能、Recall@10/最终回答质量和 AC-KB-* 全量验收未覆盖。本批唯一下一目标：在真实 Chat/Learning owner 可验证后完成 Citation 绑定准入，不生成模型答案或伪造 owner。
+
+## 第三十批：本地 Embedding 模型安装与进度闭环
+
+> 本批结论：`PASS`；阶段 5 继续 `PARTIAL`。进场分支 `feat/v1-bootstrap`，本地与 `origin/feat/v1-bootstrap` SHA 均为 `d8762e32a2d3db85cf2393f05a7d99d007f677b7`，工作区干净、远端未分叉。最终提交 SHA 在本批收口报告记录。
+
+### 固定来源与下载产物
+
+- 模型保持既定 `BAAI/bge-small-zh-v1.5`，没有重新选型。Hugging Face API 确认 BAAI revision `7999e1d3359715c523056ef9478215996d62a620` 存在且未 gated，模型卡许可为 MIT；`Xenova/bge-small-zh-v1.5` ONNX revision `75c43b069aac4d136ba6bc1122f995fedcfd2781` 存在、未 gated，模型卡 `base_model` 指向该 BAAI revision。Xenova 没有单独填写 license 字段；项目沿用既有 `index-preprocessing-contract.md` 记录的上游 MIT 许可依据，并在前端标为上游许可，不把第三方仓库元数据说成已声明 MIT。
+- 真实公网安装使用全新隔离数据根 `%TEMP%\mindmate-ai-stage5-model-install-r30b`，通过应用安装 API 和固定 Hugging Face HTTPS revision 下载；成功状态 `READY`，总字节 `95,291,718`。模型文件实测与 manifest 完全一致：`onnx/model.onnx` 为 `94,851,877` 字节、SHA-256 `69a0b846f4f116b5e6aabf9546ea6754d02264f3211a13a1bd69b31b8040749a`；`tokenizer.json` 为 `439,125` 字节、SHA-256 `48cea5d44424912a6fd1ea647bf4fe50b55ab8b1e5879c3275f80e339e8fae26`；`config.json` 为 `716` 字节、SHA-256 `d4193ead3a810fd694fa8a31d7fc72fbaebc0668b603e398734bf2f6538ff42f`。fingerprint `4d07bfc3eefa75de01924a4350eef08182c163b0060228410c3d882c9f07c6a5`。模型文件和浏览器证据留在临时目录，没有加入 Git。
+- 上述校验针对三份必需运行文件；BAAI 原模型卡/仓库未提供 ONNX 文件，Xenova 是不可变 ONNX 产物来源。此前第十二批原权重/ONNX 等价性证据仍以 `docs/project/index-preprocessing-contract.md` 为准，本批没有重做 PyTorch 对照，也没有把 fixture 当作真实模型证据。
+
+### 后端持久安装任务
+
+- 新增 `GET /api/v1/embedding-model` 和用户主动调用的 `POST /api/v1/embedding-model/install`。状态 DTO 返回基础模型/ONNX 来源链接、许可标识、两份 revision、manifest fingerprint、预计总字节、实际下载字节、当前清单文件、阶段、任务/诊断 ID、安全错误码及 `can_install/can_cancel`。下载 URL、路径和文件集合均来自固定清单；接口不接受任意地址或路径。
+- 新增 `EMBEDDING_MODEL_INSTALL` 持久 Worker，复用 SQLite `BackgroundTask` 检查点和现有 `/api/v1/tasks/{task_id}/cancel`，不新增 schema/migration。POST 通过幂等键和活动任务查询避免重复安装。Worker 启动会把遗留 `RUNNING` 任务恢复成 `INTERRUPTED` 后继续同一检查点；安装器保留原来的 `.partial`、TLS、路径/大小/超时限制、SHA-256/配置校验和原子发布。失败、取消和半成品均不能被报告为 READY。
+- 实际阶段通过持久检查点表示；任务进入下载后按块报告实际字节，所有字节到齐后报告 `VERIFYING`，只有管理器验证并原子发布后才为 READY。连接错误保留安全错误码，已知连接不可达且未安装时展示离线缺失；初次打开详情页不会发网络探测或自动下载。无新模型时，旧活动索引状态仍独立可见。
+- 空闲 Worker 通过事件等待安装命令或服务启动恢复，不轮询写 SQLite；服务关闭时活动任务中断并保留检查点。没有验证 Windows 安装包进程级强制终止/重启，持久恢复由隔离应用 lifespan 重开测试证明。
+
+### 前端与浏览器实测
+
+- 知识库详情的索引工作台加入模型安装区，明确显示约 `90.9 MiB`、来源链接、`MIT（依据 BAAI 上游；Xenova 未单独声明）`、本机保存说明、基础/ONNX revision 和 fingerprint。未安装时提供明确“下载并安装模型”入口；下载显示真实 `downloaded_bytes/total_size_bytes` 和当前 manifest 文件，支持取消；失败/离线/取消提供诊断 ID 和重试。刷新与路由变化后的状态从 API 恢复；页面打开、应用启动和知识库索引操作均不自动开始模型下载。
+- 前端回归确认 READY 活动索引与 MISSING 模型可以同时显示；模型取消后可重试， READY 状态隐藏取消入口。保留第二十九批索引重试、重建、任务取消和测试检索行为。
+- 最终真实浏览器命令：`npm run test:e2e -- --workers=1 e2e/stage5-model-install.spec.ts`，设置隔离后端 `MINDMATE_DATA_DIR=%TEMP%\mindmate-ai-stage5-model-install-r30b`、API 8001、Vite 5174、`STAGE5_MODEL_INSTALL=1`；结果 `1 passed`（25.7 秒测试，30.8 秒总计）。Chromium 从未安装状态经显式点击完成真实公网获取；页面在 `0.1 MiB / 90.9 MiB` 时截取进度证据，然后等待全量校验通过。浏览器继续点击“重建当前知识库索引”，真实 CPU ONNX 推理成功，`INDEX_PREPROCESS`、`INDEX_CHUNK`、`INDEX_EMBED`、`INDEX_FTS` 全部 `COMPLETED`，活动索引最终 `READY`，无水平溢出。
+- 截图：`%TEMP%\mindmate-ai-stage5-model-install-r30b\evidence\model-download-progress.png` 与 `model-index-ready-mobile.png`，隔离验收数据未提交。
+
+### 故障与状态机证据
+
+- `tests/test_embedding_model_install.py` 使用小型、明确标为测试用途的自有 manifest 与 `httpx.MockTransport`，覆盖安装进度检查点、重复命令复用单一 task、取消后 partial 不发布、显式重试成功、服务重启恢复同一任务和诊断 ID；它不验证真实模型内容。
+- 既有 `tests/test_embedding_model_manager.py` 保持覆盖固定清单、不受信重定向拒绝、坏哈希/截断/缺文件/错误配置不发布、离线/超时映射、最终块取消以及并发安装只发布一份完整产物。前端 Vitest 另覆盖按钮只有点击后才提交、字节进度、取消与重试。
+- 两个全新隔离目录做了真实首次公网下载；最终收口证据采用第二个目录，其中页面进度截图大于零。没有使用 DeepSeek、真实凭据、付费 API、私人资料，也未把模型文件、隔离数据库、日志或截图放入 Git。
+
+### 验收与未完成项
+
+```text
+backend> uv run pytest
+194 passed, 152 warnings（159.77 秒）
+
+backend> uv run ruff check src tests scripts
+All checks passed
+
+backend> uv run pyright src tests scripts/prepare_stage5_fixed_ready.py scripts/evaluate_stage5_evidence_gate.py
+0 errors, 0 warnings, 0 informations
+
+backend> uv run python -m compileall -q src tests migrations scripts
+通过
+
+backend> uv run alembic heads
+6b3e91a0c4d7 (head)
+
+frontend> npm test -- --run
+23 passed（6 个 test files）
+
+frontend> npm run lint
+通过
+
+frontend> npm run typecheck
+通过
+
+frontend> npm run build
+通过
+
+frontend> npm run api:generate
+44 schemas / 56 operations，与 FastAPI OpenAPI 3.1 导出一致
+
+frontend> npm run test:e2e -- --workers=1 e2e/stage5-model-install.spec.ts
+1 passed（真实 API、真实公网模型、真实本地 ONNX 索引）
+
+frontend> STAGE5_MODEL_INSTALL=1（隔离目录模型已 READY）npm run test:e2e -- --workers=1 e2e/stage5-model-install.spec.ts
+1 passed（校验忙碌态恢复、许可证说明、模型复用与再次索引）
+
+repo> git diff --check
+通过
+```
+
+阶段 5 继续 `PARTIAL`。本批证明了真实首次固定模型下载、大小/SHA-256/config 校验、取消/重试持久状态机与一次真实本机 ONNX 索引；离线状态由可控 HTTP/Manager 测试验证，未模拟系统真实断网 UI；进程级 Windows 安装包强退/重启未验证。Citation owner 依赖真实 Chat/Learning owner，仍延期到阶段 6/7；10 万 Chunk 性能、Recall@10、最终回答质量和 AC-KB-* 全量验收仍未覆盖。下一批唯一目标：真实 Chat/Learning owner 可核验后建立服务端 Citation 绑定准入，不生成模型回答或伪造 owner。

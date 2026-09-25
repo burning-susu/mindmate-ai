@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from mindmate.ai.embeddings.model_manager import ModelManager, ModelStatus
 from mindmate.api.files import VERSION_CONFLICT_RESPONSES, FileApiError
 from mindmate.application.chunking import CHUNK_GENERATION_TASK
+from mindmate.application.embedding_model_install import EMBEDDING_MODEL_INSTALL_TASK
 from mindmate.application.evidence_gate import unavailable_assessment
 from mindmate.application.files import normalize_name, utc_now
 from mindmate.application.hybrid_search import (
@@ -1095,6 +1096,7 @@ def cancel_knowledge_membership_task(
         CHUNK_GENERATION_TASK,
         INDEX_EMBED_TASK,
         INDEX_FTS_TASK,
+        EMBEDDING_MODEL_INSTALL_TASK,
     }
     if task is None or task.task_type not in cancellable_types:
         raise FileApiError("TASK_NOT_FOUND", "任务不存在。", 404)

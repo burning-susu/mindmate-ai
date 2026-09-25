@@ -14,6 +14,15 @@ export type RetrievalTestRequest = components['RetrievalTestRequest']
 export type RetrievalTestResponse = components['RetrievalTestResponse']
 export type RetrievalTestCandidate = components['RetrievalTestCandidateResponse']
 export type RetrievalTestLocation = components['RetrievalTestLocation']
+export type EmbeddingModelStatus = components['EmbeddingModelStatusResponse']
+
+export function getEmbeddingModelStatus(signal?: AbortSignal): Promise<EmbeddingModelStatus> {
+  return apiRequest('/api/v1/embedding-model', { signal })
+}
+
+export function installEmbeddingModel(): Promise<EmbeddingModelStatus> {
+  return apiRequest('/api/v1/embedding-model/install', { method: 'POST' })
+}
 
 export function createKnowledgeBase(payload: KnowledgeBaseCreate): Promise<KnowledgeBaseItem> {
   return apiRequest('/api/v1/knowledge-bases', {

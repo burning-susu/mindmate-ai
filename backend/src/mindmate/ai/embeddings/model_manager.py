@@ -35,6 +35,7 @@ class ModelState(StrEnum):
     MISSING = "MISSING"
     MISSING_OFFLINE = "MISSING_OFFLINE"
     CORRUPT = "CORRUPT"
+    INSTALLING = "INSTALLING"
 
 
 class ModelManagerError(RuntimeError):
@@ -116,7 +117,9 @@ class ModelManager:
         self._lock = _lock_for(self.install_directory)
 
     def status(self, *, offline: bool = False) -> ModelStatus:
-        with self._lock:
+        if not self._lock.acquire(blocking=False):
+            return self._status(ModelState.INSTALLING)
+        try:
             if self._model_parent_is_unsafe():
                 return self._status(ModelState.CORRUPT, "MODEL_PATH_UNSAFE")
             error_code = self._read_error_code()
@@ -130,6 +133,8 @@ class ModelManager:
                 return self._status(ModelState.READY)
             state = ModelState.MISSING_OFFLINE if offline else ModelState.MISSING
             return self._status(state, error_code)
+        finally:
+            self._lock.release()
 
     def ensure_installed(
         self,
@@ -167,6 +172,9 @@ class ModelManager:
             except ModelManagerError as error:
                 self._record_error(error.code)
                 raise
+            except (httpx.ConnectError, httpx.ConnectTimeout):
+                self._record_error("MODEL_DOWNLOAD_OFFLINE")
+                raise ModelManagerError("MODEL_DOWNLOAD_OFFLINE") from None
             except httpx.TimeoutException:
                 self._record_error("MODEL_DOWNLOAD_TIMEOUT")
                 raise ModelManagerError("MODEL_DOWNLOAD_TIMEOUT") from None

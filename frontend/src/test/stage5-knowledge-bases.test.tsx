@@ -255,6 +255,75 @@ describe('stage 5 knowledge base foundation', () => {
     expect(calls.some((call) => call.url.endsWith('/index/rebuild'))).toBe(true)
   })
 
+  it('starts model download on click, shows progress, cancels, and retries to ready', async () => {
+    window.history.pushState({}, '', '/knowledge-bases/kb-1')
+    const missingModel = {
+      state: 'MISSING', phase: null,
+      base_model_id: 'BAAI/bge-small-zh-v1.5',
+      base_model_url: 'https://huggingface.co/BAAI/bge-small-zh-v1.5/tree/base-rev',
+      artifact_repository_id: 'Xenova/bge-small-zh-v1.5',
+      artifact_url: 'https://huggingface.co/Xenova/bge-small-zh-v1.5/tree/onnx-rev',
+      license: 'MIT', base_revision: 'base-rev', artifact_revision: 'onnx-rev',
+      artifact_fingerprint: 'a'.repeat(64), total_size_bytes: 95_291_718, downloaded_bytes: 0,
+      current_file: null, file_downloaded_bytes: null, file_size_bytes: null,
+      task_id: null, diagnostic_id: null, error_code: null, can_install: true, can_cancel: false,
+    }
+    const activeIndexStatus = {
+      ...emptyIndexStatus,
+      status: 'READY',
+      active_index_version_id: 'active-version',
+      active_index_version_status: 'READY',
+      file_counts: { total: 1, available: 1, processing: 0, failed: 0 },
+      can_rebuild: true,
+    }
+    let currentModel: Record<string, unknown> = { ...missingModel }
+    let installCalls = 0
+    let cancelCalls = 0
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.includes('/system/session')) return response({ status: 'ready' })
+      if (url.endsWith('/embedding-model')) return response(currentModel)
+      if (url.endsWith('/embedding-model/install') && init?.method === 'POST') {
+        installCalls += 1
+        currentModel = installCalls === 1
+          ? { ...missingModel, state: 'DOWNLOADING', phase: 'DOWNLOADING', downloaded_bytes: 10_000_000, current_file: 'onnx/model.onnx', task_id: 'model-task-1', can_install: false, can_cancel: true }
+          : { ...missingModel, state: 'READY', phase: 'READY', downloaded_bytes: 95_291_718, can_install: false }
+        return response(currentModel, 202)
+      }
+      if (url.endsWith('/tasks/model-task-1/cancel') && init?.method === 'POST') {
+        cancelCalls += 1
+        currentModel = { ...missingModel, state: 'CANCELLED', phase: 'CANCELLED', task_id: 'model-task-1', diagnostic_id: 'model-task-1' }
+        return response({ task_id: 'model-task-1', task_type: 'EMBEDDING_MODEL_INSTALL', status: 'CANCELLED', phase: 'CANCELLED', progress: null, knowledge_base_id: null, index_version_id: null, items: [], results: [], summary: null, error: null })
+      }
+      if (url.endsWith('/index-status')) return response(activeIndexStatus)
+      if (url.endsWith('/api/v1/knowledge-bases/kb-1/files')) return response({ items: [] })
+      if (url.includes('/api/v1/files?sort=name')) return response({ items: [], next_cursor: null })
+      if (url.endsWith('/api/v1/knowledge-bases/kb-1')) return response({ ...baseItem, status: 'READY', file_count: 1 })
+      return response({ status: 'ok', version: '0.1.0' })
+    }))
+
+    render(<BrowserRouter><App /></BrowserRouter>)
+    expect((await screen.findAllByText('本地 Embedding 模型尚未安装')).length).toBeGreaterThan(0)
+    expect(screen.getByText('索引就绪')).toBeInTheDocument()
+    expect(screen.getByText(/active-version · READY/)).toBeInTheDocument()
+    expect(screen.getByText('90.9 MiB')).toBeInTheDocument()
+    expect(screen.getByText(/许可：MIT（依据 BAAI 上游；Xenova 未单独声明）/)).toBeInTheDocument()
+    expect(installCalls).toBe(0)
+
+    fireEvent.click(screen.getByRole('button', { name: '下载并安装模型' }))
+    expect((await screen.findAllByText('正在下载本地模型')).length).toBeGreaterThan(0)
+    await waitFor(() => expect(installCalls).toBe(1))
+    await waitFor(() => expect(screen.getByRole('progressbar', { name: '模型下载进度' })).toHaveAttribute('value', '10000000'))
+    expect(screen.getByText('9.5 MiB / 90.9 MiB')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '取消模型安装' }))
+    expect((await screen.findAllByText('模型安装已取消')).length).toBeGreaterThan(0)
+    await waitFor(() => expect(cancelCalls).toBe(1))
+    fireEvent.click(screen.getByRole('button', { name: '重试模型安装' }))
+    expect((await screen.findAllByText('本地 Embedding 模型可用')).length).toBeGreaterThan(0)
+    expect(installCalls).toBe(2)
+  })
+
   it('loads knowledge bases in trash and restores with the persisted version', async () => {
     window.history.pushState({}, '', '/trash')
     let restoreUrl = ''

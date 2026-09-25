@@ -971,6 +971,48 @@
         }
       }
     },
+    "/api/v1/embedding-model": {
+      "get": {
+        "tags": [
+          "embedding-models"
+        ],
+        "summary": "Get Embedding Model Status",
+        "operationId": "get_embedding_model_status_api_v1_embedding_model_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmbeddingModelStatusResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/embedding-model/install": {
+      "post": {
+        "tags": [
+          "embedding-models"
+        ],
+        "summary": "Install Embedding Model",
+        "operationId": "install_embedding_model_api_v1_embedding_model_install_post",
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmbeddingModelStatusResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/file-imports": {
       "post": {
         "tags": [
@@ -2791,6 +2833,156 @@
           "decisions"
         ],
         "title": "DuplicateDecisionRequest"
+      },
+      "EmbeddingModelStatusResponse": {
+        "properties": {
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "phase": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phase"
+          },
+          "base_model_id": {
+            "type": "string",
+            "title": "Base Model Id"
+          },
+          "base_model_url": {
+            "type": "string",
+            "title": "Base Model Url"
+          },
+          "artifact_repository_id": {
+            "type": "string",
+            "title": "Artifact Repository Id"
+          },
+          "artifact_url": {
+            "type": "string",
+            "title": "Artifact Url"
+          },
+          "license": {
+            "type": "string",
+            "title": "License"
+          },
+          "base_revision": {
+            "type": "string",
+            "title": "Base Revision"
+          },
+          "artifact_revision": {
+            "type": "string",
+            "title": "Artifact Revision"
+          },
+          "artifact_fingerprint": {
+            "type": "string",
+            "title": "Artifact Fingerprint"
+          },
+          "total_size_bytes": {
+            "type": "integer",
+            "title": "Total Size Bytes"
+          },
+          "downloaded_bytes": {
+            "type": "integer",
+            "title": "Downloaded Bytes"
+          },
+          "current_file": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current File"
+          },
+          "file_downloaded_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Downloaded Bytes"
+          },
+          "file_size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Size Bytes"
+          },
+          "task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Id"
+          },
+          "diagnostic_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diagnostic Id"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "can_install": {
+            "type": "boolean",
+            "title": "Can Install"
+          },
+          "can_cancel": {
+            "type": "boolean",
+            "title": "Can Cancel"
+          }
+        },
+        "type": "object",
+        "required": [
+          "state",
+          "base_model_id",
+          "base_model_url",
+          "artifact_repository_id",
+          "artifact_url",
+          "license",
+          "base_revision",
+          "artifact_revision",
+          "artifact_fingerprint",
+          "total_size_bytes",
+          "downloaded_bytes",
+          "can_install",
+          "can_cancel"
+        ],
+        "title": "EmbeddingModelStatusResponse"
       },
       "FileBatchRequest": {
         "properties": {

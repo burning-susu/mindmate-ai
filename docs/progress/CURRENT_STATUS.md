@@ -6,7 +6,7 @@
 - 当前远程提交：以 `git ls-remote --heads origin feat/v1-bootstrap` 为准；本文件随本批次收口提交推送
 - 最后更新时间：`2026-09-25`
 - 当前开发阶段：阶段 5 开发中，状态 `PARTIAL`
-- 当前批次状态：第二十二批 Citation 绑定因无真实 Chat/Learning owner 而 `BLOCKED` 并延期到阶段 6/7；第二十三至第二十九批均为 `PASS`；第二十九批完成索引运维状态、失败诊断、持久重试/重建操作与真实浏览器重建闭环；阶段 5 状态仍为 `PARTIAL`
+- 当前批次状态：第二十二批 Citation 绑定因无真实 Chat/Learning owner 而 `BLOCKED` 并延期到阶段 6/7；第二十三至第三十批均为 `PASS`；第三十批完成固定本地 ONNX 模型用户主动安装、可恢复进度/取消/重试与真实浏览器索引闭环；阶段 5 状态仍为 `PARTIAL`
 
 ## 已完成阶段
 
@@ -15,13 +15,14 @@
 - 阶段 2：安全本地应用壳，`0b19795`
 - 阶段 3：数据、任务和备份基础，`02a32b8`
 - 阶段 4：初始实现 `bc30e1f`，证据修订 `9e0174a`，收口修复 `3b29d22`，第四批交接 `0448d5b`；第五批完成数据模型、迁移、乐观锁、解析失败持久化与契约同步；第六批完成持久解析 Worker、原子领取/租约、重试恢复和 Windows Job Object；第七批补齐列表状态恢复并完成最终验收，状态 `PASS`
-- 阶段 5：第八批完成空知识库持久化基础；第九批完成成员加入/移出、多库共享、批量准入、持久任务、取消/恢复和前端真实状态闭环；第十批完成索引配置、不可变版本输入快照与可恢复预处理 Worker；第十一批完成可复用版本化 Chunk 与独立可恢复切片任务；第十二批完成固定 ONNX 产物来源、哈希验证与本地 CPU Adapter；第十三批完成持久 EmbeddingRecord、单并发 Worker 与 sqlite-vec 向量写入；第十四批完成按 IndexVersion 隔离的持久 FTS5 投影与逐输入恢复；第十五批完成内部向量 Top-K 与范围过滤；第十六批完成双路 Top 30 候选收集、稳定按 Chunk ID 去重与范围变化复核；第十七批完成内部 RRF、精确命中奖励和确定性多样性 Top 8；第十八批完成内部证据门控与结构化严格拒答；第十九批完成产物完整性复核与原子激活；第二十批完成同一知识库的增量差异计划、Chunk/Embedding/FTS 兼容复用并沿用原子激活；第二十一批完成受服务端范围校验的未绑定来源快照、删除净化和内部读取边界；阶段整体仍为 `PARTIAL`
+- 阶段 5：第八批完成空知识库持久化基础；第九批完成成员加入/移出、多库共享、批量准入、持久任务、取消/恢复和前端真实状态闭环；第十批完成索引配置、不可变版本输入快照与可恢复预处理 Worker；第十一批完成可复用版本化 Chunk 与独立可恢复切片任务；第十二批完成固定 ONNX 产物来源、哈希验证与本地 CPU Adapter；第十三批完成持久 EmbeddingRecord、单并发 Worker 与 sqlite-vec 向量写入；第十四批完成按 IndexVersion 隔离的持久 FTS5 投影与逐输入恢复；第十五批完成内部向量 Top-K 与范围过滤；第十六批完成双路 Top 30 候选收集、稳定按 Chunk ID 去重与范围变化复核；第十七批完成内部 RRF、精确命中奖励和确定性多样性 Top 8；第十八批完成内部证据门控与结构化严格拒答；第十九批完成产物完整性复核与原子激活；第二十批完成同一知识库的增量差异计划、Chunk/Embedding/FTS 兼容复用并沿用原子激活；第二十一批完成受服务端范围校验的未绑定来源快照、删除净化和内部读取边界；第二十九批完成索引运维状态、失败诊断、持久重试/重建与浏览器重建；第三十批完成固定 ONNX 的显式安装/校验/恢复与浏览器真实索引；阶段整体仍为 `PARTIAL`
 
 ## 当前已实现能力
 
 - 后端：5 类文件导入、托管复制、哈希去重、持久解析 Worker、隔离解析、搜索筛选、文件/文件夹/标签、批量操作、受控内容读取、回收站和永久删除；Folder/Tag 修改、删除与恢复使用数据库原子 `row_version` 乐观锁。
 - 任务与资源安全：复用 `BackgroundTask` 实现文件导入/重新处理及知识库成员准入；解析 Worker 与成员 Worker 按任务类型隔离领取，均使用原子领取、租约、过期恢复、关闭中断与取消状态；Windows 解析子进程使用 Job Object 的 `KILL_ON_JOB_CLOSE` 与进程内存上限，默认 `512 MiB`。
 - 前端：真实 API 文件工作台、嵌套目录、筛选排序、导入与重复决策、详情编辑/预览、文件和文件夹回收站操作；列表查询参数、详情返回后的筛选/排序/滚动恢复；返回前刷新列表避免旧 `row_version` 竞态；版本冲突提示并引导重新加载，不自动覆盖；第二十四批在知识库详情页增加高级“测试检索”区域，调用现有只读 API，展示三种判定、候选定位与排序信号。
+- 模型安装：第三十批在知识库详情页增加固定 ONNX 安装入口，显示来源/许可依据/大小/revision/指纹、本机下载、持久真实进度、取消和重试；仅用户主动点击下载，刷新或应用重启后从持久任务恢复。
 - 数据库：SQLite/Alembic 核心实体、持久任务、内容对象引用计数和软删除字段；revision `d91f4a6b2c30` 增加 ChunkingConfig、EmbeddingConfig、IndexVersion 与逐文件输入快照；revision `f2c7a1d8e904` 增加文件级 Chunk 与切片检查点；revision `a81f3c6d2e90` 增加 EmbeddingRecord、逐输入 Embedding 检查点及 INDEX_EMBED 单运行租约约束；revision `d60f2e8a7c31` 增加逐输入 FTS 状态、映射表、FTS5 虚表和 INDEX_FTS 单运行租约约束；revision `e4a7810c9b62` 增加索引激活失败原因码；revision `6b3e91a0c4d7` 增加内部未绑定来源快照和文件永久删除净化触发器。
 - 测试与工程：第二十一批新增 10 项服务端快照生命周期/范围/删除用例；第二十四批补充知识库测试检索页面交互回归；完整串行测试与门禁结果见下方测试状态。前端 21 tests 和阶段 4/5 浏览器生命周期证据见测试状态。
 - 知识库：空库创建保持 `EMPTY`；名称/描述/颜色/图标编辑；回收站生命周期；已导入文件批量加入/移出、多库共享、幂等重加与逐项结果；成员准入完成后保持 `index_state=PENDING` 和知识库 `PREPARING`，不伪造可检索状态。
@@ -229,8 +230,16 @@
 - 本批状态：`PASS`；阶段 5 继续 `PARTIAL`。进场本地与远端 `origin/feat/v1-bootstrap` SHA 均为 `cf0853e3c80a71b64c65d60ae8b8fb4e0b057707`，工作区干净。
 - 后端真实契约：新增 `GET /api/v1/knowledge-bases/{knowledge_base_id}/index-status`、`POST /api/v1/knowledge-bases/{knowledge_base_id}/index/retry-failed` 和 `POST /api/v1/knowledge-bases/{knowledge_base_id}/index/rebuild`。状态基于当前有效成员、活动/目标 `IndexVersion`、逐文件阶段检查点及 `BackgroundTask`；失败仅返回安全原因码、可读说明和诊断 ID。重试校验成员确属当前库、仍有效、已解析且当前确实失败；回收站文件、非成员和未知 ID 均拒绝。操作沿用持久 `INDEX_PREPROCESS` 任务和现有任务取消 API，无数据库迁移。
 - Worker 接力：激活扫描器在上游阶段达到 `COMPLETED/PARTIAL` 检查点后幂等入队 `INDEX_CHUNK`，再并行入队 `INDEX_EMBED` 与 `INDEX_FTS`；现有激活器负责候选完整性复核与活动指针切换。固定 READY 准备脚本与运行时共用阶段幂等键，避免并发重复任务。
-- 页面：知识库详情新增索引运维工作台，显示真实索引状态、活动/目标版本、有效文件计数、失败列表、后台阶段/进度/诊断 ID、本机模型状态；连接失败文件重试、确认重建和持久任务取消。操作中按 KB ID 隔离并每 1.5 秒轮询，页面不可见时暂停，刷新后从 API 恢复。原“测试检索”区域保留；不自动下载模型，不生成回答或 Citation。
+- 前端闭环：详情页新增索引运维工作台，保留“测试检索”；显示索引状态、活动/目标版本、成员计数、失败文件和安全原因码、真实任务阶段/进度/诊断 ID、本地模型可用性；支持重试失败文件、确认当前库重建和现有任务取消。状态查询按 KB ID 隔离，运行期间每 1.5 秒轮询，页面不可见时暂停，刷新后从 API 恢复；不触发模型下载、回答或 Citation。
 - 浏览器证据：固定 READY 隔离根 `%TEMP%\mindmate-ai-stage5-r29-index-ops-e2e-02` 中，知识库 `01a0d6a1-583b-7360-b0bb-2546fc3f85ec` 活动版本由 `01a0d6b2-1b26-7afb-a599-0366cd1c8602` 切换为 `01a0d6c4-b88c-7a8f-b67d-bd64993daf9d`；新 `INDEX_PREPROCESS`、`INDEX_CHUNK`、`INDEX_EMBED`、`INDEX_FTS` 任务均为 `COMPLETED`，最终状态 `READY`。Playwright 在 390px 视口验证无水平溢出；截图 `evidence/index-operations-mobile.png` 留在临时根，不入 Git。模型来自已校验离线副本，未下载或调用外部 Provider。
 - 验收：`uv run pytest` `191 passed, 148 warnings`（143.94 秒）；`uv run ruff check src tests scripts`、Pyright（0 errors）、compileall、Alembic head `6b3e91a0c4d7` 和 `git diff --check` 通过。前端 Vitest `22 passed`、`npm run lint`、`npm run build`、真实 API Playwright E2E `1 passed`。
 - 边界：本批浏览器验证真实 READY 库重建成功；失败原因展示、失败文件范围校验和保留活动版本由 API/激活器测试覆盖，未宣称浏览器级模型缺失失败恢复。模型下载安装页面、Citation owner、10 万 Chunk 性能、Recall@10/最终问答质量和 AC-KB-* 全量验收仍未完成。
 - 下一批唯一目标：真实 Chat/Learning owner 可核验后完成服务端 Citation 绑定准入；不伪造 owner 或模型答案。
+
+## 第三十批交接
+
+- 本批状态：`PASS`；阶段 5 继续 `PARTIAL`。起始本地 SHA 与 `origin/feat/v1-bootstrap` SHA 均为 `d8762e32a2d3db85cf2393f05a7d99d007f677b7`。
+- 后端新增固定模型状态/安装 API 和持久 `EMBEDDING_MODEL_INSTALL` Worker，复用 `BackgroundTask` 检查点、通用任务取消端点与重启恢复，无数据库迁移。命令只使用固定 manifest；重复安装请求复用活动任务；取消不会发布半成品。
+- 固定 BAAI revision `7999e1d3359715c523056ef9478215996d62a620`、Xenova ONNX revision `75c43b069aac4d136ba6bc1122f995fedcfd2781`，manifest fingerprint `4d07bfc3eefa75de01924a4350eef08182c163b0060228410c3d882c9f07c6a5`，三个文件共 `95,291,718` 字节。真实公网下载、文件 SHA-256 校验和本机 ONNX 索引见第三十批详细交接。
+- 浏览器证据：用户点击安装后展示真实非零字节进度；安装 READY 后点击重建，真实 `INDEX_PREPROCESS/CHUNK/EMBED/FTS` 均完成，活动索引 `READY`；390px 视口无水平溢出。截图留在隔离临时根，不进 Git。
+- 下一批唯一目标：真实 Chat/Learning owner 可核验后建立服务端 Citation 绑定准入；阶段 5 继续 `PARTIAL`。

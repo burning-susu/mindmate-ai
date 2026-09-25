@@ -29,6 +29,28 @@ export interface components {
   "DuplicateDecisionRequest": {
     "decisions": Array<components["DuplicateDecision"]>
   };
+  "EmbeddingModelStatusResponse": {
+    "state": string;
+    "phase"?: string | null;
+    "base_model_id": string;
+    "base_model_url": string;
+    "artifact_repository_id": string;
+    "artifact_url": string;
+    "license": string;
+    "base_revision": string;
+    "artifact_revision": string;
+    "artifact_fingerprint": string;
+    "total_size_bytes": number;
+    "downloaded_bytes": number;
+    "current_file"?: string | null;
+    "file_downloaded_bytes"?: number | null;
+    "file_size_bytes"?: number | null;
+    "task_id"?: string | null;
+    "diagnostic_id"?: string | null;
+    "error_code"?: string | null;
+    "can_install": boolean;
+    "can_cancel": boolean
+  };
   "FileBatchRequest": {
     "file_ids": Array<string>;
     "action": string;
@@ -420,6 +442,12 @@ export interface operations {
   };
   "POST /api/v1/knowledge-bases/{knowledge_base_id}/retrieval-tests": {
     operationId: "create_knowledge_base_retrieval_test_api_v1_knowledge_bases__knowledge_base_id__retrieval_tests_post"
+  };
+  "GET /api/v1/embedding-model": {
+    operationId: "get_embedding_model_status_api_v1_embedding_model_get"
+  };
+  "POST /api/v1/embedding-model/install": {
+    operationId: "install_embedding_model_api_v1_embedding_model_install_post"
   };
   "POST /api/v1/file-imports": {
     operationId: "create_file_import_api_v1_file_imports_post"

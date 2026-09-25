@@ -16,10 +16,13 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from uuid6 import uuid7
 
 from mindmate import __version__
+from mindmate.ai.embeddings.model_manager import ModelManager
+from mindmate.api.embedding_models import router as embedding_models_router
 from mindmate.api.files import FileApiError
 from mindmate.api.files import router as files_router
 from mindmate.api.knowledge_bases import router as knowledge_bases_router
 from mindmate.api.problem import ProblemDetail
+from mindmate.application.embedding_model_install import EmbeddingModelInstallWorker
 from mindmate.application.index_activation import IndexActivationWorker
 from mindmate.application.index_chunking_worker import IndexChunkingWorker
 from mindmate.application.index_embedding_worker import IndexEmbeddingWorker
@@ -85,6 +88,11 @@ async def lifespan(app: FastAPI):
         app.state.database_status = quick_check(app.state.engine)
         app.state.session_factory = create_session_factory(app.state.engine)
         app.state.session = LocalSession()
+        app.state.embedding_model_install_worker = EmbeddingModelInstallWorker(
+            app.state.session_factory,
+            app.state.embedding_model_manager,
+        )
+        app.state.embedding_model_install_worker.start()
         app.state.parse_worker = ParsingWorker(app.state.session_factory, settings)
         app.state.parse_worker.start()
         app.state.knowledge_membership_worker = KnowledgeMembershipWorker(
@@ -111,6 +119,9 @@ async def lifespan(app: FastAPI):
         app.state.index_activation_worker.start()
         yield
     finally:
+        model_install_worker = getattr(app.state, "embedding_model_install_worker", None)
+        if model_install_worker is not None:
+            model_install_worker.stop()
         activation_worker = getattr(app.state, "index_activation_worker", None)
         if activation_worker is not None:
             activation_worker.stop()
@@ -150,6 +161,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = app_settings
     app.state.retrieval_query_encoder = LocalRetrievalQueryEncoder(app_settings.model_dir)
+    app.state.embedding_model_manager = ModelManager(app_settings.model_dir)
 
     app.add_middleware(
         CORSMiddleware,
@@ -354,6 +366,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return app.openapi()
 
     app.include_router(knowledge_bases_router)
+    app.include_router(embedding_models_router)
     app.include_router(files_router)
 
     return app
