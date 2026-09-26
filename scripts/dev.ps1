@@ -6,7 +6,9 @@ param(
     [string]$KnowledgeBaseId = '',
     [string]$ExpectedFingerprint = '',
     [string]$ExpectedIndexVersionId = '',
-    [switch]$OpenBrowser
+    [switch]$OpenBrowser,
+    [ValidateSet('', 'RequestedStop', 'UnexpectedExit')]
+    [string]$LifecycleSelfTest = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -14,6 +16,8 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $script:cleaned = $false
 $script:backendProcess = $null
 $script:frontendProcess = $null
+$script:stopRequested = $false
+$script:abnormalMessage = $null
 $previousApiPort = $env:MINDMATE_API_PORT
 $previousDataDir = $env:MINDMATE_DATA_DIR
 $previousProviderMode = $env:MINDMATE_PROVIDER_MODE
@@ -70,6 +74,15 @@ function Stop-OwnedPortListener {
     }
 }
 
+function Test-OperatorTermination {
+    param($ExitCode)
+    if ($null -eq $ExitCode) {
+        return $false
+    }
+    # Stop-Process uses TerminateProcess with exit code -1. Other codes stay failures.
+    return ($ExitCode -eq -1) -or ($ExitCode -eq 4294967295)
+}
+
 function Restore-DemoEnvironment {
     $env:MINDMATE_API_PORT = $previousApiPort
     if ($null -eq $previousDataDir) {
@@ -103,6 +116,55 @@ function Stop-StartedServers {
     Stop-OwnedPortListener -Port $ApiPort -CommandMatch 'mindmate.main:app'
     Stop-OwnedPortListener -Port $WebPort -CommandMatch '--port'
     Restore-DemoEnvironment
+}
+
+function Invoke-LifecycleSelfTest {
+    param([string]$Mode)
+    $decoy = Start-Process -FilePath 'powershell.exe' -ArgumentList @(
+        '-NoProfile', '-Command', 'Start-Sleep -Seconds 60'
+    ) -WindowStyle Hidden -PassThru
+    try {
+        if ($Mode -eq 'RequestedStop') {
+            $owned = Start-Process -FilePath 'powershell.exe' -ArgumentList @(
+                '-NoProfile', '-Command', 'Start-Sleep -Seconds 60'
+            ) -WindowStyle Hidden -PassThru
+            Stop-Process -Id $owned.Id -Force
+            $owned.WaitForExit()
+            $owned.Refresh()
+            if (-not (Test-OperatorTermination $owned.ExitCode)) {
+                throw "本批进程的 Stop-Process 退出码 $($owned.ExitCode) 不能当成正常停止。"
+            }
+            Stop-OwnedProcessTree -ProcessId $owned.Id
+        } else {
+            $owned = Start-Process -FilePath 'powershell.exe' -ArgumentList @(
+                '-NoProfile', '-Command', 'exit 1'
+            ) -WindowStyle Hidden -PassThru -Wait
+            $owned.Refresh()
+            if (Test-OperatorTermination $owned.ExitCode) {
+                throw "退出码 $($owned.ExitCode) 不应视为操作者停止。"
+            }
+        }
+        if ($decoy.HasExited) {
+            throw "无关进程被清理，pid=$($decoy.Id)。"
+        }
+        $busy = netstat -ano -p tcp | Select-String -Pattern ':8000\s+.*LISTENING|:5173\s+.*LISTENING'
+        if ($busy) {
+            throw "自测占用了受保护端口。"
+        }
+    } finally {
+        if (-not $decoy.HasExited) {
+            Stop-Process -Id $decoy.Id -Force -ErrorAction SilentlyContinue
+        }
+    }
+    if ($Mode -eq 'UnexpectedExit') {
+        exit 1
+    }
+    Write-Host "正常停止分类通过，未结束无关进程。"
+    exit 0
+}
+
+if ($LifecycleSelfTest) {
+    Invoke-LifecycleSelfTest -Mode $LifecycleSelfTest
 }
 
 if (-not (Test-LoopbackPortFree -Port $ApiPort)) {
@@ -214,19 +276,57 @@ try {
     }
     Write-Host "API  http://127.0.0.1:$ApiPort"
     Write-Host "Web  $pageUrl"
-    Write-Host "Provider 固定为 Mock。按 Ctrl+C 停止本次启动的进程。"
+    Write-Host "Provider 固定为 Mock。按 Ctrl+C，或结束本次启动的后端/前端进程，即正常停止。"
+    Write-Host "Stop-Process 产生的退出码 -1 视为正常停止；其他退出码仍视为失败。不会结束系统浏览器，也不会清理其他端口。"
     if ($OpenBrowser) {
         Start-Process $pageUrl
     }
+    $script:consoleCancel = $false
+    try {
+        [Console]::TreatControlCAsInput = $true
+        $script:consoleCancel = $true
+    } catch {
+        $script:consoleCancel = $false
+    }
     while (-not $script:backendProcess.HasExited -and -not $script:frontendProcess.HasExited) {
+        if ($script:consoleCancel) {
+            try {
+                if ([Console]::KeyAvailable) {
+                    $key = [Console]::ReadKey($true)
+                    $ctrl = ($key.Modifiers -band [ConsoleModifiers]::Control) -eq [ConsoleModifiers]::Control
+                    if ($ctrl -and $key.Key -eq [ConsoleKey]::C) {
+                        $script:stopRequested = $true
+                        break
+                    }
+                }
+            } catch {
+                $script:consoleCancel = $false
+            }
+        }
         Start-Sleep -Milliseconds 500
     }
-    if ($script:backendProcess.HasExited) {
-        throw "后端已退出，退出码 $($script:backendProcess.ExitCode)。"
+    if (-not $script:stopRequested) {
+        $script:backendProcess.Refresh()
+        $script:frontendProcess.Refresh()
+        $backendCode = if ($script:backendProcess.HasExited) { $script:backendProcess.ExitCode } else { $null }
+        $frontendCode = if ($script:frontendProcess.HasExited) { $script:frontendProcess.ExitCode } else { $null }
+        if ((Test-OperatorTermination $backendCode) -or (Test-OperatorTermination $frontendCode)) {
+            $script:stopRequested = $true
+        } elseif ($null -ne $backendCode) {
+            $script:abnormalMessage = "后端已退出，退出码 $backendCode。"
+        } elseif ($null -ne $frontendCode) {
+            $script:abnormalMessage = "前端已退出，退出码 $frontendCode。"
+        }
     }
-    if ($script:frontendProcess.HasExited) {
-        throw "前端已退出，退出码 $($script:frontendProcess.ExitCode)。"
-    }
+} catch [System.Management.Automation.PipelineStoppedException] {
+    $script:stopRequested = $true
+    $script:abnormalMessage = $null
 } finally {
     Stop-StartedServers
+}
+if ($script:abnormalMessage) {
+    throw $script:abnormalMessage
+}
+if ($script:stopRequested) {
+    Write-Host "已正常停止本次启动的后端和前端。"
 }

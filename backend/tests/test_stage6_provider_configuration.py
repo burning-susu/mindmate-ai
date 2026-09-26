@@ -66,6 +66,44 @@ def _session(client: TestClient) -> dict[str, str]:
     return {"Origin": ORIGIN, "Idempotency-Key": str(uuid4())}
 
 
+def test_generation_mode_is_explicit_and_does_not_call_or_leak_key(tmp_path: Path) -> None:
+    client, store, calls = _make_app(tmp_path, _stream_response)
+    with client:
+        headers = _session(client)
+        initial = client.get("/api/v1/ai/provider")
+        assert initial.status_code == 200
+        body = initial.json()
+        assert body["generation_mode"] == "mock"
+        assert "不是严格美元限额" in body["cost_estimate"]["disclaimer"]
+        assert "api_key" not in body
+        assert calls == []
+
+        switched = client.post(
+            "/api/v1/ai/provider/generation-mode",
+            headers=headers,
+            json={"mode": "deepseek"},
+        )
+        assert switched.status_code == 200
+        assert switched.json()["generation_mode"] == "deepseek"
+        assert API_KEY not in switched.text
+        assert calls == []
+
+        store.set_secret("provider/deepseek/api-key", API_KEY)
+        again = client.get("/api/v1/ai/provider")
+        assert again.json()["generation_mode"] == "deepseek"
+        assert API_KEY not in again.text
+        assert calls == []
+
+        restored = client.post(
+            "/api/v1/ai/provider/generation-mode",
+            headers={**headers, "Idempotency-Key": str(uuid4())},
+            json={"mode": "mock"},
+        )
+        assert restored.status_code == 200
+        assert restored.json()["generation_mode"] == "mock"
+        assert calls == []
+
+
 def test_status_and_key_lifecycle_never_persist_secret(tmp_path: Path) -> None:
     client, store, calls = _make_app(tmp_path, _stream_response)
     with client:

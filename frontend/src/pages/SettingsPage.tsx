@@ -8,7 +8,9 @@ import {
   deleteAiProviderKey,
   getAiProviderStatus,
   saveAiProviderKey,
+  setAiGenerationMode,
   testAiProviderConnection,
+  type GenerationMode,
 } from '../api/aiProvider'
 
 function formatTime(value: string | null | undefined) {
@@ -63,8 +65,13 @@ export default function SettingsPage() {
       void refresh()
     },
   })
+  const modeMutation = useMutation({
+    mutationFn: (mode: GenerationMode) => setAiGenerationMode(mode),
+    onSuccess: () => void refresh(),
+  })
 
-  const busy = saveMutation.isPending || deleteMutation.isPending || testMutation.isPending || consentMutation.isPending
+  const busy = saveMutation.isPending || deleteMutation.isPending || testMutation.isPending || consentMutation.isPending || modeMutation.isPending
+  const generationMode = status?.generation_mode ?? 'mock'
   const canTest = Boolean(status?.configured && status.credential_store.available && confirmTransfer && !busy)
 
   if (query.isLoading) {
@@ -102,7 +109,19 @@ export default function SettingsPage() {
           <div className="settings-provider-meta">
             <span>Provider：{status.display_name}</span>
             <span>存储：{status.credential_store.available ? 'Windows Credential Manager' : '不可用'}</span>
+            <span>生成模式：{generationMode === 'deepseek' ? 'DeepSeek 在线' : 'Mock'}</span>
           </div>
+          <div className="settings-mode-actions">
+            <button className="quiet-button" type="button" disabled={busy || generationMode === 'mock'} onClick={() => modeMutation.mutate('mock')}>使用 Mock（无费用）</button>
+            <button className="quiet-button" type="button" disabled={busy || generationMode === 'deepseek'} onClick={() => modeMutation.mutate('deepseek')}>使用 DeepSeek 在线生成</button>
+          </div>
+          {generationMode === 'deepseek' ? (
+            <div className="settings-privacy-copy">
+              <p>DeepSeek 在线生成、会外发当前问题与必要的少量证据。</p>
+              {status.cost_estimate ? <p>{status.cost_estimate.disclaimer} 知识库问题按本地上限粗估不超过 {status.cost_estimate.knowledge_question_estimated_usd_ceiling} 美元；连接探测粗估不超过 {status.cost_estimate.probe_estimated_usd_ceiling} 美元。假设：{status.cost_estimate.rate_assumption}。</p> : null}
+            </div>
+          ) : <p className="settings-hint">当前是 Mock。启动、刷新和发送都不会调用 DeepSeek，也不会产生费用。</p>}
+          {modeMutation.isError && <p className="settings-error-text" role="alert">{errorText(modeMutation.error)}</p>}
 
           <form className="settings-key-form" onSubmit={(event) => { event.preventDefault(); if (apiKey.trim()) saveMutation.mutate(apiKey.trim()) }}>
             <label htmlFor="deepseek-api-key">DeepSeek API Key</label>

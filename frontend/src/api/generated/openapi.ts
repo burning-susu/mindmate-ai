@@ -37,7 +37,9 @@ export interface components {
     "consent": components["ConsentResponse"];
     "probe"?: components["ConnectionProbeResponse"] | null;
     "source_url": string;
-    "pricing_url": string
+    "pricing_url": string;
+    "generation_mode"?: "mock" | "deepseek";
+    "cost_estimate": components["CostEstimateResponse"]
   };
   "AnswerVersionResponse": {
     "answer_version_id": string;
@@ -166,6 +168,20 @@ export interface components {
     "assistant_message": components["MessageResponse"];
     "operation": components["AiOperationResponse"]
   };
+  "CostEstimateResponse": {
+    "checked_on": string;
+    "model": string;
+    "pricing_url": string;
+    "rate_assumption": string;
+    "input_usd_per_million_tokens": string;
+    "output_usd_per_million_tokens": string;
+    "knowledge_input_token_cap": number;
+    "knowledge_output_token_cap": number;
+    "knowledge_question_estimated_usd_ceiling": string;
+    "probe_output_token_cap": number;
+    "probe_estimated_usd_ceiling": string;
+    "disclaimer": string
+  };
   "CredentialStoreResponse": {
     "available": boolean;
     "type": string;
@@ -269,6 +285,9 @@ export interface components {
     "row_version": number;
     "created_at": string;
     "updated_at": string
+  };
+  "GenerationModeRequest": {
+    "mode": "mock" | "deepseek"
   };
   "HTTPValidationError": {
     "detail"?: Array<components["ValidationError"]>
@@ -642,6 +661,9 @@ export interface operations {
   };
   "POST /api/v1/ai/provider/test": {
     operationId: "test_ai_provider_connection_api_v1_ai_provider_test_post"
+  };
+  "POST /api/v1/ai/provider/generation-mode": {
+    operationId: "set_ai_generation_mode_api_v1_ai_provider_generation_mode_post"
   };
   "GET /api/v1/ai/consent": {
     operationId: "get_external_ai_consent_api_v1_ai_consent_get"

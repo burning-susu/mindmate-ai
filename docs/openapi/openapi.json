@@ -1135,6 +1135,47 @@
         }
       }
     },
+    "/api/v1/ai/provider/generation-mode": {
+      "post": {
+        "tags": [
+          "ai-provider"
+        ],
+        "summary": "Set Ai Generation Mode",
+        "operationId": "set_ai_generation_mode_api_v1_ai_provider_generation_mode_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerationModeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiProviderStatusResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/ai/consent": {
       "get": {
         "tags": [
@@ -3521,6 +3562,18 @@
           "pricing_url": {
             "type": "string",
             "title": "Pricing Url"
+          },
+          "generation_mode": {
+            "type": "string",
+            "enum": [
+              "mock",
+              "deepseek"
+            ],
+            "title": "Generation Mode",
+            "default": "mock"
+          },
+          "cost_estimate": {
+            "$ref": "#/components/schemas/CostEstimateResponse"
           }
         },
         "type": "object",
@@ -3532,7 +3585,8 @@
           "requested_model",
           "consent",
           "source_url",
-          "pricing_url"
+          "pricing_url",
+          "cost_estimate"
         ],
         "title": "AiProviderStatusResponse"
       },
@@ -4444,6 +4498,74 @@
         ],
         "title": "ConversationSubmissionResponse"
       },
+      "CostEstimateResponse": {
+        "properties": {
+          "checked_on": {
+            "type": "string",
+            "title": "Checked On"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "pricing_url": {
+            "type": "string",
+            "title": "Pricing Url"
+          },
+          "rate_assumption": {
+            "type": "string",
+            "title": "Rate Assumption"
+          },
+          "input_usd_per_million_tokens": {
+            "type": "string",
+            "title": "Input Usd Per Million Tokens"
+          },
+          "output_usd_per_million_tokens": {
+            "type": "string",
+            "title": "Output Usd Per Million Tokens"
+          },
+          "knowledge_input_token_cap": {
+            "type": "integer",
+            "title": "Knowledge Input Token Cap"
+          },
+          "knowledge_output_token_cap": {
+            "type": "integer",
+            "title": "Knowledge Output Token Cap"
+          },
+          "knowledge_question_estimated_usd_ceiling": {
+            "type": "string",
+            "title": "Knowledge Question Estimated Usd Ceiling"
+          },
+          "probe_output_token_cap": {
+            "type": "integer",
+            "title": "Probe Output Token Cap"
+          },
+          "probe_estimated_usd_ceiling": {
+            "type": "string",
+            "title": "Probe Estimated Usd Ceiling"
+          },
+          "disclaimer": {
+            "type": "string",
+            "title": "Disclaimer"
+          }
+        },
+        "type": "object",
+        "required": [
+          "checked_on",
+          "model",
+          "pricing_url",
+          "rate_assumption",
+          "input_usd_per_million_tokens",
+          "output_usd_per_million_tokens",
+          "knowledge_input_token_cap",
+          "knowledge_output_token_cap",
+          "knowledge_question_estimated_usd_ceiling",
+          "probe_output_token_cap",
+          "probe_estimated_usd_ceiling",
+          "disclaimer"
+        ],
+        "title": "CostEstimateResponse"
+      },
       "CredentialStoreResponse": {
         "properties": {
           "available": {
@@ -5129,6 +5251,23 @@
           "updated_at"
         ],
         "title": "FolderResponse"
+      },
+      "GenerationModeRequest": {
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "mock",
+              "deepseek"
+            ],
+            "title": "Mode"
+          }
+        },
+        "type": "object",
+        "required": [
+          "mode"
+        ],
+        "title": "GenerationModeRequest"
       },
       "HTTPValidationError": {
         "properties": {

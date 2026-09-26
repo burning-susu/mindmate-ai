@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { BrowserRouter } from 'react-router-dom'
 
 import App from '../App'
+import { queryClient } from '../queryClient'
 
 function response(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -37,6 +38,13 @@ type FixtureStatus = {
   probe: FixtureProbe | null
   source_url: string
   pricing_url: string
+  generation_mode?: 'mock' | 'deepseek'
+  cost_estimate?: {
+    disclaimer: string
+    knowledge_question_estimated_usd_ceiling: string
+    probe_estimated_usd_ceiling: string
+    rate_assumption: string
+  }
 }
 
 const initialStatus: FixtureStatus = {
@@ -127,5 +135,76 @@ describe('stage 6 AI provider configuration', () => {
     fireEvent.click(screen.getByRole('button', { name: '确认并记录说明版本' }))
     await waitFor(() => expect(consentBody).toEqual({ version: 'deepseek-external-ai-v1' }))
     expect(await screen.findByText(/已记录版本 deepseek-external-ai-v1/)).toBeInTheDocument()
+  })
+
+  it('switches generation mode without sending a key or a provider request', async () => {
+    window.history.pushState({}, '', '/settings')
+    let currentStatus: FixtureStatus = structuredClone(initialStatus)
+    const calls: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.includes('/system/session')) return response({ status: 'ready' })
+      if (url.endsWith('/api/v1/ai/provider/generation-mode') && init?.method === 'POST') {
+        calls.push(String(init.body))
+        currentStatus = { ...currentStatus, generation_mode: 'deepseek' }
+        return response(currentStatus)
+      }
+      if (url.endsWith('/api/v1/ai/provider')) return response(currentStatus)
+      return response({ status: 'ok', version: '0.1.0' })
+    }))
+
+    render(<BrowserRouter><App /></BrowserRouter>)
+    fireEvent.click(await screen.findByRole('button', { name: '使用 DeepSeek 在线生成' }))
+    await waitFor(() => expect(calls).toEqual([JSON.stringify({ mode: 'deepseek' })]))
+    expect(await screen.findByText('DeepSeek 在线生成、会外发当前问题与必要的少量证据。')).toBeInTheDocument()
+    expect(calls.some((body) => body.includes('api_key'))).toBe(false)
+  })
+
+  it('labels mock chat and blocks online send until the user confirms the estimate', async () => {
+    queryClient.clear()
+    window.history.pushState({}, '', '/chat')
+    let mode: 'mock' | 'deepseek' = 'mock'
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/system/session')) return response({ status: 'ready' })
+      if (url.endsWith('/api/v1/ai/provider')) {
+        return response({
+          ...initialStatus,
+          generation_mode: mode,
+          configured: true,
+          consent: { ...initialStatus.consent, accepted: true, version: 'deepseek-external-ai-v1' },
+          cost_estimate: {
+            checked_on: '2026-09-26',
+            model: 'deepseek-flash',
+            pricing_url: initialStatus.pricing_url,
+            rate_assumption: '高峰、缓存未命中',
+            input_usd_per_million_tokens: '0.30',
+            output_usd_per_million_tokens: '1.20',
+            knowledge_input_token_cap: 2048,
+            knowledge_output_token_cap: 256,
+            knowledge_question_estimated_usd_ceiling: '0.001',
+            probe_output_token_cap: 8,
+            probe_estimated_usd_ceiling: '0.0001',
+            disclaimer: '这是保守估算，不是严格美元限额。',
+          },
+        })
+      }
+      if (url.endsWith('/api/v1/conversations')) return response({ items: [] })
+      return response({ status: 'ok', version: '0.1.0' })
+    }))
+
+    const view = render(<BrowserRouter><App /></BrowserRouter>)
+    expect(await screen.findByText('Mock 生成，不会外发，也不会产生 DeepSeek 费用。')).toBeInTheDocument()
+    mode = 'deepseek'
+    view.unmount()
+    queryClient.clear()
+    window.history.pushState({}, '', '/chat')
+    render(<BrowserRouter><App /></BrowserRouter>)
+    expect(await screen.findByText('DeepSeek 在线生成、会外发当前问题与必要的少量证据。')).toBeInTheDocument()
+    const send = screen.getByRole('button', { name: '发送' })
+    expect(send).toBeDisabled()
+    fireEvent.click(screen.getByRole('checkbox', { name: /保守费用估算/ }))
+    fireEvent.change(screen.getByLabelText('消息内容'), { target: { value: '短问题' } })
+    expect(screen.getByRole('button', { name: '发送' })).toBeEnabled()
   })
 })

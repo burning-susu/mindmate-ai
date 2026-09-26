@@ -18,6 +18,8 @@ DEEPSEEK_SECRET_REFERENCE = "provider/deepseek/api-key"
 EXTERNAL_AI_CONSENT_VERSION = "deepseek-external-ai-v1"
 CONSENT_SETTING_KEY = "privacy.external_ai_consent"
 PROBE_SETTING_KEY = "ai.deepseek.connection_probe"
+GENERATION_MODE_SETTING_KEY = "ai.chat.generation_mode"
+GENERATION_MODES = {"mock", "deepseek"}
 _PROVIDER_LOCK = RLock()
 
 
@@ -77,6 +79,47 @@ def _set_setting(session: Session, key: str, value: dict[str, Any]) -> None:
         row.setting_value_json = value
         row.setting_schema_version = 1
         row.updated_at = now
+
+
+def public_cost_estimate() -> dict[str, Any]:
+    """Conservative display estimate from the 2026-09-26 public price page.
+
+    The numbers are not a billing authority and are not enforced as a USD cap.
+    """
+
+    return {
+        "checked_on": "2026-09-26",
+        "model": DEEPSEEK_MODEL,
+        "pricing_url": "https://api-docs.deepseek.com/quick_start/pricing",
+        "rate_assumption": "deepseek-flash 高峰时段、输入缓存未命中",
+        "input_usd_per_million_tokens": "0.30",
+        "output_usd_per_million_tokens": "1.20",
+        "knowledge_input_token_cap": 2048,
+        "knowledge_output_token_cap": 256,
+        "knowledge_question_estimated_usd_ceiling": "0.001",
+        "probe_output_token_cap": 8,
+        "probe_estimated_usd_ceiling": "0.0001",
+        "disclaimer": (
+            "这是按 2026-09-26 公开费率、用满本地上限时的保守估算，不是严格美元限额，"
+            "也不是账户扣费承诺。实际费用以 DeepSeek 账单为准，价格可能变化。"
+        ),
+    }
+
+
+def read_generation_mode(session: Session, *, fallback: str = "mock") -> str:
+    stored = _setting(session, GENERATION_MODE_SETTING_KEY) or {}
+    mode = stored.get("mode")
+    if isinstance(mode, str) and mode in GENERATION_MODES:
+        return mode
+    return "deepseek" if fallback != "mock" else "mock"
+
+
+def set_generation_mode(session: Session, mode: str) -> dict[str, Any]:
+    if mode not in GENERATION_MODES:
+        raise ValueError(mode)
+    _set_setting(session, GENERATION_MODE_SETTING_KEY, {"mode": mode})
+    session.commit()
+    return {"mode": mode}
 
 
 def read_consent(session: Session) -> dict[str, Any]:
@@ -174,7 +217,10 @@ def save_probe_failure(
 
 
 def provider_status(
-    session: Session, credential_store: CredentialStorePort
+    session: Session,
+    credential_store: CredentialStorePort,
+    *,
+    provider_mode_fallback: str = "mock",
 ) -> tuple[dict[str, Any], bool]:
     configured = False
     credential_store_available = True
@@ -201,6 +247,10 @@ def provider_status(
             "probe": probe,
             "source_url": "https://platform.deepseek.com/api_keys",
             "pricing_url": "https://api-docs.deepseek.com/quick_start/pricing",
+            "generation_mode": read_generation_mode(
+                session, fallback=provider_mode_fallback
+            ),
+            "cost_estimate": public_cost_estimate(),
         },
         credential_store_available,
     )
@@ -238,14 +288,18 @@ __all__ = [
     "DEEPSEEK_PROVIDER_TYPE",
     "DEEPSEEK_SECRET_REFERENCE",
     "EXTERNAL_AI_CONSENT_VERSION",
+    "GENERATION_MODE_SETTING_KEY",
     "PROBE_SETTING_KEY",
     "delete_api_key",
     "provider_lock",
     "provider_status",
+    "public_cost_estimate",
     "read_consent",
+    "read_generation_mode",
     "read_probe",
     "record_consent",
     "save_api_key",
     "save_probe_failure",
     "save_probe_success",
+    "set_generation_mode",
 ]

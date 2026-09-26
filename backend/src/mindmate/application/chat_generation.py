@@ -7,7 +7,7 @@ import logging
 import re
 import threading
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any
 
@@ -32,7 +32,7 @@ from mindmate.application.hybrid_search import (
     HybridCandidate,
     HybridCandidateQuery,
 )
-from mindmate.application.provider_configuration import read_consent
+from mindmate.application.provider_configuration import read_consent, read_generation_mode
 from mindmate.application.retrieval_test_queries import RetrievalQueryEncoderError
 from mindmate.application.source_snapshots import (
     SourceSnapshotCreated,
@@ -66,6 +66,11 @@ MAX_USER_MESSAGE_CHARS = 10_000
 MAX_CONTEXT_CHARS = 64_000
 MAX_OUTPUT_TOKENS = 2_048
 MAX_OUTPUT_CHARS = 64_000
+EXTERNAL_INPUT_CHAR_LIMIT = 2_048
+EXTERNAL_INPUT_TOKEN_ESTIMATE_LIMIT = 2_048
+EXTERNAL_KNOWLEDGE_MAX_OUTPUT_TOKENS = 256
+EXTERNAL_EVIDENCE_BLOCK_LIMIT = 2
+EXTERNAL_EXCERPT_CHAR_LIMIT = 480
 ACTIVE_OPERATION_STATES = {"QUEUED", "RUNNING", "STOPPING"}
 TERMINAL_OPERATION_STATES = {"COMPLETED", "FAILED", "STOPPED", "INTERRUPTED"}
 _SUBMISSION_LOCK = threading.RLock()
@@ -786,6 +791,73 @@ def _grounding_prompt(blocks: tuple[dict[str, str], ...]) -> str:
     return "\n".join(lines)[:16_000]
 
 
+def _outbound_text(request: ChatRequest) -> str:
+    chunks = [request.system_instructions]
+    for message in request.messages:
+        chunks.append(str(message.get("role", "")))
+        chunks.append(str(message.get("content", "")))
+    for block in request.evidence_blocks:
+        chunks.append(str(block.get("citation_number", "")))
+        chunks.append(str(block.get("file_name", "")))
+        chunks.append(str(block.get("location", "")))
+        chunks.append(str(block.get("excerpt", "")))
+    return "\n".join(chunks)
+
+
+def estimate_input_tokens(text: str) -> int:
+    """Count one character as one token so the local gate overestimates."""
+
+    return len(text)
+
+
+def _fit_external_knowledge_request(request: ChatRequest) -> ChatRequest:
+    output_tokens = min(request.max_output_tokens, EXTERNAL_KNOWLEDGE_MAX_OUTPUT_TOKENS)
+    selected = [
+        {**block, "excerpt": block.get("excerpt", "")[:EXTERNAL_EXCERPT_CHAR_LIMIT]}
+        for block in request.evidence_blocks[:EXTERNAL_EVIDENCE_BLOCK_LIMIT]
+    ]
+    while True:
+        candidate = replace(
+            request,
+            system_instructions=_grounding_prompt(tuple(selected)),
+            evidence_blocks=tuple(selected),
+            max_output_tokens=output_tokens,
+        )
+        if len(_outbound_text(candidate)) <= EXTERNAL_INPUT_CHAR_LIMIT or not selected:
+            return candidate
+        if len(selected) > 1:
+            selected.pop()
+            continue
+        excerpt = selected[0].get("excerpt", "")
+        if len(excerpt) <= 80:
+            return candidate
+        selected[0] = {**selected[0], "excerpt": excerpt[: max(80, len(excerpt) // 2)]}
+
+
+def constrain_external_chat_request(request: ChatRequest) -> ChatRequest:
+    """Reject or shrink an outbound request before any provider call."""
+
+    if request.task_type == "RAG_ANSWER":
+        request = _fit_external_knowledge_request(request)
+    text = _outbound_text(request)
+    if (
+        len(text) > EXTERNAL_INPUT_CHAR_LIMIT
+        or estimate_input_tokens(text) > EXTERNAL_INPUT_TOKEN_ESTIMATE_LIMIT
+    ):
+        raise ProviderRequestError(
+            "INPUT_BUDGET_EXCEEDED",
+            "这次请求的估算输入超过本地上限（约 2048 Token，并受同等字符上限约束）。未向 Provider 发送。该估算不是严格美元限额。",
+            409,
+        )
+    if request.task_type == "RAG_ANSWER" and not request.evidence_blocks:
+        raise ProviderRequestError(
+            "INPUT_BUDGET_EXCEEDED",
+            "允许外发的公开证据放不进本地输入上限，未向 Provider 发送。",
+            409,
+        )
+    return request
+
+
 def _chat_request(
     session: Session,
     operation: AiOperation,
@@ -847,6 +919,7 @@ class ChatGenerationWorker:
         provider_getter: Callable[[], ChatProviderPort],
         credential_store_getter: Callable[[], CredentialStorePort],
         *,
+        deepseek_provider_getter: Callable[[], ChatProviderPort] | None = None,
         retrieval_query_encoder_getter: Callable[[], Any] | None = None,
         retrieval_query_getter: Callable[[Settings], Any] | None = None,
         worker_id: str | None = None,
@@ -854,6 +927,7 @@ class ChatGenerationWorker:
         self._session_factory = session_factory
         self._settings = settings
         self._provider_getter = provider_getter
+        self._deepseek_provider_getter = deepseek_provider_getter
         self._credential_store_getter = credential_store_getter
         self._retrieval_query_encoder_getter = retrieval_query_encoder_getter
         self._retrieval_query_getter = retrieval_query_getter
@@ -1267,7 +1341,7 @@ class ChatGenerationWorker:
                 return
             request = _chat_request(request_session, operation_for_request, grounding)
 
-        provider = self._provider_getter()
+        provider, generation_mode = self._active_provider()
         api_key: str | None = None
         stream: Any = None
         content = ""
@@ -1297,14 +1371,12 @@ class ChatGenerationWorker:
                         "尚未配置可用的 DeepSeek API Key。",
                         409,
                     )
+                request = constrain_external_chat_request(request)
             # Test/runtime injection keeps the established non-streaming fixture
-            # path when the application itself is still in Mock mode.  The real
-            # DeepSeek runtime uses its SSE adapter below.
+            # path when generation itself is still Mock. Explicit DeepSeek mode
+            # uses the SSE adapter below and does not retry a failed call.
             stream_factory = getattr(provider, "generate_stream", None)
-            if (
-                getattr(provider, "provider_name", "") == "DEEPSEEK"
-                and self._settings.provider_mode == "mock"
-            ):
+            if getattr(provider, "provider_name", "") == "DEEPSEEK" and generation_mode == "mock":
                 stream_factory = None
             if callable(stream_factory):
                 stream = stream_factory(request, api_key)
@@ -1382,7 +1454,20 @@ class ChatGenerationWorker:
                 resolved_model=getattr(provider, "model", None),
                 done=True,
             )
-        self._complete_operation(task_id, content, final_chunk, grounding)
+        sent_citation_numbers = None
+        if getattr(provider, "requires_external_transfer", False) and grounding is not None:
+            sent_citation_numbers = tuple(
+                int(block["citation_number"])
+                for block in request.evidence_blocks
+                if str(block.get("citation_number", "")).isdigit()
+            )
+        self._complete_operation(
+            task_id,
+            content,
+            final_chunk,
+            grounding,
+            external_citation_numbers=sent_citation_numbers,
+        )
 
     def _persist_snapshot(self, task_id: str, content: str) -> bool:
         if self._stop_event.is_set():
@@ -1438,12 +1523,21 @@ class ChatGenerationWorker:
             session.commit()
             return True
 
+    def _active_provider(self) -> tuple[ChatProviderPort, str]:
+        with self._session_factory() as session:
+            mode = read_generation_mode(session, fallback=self._settings.provider_mode)
+        if mode == "deepseek" and self._deepseek_provider_getter is not None:
+            return self._deepseek_provider_getter(), mode
+        return self._provider_getter(), mode
+
     def _complete_operation(
         self,
         task_id: str,
         content: str,
         chunk: ChatStreamChunk,
         grounding: GroundingContext | None = None,
+        *,
+        external_citation_numbers: tuple[int, ...] | None = None,
     ) -> None:
         with self._session_factory() as session:
             task = session.get(BackgroundTask, task_id)
@@ -1455,6 +1549,18 @@ class ChatGenerationWorker:
                 self._stop_operation(session, task, operation)
                 session.commit()
                 return
+            if external_citation_numbers is not None:
+                cited = {int(value) for value in re.findall(r"\[(\d+)\]", content)}
+                if not cited.intersection(external_citation_numbers):
+                    self._fail_operation(
+                        session,
+                        task,
+                        operation,
+                        "CITATION_CONSTRAINT_FAILED",
+                        "在线回答没有通过已外发证据的引用约束，未标记为成功。",
+                    )
+                    session.commit()
+                    return
             source_snapshots: tuple[SourceSnapshotCreated, ...] = ()
             if grounding is not None:
                 try:

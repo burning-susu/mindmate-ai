@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
+import { QueryClientProvider, useQuery } from '@tanstack/react-query'
 import { Activity, BookOpen, Boxes, FileText, Home, Menu, MessageSquare, Settings2, Trash2 } from 'lucide-react'
 import { NavLink, Route, Routes } from 'react-router-dom'
 import { create } from 'zustand'
@@ -12,6 +12,7 @@ import KnowledgeBasesPage from './pages/KnowledgeBasesPage'
 import SettingsPage from './pages/SettingsPage'
 import TrashPage from './pages/TrashPage'
 import ChatPage from './pages/ChatPage'
+import { queryClient } from './queryClient'
 import './App.css'
 
 type UiState = {
@@ -23,12 +24,6 @@ const useUiStore = create<UiState>((set) => ({
   sidebarOpen: true,
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
 }))
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: { staleTime: 30_000, retry: 1 },
-  },
-})
 
 const navigation = [
   { to: '/', label: '首页', icon: Home, end: true },

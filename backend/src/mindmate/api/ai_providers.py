@@ -22,6 +22,7 @@ from mindmate.application.provider_configuration import (
     save_api_key,
     save_probe_failure,
     save_probe_success,
+    set_generation_mode,
 )
 from mindmate.security.credentials import (
     CredentialStoreError,
@@ -73,6 +74,21 @@ class ConnectionProbeResponse(BaseModel):
     retryable: bool | None = None
 
 
+class CostEstimateResponse(BaseModel):
+    checked_on: str
+    model: str
+    pricing_url: str
+    rate_assumption: str
+    input_usd_per_million_tokens: str
+    output_usd_per_million_tokens: str
+    knowledge_input_token_cap: int
+    knowledge_output_token_cap: int
+    knowledge_question_estimated_usd_ceiling: str
+    probe_output_token_cap: int
+    probe_estimated_usd_ceiling: str
+    disclaimer: str
+
+
 class AiProviderStatusResponse(BaseModel):
     provider: str
     display_name: str
@@ -83,6 +99,8 @@ class AiProviderStatusResponse(BaseModel):
     probe: ConnectionProbeResponse | None = None
     source_url: str
     pricing_url: str
+    generation_mode: Literal["mock", "deepseek"] = "mock"
+    cost_estimate: CostEstimateResponse
 
 
 class ApiKeyRequest(BaseModel):
@@ -95,6 +113,10 @@ class ConnectionTestRequest(BaseModel):
 
 class ConsentRequest(BaseModel):
     version: str = Field(min_length=1, max_length=80)
+
+
+class GenerationModeRequest(BaseModel):
+    mode: Literal["mock", "deepseek"]
 
 
 def _credential_store(request: Request) -> CredentialStorePort:
@@ -120,8 +142,10 @@ def _provider(request: Request) -> DeepSeekChatProvider:
     return provider
 
 
-def _status(session: Session, store: CredentialStorePort) -> dict[str, Any]:
-    return provider_status(session, store)[0]
+def _status(request: Request, session: Session, store: CredentialStorePort) -> dict[str, Any]:
+    settings = getattr(request.app.state, "settings", None)
+    fallback = getattr(settings, "provider_mode", "mock")
+    return provider_status(session, store, provider_mode_fallback=str(fallback))[0]
 
 
 def _store_error(exc: CredentialStoreError) -> AiProviderApiError:
@@ -141,7 +165,7 @@ def _store_error(exc: CredentialStoreError) -> AiProviderApiError:
 def get_ai_provider_status(
     request: Request, session: Session = Depends(get_session)
 ) -> dict[str, Any]:
-    return _status(session, _credential_store(request))
+    return _status(request, session, _credential_store(request))
 
 
 @router.post(
@@ -158,7 +182,8 @@ def save_ai_provider_key(
     store = _credential_store(request)
     secret = payload.api_key.get_secret_value()
     try:
-        return save_api_key(session, store, secret)
+        save_api_key(session, store, secret)
+        return _status(request, session, store)
     except CredentialStoreError as exc:
         raise _store_error(exc) from exc
     finally:
@@ -173,8 +198,10 @@ def save_ai_provider_key(
 def delete_ai_provider_key(
     request: Request, session: Session = Depends(get_session)
 ) -> dict[str, Any]:
+    store = _credential_store(request)
     try:
-        return delete_api_key(session, _credential_store(request))
+        delete_api_key(session, store)
+        return _status(request, session, store)
     except CredentialStoreError as exc:
         raise _store_error(exc) from exc
 
@@ -212,7 +239,21 @@ def test_ai_provider_connection(
         finally:
             secret = ""
         save_probe_success(session, result)
-    return _status(session, store)
+    return _status(request, session, store)
+
+
+@router.post(
+    "/ai/provider/generation-mode",
+    response_model=AiProviderStatusResponse,
+    tags=["ai-provider"],
+)
+def set_ai_generation_mode(
+    request: Request,
+    payload: GenerationModeRequest,
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    set_generation_mode(session, payload.mode)
+    return _status(request, session, _credential_store(request))
 
 
 @router.post(

@@ -6,7 +6,8 @@
 - 当前远程提交：以 `git ls-remote --heads origin feat/v1-bootstrap` 为准；本文件随本批次收口提交推送
 - 最后更新时间：`2026-09-26`
 - 当前开发阶段：阶段 6 开发中，状态 `PARTIAL`；阶段 5 继续 `PARTIAL`
-- 当前批次状态：第三十七批在 Windows 本机完成固定公开合成资料的求职 Demo 现场稳定性闭环，结论 `PASS`；阶段 5、阶段 6 的完整 V1 仍为 `PARTIAL`。生成端是 Mock，不是真实 DeepSeek。详细证据见 `docs/test-reports/stage-37-windows-demo-stability.md`。
+- 交付顺序：Demo 首先完成，完整 V1 以后精进。求职 Demo 优先文件整理/导入、建库、带来源问答、最小学习陪练和重启恢复。Demo 可用性与完整 V1 阶段状态分开报告。
+- 当前批次状态：第三十八批补齐显式 Mock/DeepSeek 模式、外发与保守费用门禁，并修复演示脚本正常停止仍返回 1 的问题。默认 `.\scripts\demo.ps1` 仍是无费用 Mock。真实 DeepSeek：`PENDING`，本批没有真实 Key 请求，也没有付费调用。阶段 5、阶段 6 的完整 V1 仍为 `PARTIAL`。详细证据见 `docs/test-reports/stage-38-deepseek-demo-gate.md`。
 
 ## 已完成阶段
 
@@ -52,7 +53,7 @@
 - 阶段 4 无未解决功能、安全、数据一致性或迁移阻塞项；需求追踪详见 `docs/test-reports/stage-4-file-management.md`。
 - 发布候选保留：正式恶意文档集、真实资源耗尽边界、干净 Windows 安装/升级/卸载包，依据发布流程执行，不回填为阶段 4 已完成证据。
 - 阶段 5 缺口：来源快照 owner/Citation 绑定（延期到阶段 6/7）、用户级严格拒答/RAG 流程、固定样本之外的质量/性能评估仍未完成；第二十八批只完成固定 31+7 样本的门控校准回归。`supported` 不证明候选蕴含事实；本地调试端点和本批页面不构成 AC-KB-003、Recall@10 或聊天验收。
-- 阶段 6 缺口：普通 Chat 服务端 owner、Mock/fixture 生成、聊天前端、SSE/停止、断线/刷新恢复已完成；重试/重新生成与答案版本切换、RAG/Citation、Learning owner、预算执行和自动回退仍未实现；本批只验证 Mock 与本地 HTTP fixture，不代表真实 DeepSeek 已联通或账户余额充足。
+- 阶段 6 缺口：普通聊天与知识库问答的 Mock、引用、SSE 和刷新恢复已有实现；第三十八批补了显式在线模式、外发同意/凭据门禁和本地输入输出上限。完整周期预算、自动回退、Learning owner 和真实 DeepSeek 连通仍未完成。
 
 ## 第十八批交接
 

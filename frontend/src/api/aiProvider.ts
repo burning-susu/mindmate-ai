@@ -25,6 +25,23 @@ export type ConnectionProbe = {
   retryable: boolean | null
 }
 
+export type GenerationMode = 'mock' | 'deepseek'
+
+export type CostEstimate = {
+  checked_on: string
+  model: string
+  pricing_url: string
+  rate_assumption: string
+  input_usd_per_million_tokens: string
+  output_usd_per_million_tokens: string
+  knowledge_input_token_cap: number
+  knowledge_output_token_cap: number
+  knowledge_question_estimated_usd_ceiling: string
+  probe_output_token_cap: number
+  probe_estimated_usd_ceiling: string
+  disclaimer: string
+}
+
 export type AiProviderStatus = {
   provider: string
   display_name: string
@@ -39,6 +56,8 @@ export type AiProviderStatus = {
   probe: ConnectionProbe | null
   source_url: string
   pricing_url: string
+  generation_mode?: GenerationMode
+  cost_estimate?: CostEstimate
 }
 
 export function getAiProviderStatus(signal?: AbortSignal) {
@@ -60,6 +79,13 @@ export function testAiProviderConnection(confirmExternalTransfer: boolean) {
   return apiRequest<AiProviderStatus>('/api/v1/ai/provider/test', {
     method: 'POST',
     body: JSON.stringify({ confirm_external_transfer: confirmExternalTransfer }),
+  })
+}
+
+export function setAiGenerationMode(mode: GenerationMode) {
+  return apiRequest<AiProviderStatus>('/api/v1/ai/provider/generation-mode', {
+    method: 'POST',
+    body: JSON.stringify({ mode }),
   })
 }
 

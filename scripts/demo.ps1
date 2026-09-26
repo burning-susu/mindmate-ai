@@ -19,7 +19,8 @@ if ($resolvedDataDir -eq $defaultUserData) {
 
 Write-Host "演示数据目录：$resolvedDataDir"
 Write-Host "该目录位于 TEMP 时可能被系统清理。清理后脚本只在空目录或带本批所有权标记的目录中重新准备，不会清空其他数据。"
-Write-Host "Embedding 使用已校验的固定本地 ONNX 缓存；生成端固定为 Mock Provider，不调用真实 DeepSeek。"
+Write-Host "Embedding 使用已校验的固定本地 ONNX 缓存。默认生成端是 Mock，启动和进入页面不会调用真实 DeepSeek。"
+Write-Host "只有在设置页显式改为 DeepSeek 在线生成，并完成同意、系统凭据和发送前确认后，才会外发。本脚本不会切换该模式，也不会读取 Key。"
 
 $python = Join-Path $repoRoot 'backend\.venv\Scripts\python.exe'
 if (-not (Test-Path -LiteralPath $python)) {

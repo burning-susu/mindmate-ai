@@ -18,6 +18,7 @@ import {
   stopOperation,
   streamOperation,
 } from '../api/chat'
+import { getAiProviderStatus } from '../api/aiProvider'
 import { ApiError, apiRequest } from '../api/client'
 
 const ACTIVE_STATES = new Set(['QUEUED', 'RUNNING', 'STOPPING'])
@@ -101,7 +102,21 @@ export default function ChatPage() {
   const [retryCount, setRetryCount] = useState(0)
   const [streamNonce, setStreamNonce] = useState(0)
   const [selectedCitation, setSelectedCitation] = useState<Citation | null>(null)
+  const [confirmOnlineSend, setConfirmOnlineSend] = useState(false)
   const operationRef = useRef<Operation | null>(null)
+  const providerQuery = useQuery({
+    queryKey: ['ai-provider'],
+    queryFn: ({ signal }) => getAiProviderStatus(signal),
+    staleTime: 5_000,
+  })
+  const generationMode = providerQuery.data?.generation_mode ?? 'mock'
+  const onlineGeneration = generationMode === 'deepseek'
+  const onlineReady = Boolean(
+    providerQuery.data?.configured
+    && providerQuery.data.consent.accepted
+    && providerQuery.data.credential_store.available,
+  )
+  const onlineBlocked = onlineGeneration && (!onlineReady || !confirmOnlineSend)
 
   const conversationsQuery = useQuery({
     queryKey: ['chat-conversations'],
@@ -228,7 +243,7 @@ export default function ChatPage() {
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const content = draft.trim()
-    if (!content || hasActiveOperation || knowledgeScopeUnavailable) return
+    if (!content || hasActiveOperation || knowledgeScopeUnavailable || onlineBlocked) return
     setSendError('')
     setDraft('')
     try {
@@ -314,6 +329,7 @@ export default function ChatPage() {
         <div className="chat-main">
           <div className="chat-mode-bar">
             <span className="chat-mode-badge">{chatMode === 'KNOWLEDGE_CHAT' ? <BookOpen size={14} aria-hidden="true" /> : <MessageSquare size={14} aria-hidden="true" />} {chatMode === 'KNOWLEDGE_CHAT' ? '知识库模式' : '普通聊天'}</span>
+            <span className="chat-provider-banner">{onlineGeneration ? 'DeepSeek 在线生成、会外发当前问题与必要的少量证据。' : 'Mock 生成，不会外发，也不会产生 DeepSeek 费用。'}</span>
             {chatMode === 'KNOWLEDGE_CHAT' ? <span className="chat-mode-note">范围：{scopeName}</span> : <span className="chat-mode-note">回答不使用知识库资料</span>}
             {operation ? <span className={`chat-operation-status chat-operation-status--${operation.status.toLowerCase()}`}>{statusLabel(operation.status)}</span> : null}
           </div>
@@ -343,9 +359,19 @@ export default function ChatPage() {
             {operation?.error_code && operation.error_code !== 'EVIDENCE_INSUFFICIENT' ? <div className="chat-alert chat-alert--error">{operation.error_detail || '知识库请求未完成，请刷新范围后重试。'}</div> : null}
             {sendError ? <div className="chat-alert chat-alert--error">{sendError}</div> : null}
             <form className="chat-composer" onSubmit={submit}>
-              <textarea value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={chatMode === 'KNOWLEDGE_CHAT' ? '询问所选知识库中的内容' : '输入你的问题'} aria-label="消息内容" rows={3} disabled={hasActiveOperation || knowledgeScopeUnavailable} />
+              {onlineGeneration ? (
+                <div className="chat-online-gate">
+                  <p>{providerQuery.data?.cost_estimate?.disclaimer ?? '费用估算不是严格美元限额。'} 知识库问题用满本地上限时粗估不超过 {providerQuery.data?.cost_estimate?.knowledge_question_estimated_usd_ceiling ?? '0.001'} 美元。</p>
+                  {!onlineReady ? <p>需要先在设置页保存系统凭据中的 Key，并确认当前版本的外发说明。页面不会接收或保存 Key。</p> : null}
+                  <label className="settings-checkline">
+                    <input type="checkbox" checked={confirmOnlineSend} onChange={(event) => setConfirmOnlineSend(event.target.checked)} />
+                    <span>我确认本次会外发当前问题与必要的少量证据，并接受上述保守费用估算。</span>
+                  </label>
+                </div>
+              ) : null}
+              <textarea value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={chatMode === 'KNOWLEDGE_CHAT' ? '询问所选知识库中的内容' : '输入你的问题'} aria-label="消息内容" rows={3} disabled={hasActiveOperation || knowledgeScopeUnavailable || onlineBlocked} />
               <div className="chat-composer__footer">
-                {hasActiveOperation ? <button className="stop-button" type="button" onClick={stop}><Square size={15} fill="currentColor" /> {operation?.status === 'STOPPING' ? '正在停止' : '停止生成'}</button> : <button className="primary-button" type="submit" disabled={!draft.trim() || knowledgeScopeUnavailable}><Send size={15} /> 发送</button>}
+                {hasActiveOperation ? <button className="stop-button" type="button" onClick={stop}><Square size={15} fill="currentColor" /> {operation?.status === 'STOPPING' ? '正在停止' : '停止生成'}</button> : <button className="primary-button" type="submit" disabled={!draft.trim() || knowledgeScopeUnavailable || onlineBlocked}><Send size={15} /> 发送</button>}
               </div>
             </form>
           </div>

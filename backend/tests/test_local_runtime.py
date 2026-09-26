@@ -1,3 +1,5 @@
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any, cast
 
@@ -111,6 +113,49 @@ def test_idempotency_key_shape_is_validated(client: TestClient) -> None:
 
     assert response.status_code == 400
     assert response.json()["code"] == "IDEMPOTENCY_KEY_INVALID"
+
+
+def test_demo_stop_classifies_owned_termination_without_killing_unrelated_process() -> None:
+    if sys.platform != "win32":
+        pytest.skip("演示停止分类只在 Windows PowerShell 上验证")
+    script = Path(__file__).resolve().parents[2] / "scripts" / "dev.ps1"
+    normal = subprocess.run(
+        [
+            "powershell",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(script),
+            "-LifecycleSelfTest",
+            "RequestedStop",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=40,
+        check=False,
+    )
+    assert normal.returncode == 0, normal.stdout + normal.stderr
+    assert "正常停止分类通过" in normal.stdout
+
+    abnormal = subprocess.run(
+        [
+            "powershell",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(script),
+            "-LifecycleSelfTest",
+            "UnexpectedExit",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=40,
+        check=False,
+    )
+    assert abnormal.returncode == 1, abnormal.stdout + abnormal.stderr
+    assert "正常停止分类通过" not in abnormal.stdout
 
 
 def test_single_instance_lock_rejects_second_writer(tmp_path: Path) -> None:

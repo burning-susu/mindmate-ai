@@ -314,6 +314,10 @@
 }
 
 .settings-page { min-width: 0; }
+.settings-mode-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.chat-provider-banner { color: var(--muted); font-size: 12px; }
+.chat-online-gate { display: grid; gap: 8px; margin-bottom: 8px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.chat-online-gate p { margin: 0; }
 .settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: start; }
 .settings-section { display: grid; gap: 18px; min-width: 0; padding: 22px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
 .settings-section--probe { grid-column: 1 / -1; }

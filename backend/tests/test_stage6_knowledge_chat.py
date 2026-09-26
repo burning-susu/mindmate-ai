@@ -14,6 +14,7 @@ from mindmate.application.retrieval_test_queries import RetrievalQueryEncoderErr
 from mindmate.application.source_snapshots import purge_source_snapshots_for_files
 from mindmate.config import Settings
 from mindmate.main import create_app
+from mindmate.security.credentials import InMemoryCredentialStore
 from test_stage5_source_snapshots import _seed_active_index, _supported_result
 
 ORIGIN = "http://127.0.0.1:5173"
@@ -144,6 +145,83 @@ def test_insufficient_knowledge_chat_refuses_without_provider_or_citation(tmp_pa
         assert operation["answer_version"]["citations"] == []
         assert "资料不足" in operation["assistant_message"]["content"]
         assert provider.calls == []
+
+
+def test_external_knowledge_request_is_bounded_and_citation_constraint_blocks_success(
+    tmp_path: Path,
+) -> None:
+    provider = MockChatProvider(response_factory=lambda _request: "没有引用编号")
+    provider.requires_external_transfer = True
+    settings = Settings(data_dir=tmp_path, env="test", chat_worker_poll_seconds=0.01)
+    app = create_app(settings)
+    app.state.chat_provider = provider
+    app.state.credential_store = InMemoryCredentialStore()
+    app.state.credential_store.set_secret(
+        "provider/deepseek/api-key", "fixture-secret-do-not-persist"
+    )
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        client.post("/api/v1/system/session", headers={"Origin": ORIGIN})
+        consent = client.post(
+            "/api/v1/ai/consent",
+            headers=_headers("knowledge-external-consent"),
+            json={"version": "deepseek-external-ai-v1"},
+        )
+        assert consent.status_code == 200
+        factory = cast(Any, client.app).state.session_factory
+        data = _seed_active_index(factory, settings)
+        result = _supported_result(data)
+        worker = cast(Any, client.app).state.chat_worker
+        worker._retrieval_query_encoder_getter = lambda: _Encoder()
+        worker._retrieval_query_getter = lambda _settings: _Query(result)
+        created = client.post(
+            "/api/v1/conversations",
+            headers=_headers("knowledge-external-001"),
+            json={
+                "mode": "KNOWLEDGE_CHAT",
+                "source_scope": {
+                    "scope_type": "KNOWLEDGE_BASE",
+                    "knowledge_base_id": data.knowledge_base_id,
+                },
+                "first_message": "什么是向量数据库？",
+                "client_request_id": "knowledge-external-client-001",
+            },
+        )
+        assert created.status_code == 202, created.text
+        failed = _wait(client, created.json()["operation_id"])
+        assert failed["status"] == "FAILED"
+        assert failed["error_code"] == "CITATION_CONSTRAINT_FAILED"
+        assert len(provider.calls) == 1
+        sent = provider.calls[0]
+        assert sent.max_output_tokens == 256
+        assert sent.evidence_blocks
+        assert len(sent.evidence_blocks[0]["excerpt"]) <= 480
+        outbound = "\n".join(
+            [
+                sent.system_instructions,
+                *(block["excerpt"] for block in sent.evidence_blocks),
+                sent.messages[-1]["content"],
+            ]
+        )
+        assert len(outbound) <= 2048
+
+        provider.response_factory = lambda _request: "资料结论 [1]"
+        created_ok = client.post(
+            "/api/v1/conversations",
+            headers=_headers("knowledge-external-002"),
+            json={
+                "mode": "KNOWLEDGE_CHAT",
+                "source_scope": {
+                    "scope_type": "KNOWLEDGE_BASE",
+                    "knowledge_base_id": data.knowledge_base_id,
+                },
+                "first_message": "什么是向量数据库？",
+                "client_request_id": "knowledge-external-client-002",
+            },
+        )
+        completed = _wait(client, created_ok.json()["operation_id"])
+        assert completed["status"] == "COMPLETED"
+        assert completed["answer_version"]["citations"][0]["file_name"] == "vector-notes.txt"
+        assert len(provider.calls) == 2
 
 
 def test_unavailable_knowledge_chat_is_distinct_and_does_not_call_provider(tmp_path: Path) -> None:

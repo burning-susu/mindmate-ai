@@ -288,6 +288,19 @@ def test_external_gate_rejects_without_consent_or_key_before_provider_call(tmp_p
         assert oversized.status_code == 422
         assert provider.calls == []
 
+        app.state.credential_store.set_secret("provider/deepseek/api-key", "fixture-secret-do-not-persist")
+        bounded = client.post(
+            "/api/v1/conversations",
+            headers=_headers("chat-gate-005"),
+            json={"first_message": "测" * 3000, "client_request_id": "client-gate-005"},
+        )
+        assert bounded.status_code == 202
+        rejected = _wait_for_terminal(client, bounded.json()["operation_id"])
+        assert rejected["status"] == "FAILED"
+        assert rejected["error_code"] == "INPUT_BUDGET_EXCEEDED"
+        assert provider.calls == []
+        assert "fixture-secret-do-not-persist" not in rejected["error_detail"]
+
 
 def test_provider_failure_is_persisted_without_leaking_raw_error(tmp_path: Path) -> None:
     provider = MockChatProvider(

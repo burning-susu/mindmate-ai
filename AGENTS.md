@@ -50,6 +50,7 @@
 - `项目业务资料/` 中的 Figma、Sketch 和 Word 原始资料必须保留，不修改、不删除。
 - 当前已冻结的技术基线包括 React 19 + TypeScript + Vite、Python 3.12 + FastAPI、SQLite + FTS5 + sqlite-vec、本地 ONNX `BAAI/bge-small-zh-v1.5`、DeepSeek `deepseek-flash`、SQLite 持久任务、PyInstaller one-folder 和 Inno Setup。
 - Provider Runtime 仍必须使用 Mock Provider 进行开发；真实 DeepSeek 请求、真实凭据和付费外部调用不属于日常自动化测试。
+- 近期目标是先做成求职展示用的稳定 Demo：优先文件整理/导入、建库、带来源问答、最小学习陪练和重启恢复。完整 V1 的高级项与发布级验收稍后精进。报告必须分开写 `Demo 可用性` 和 `完整 V1 阶段状态`，不能用 Demo 通过冒充阶段 5/6 验收通过。
 - 当前开发阶段不得重新发起产品、Provider、Embedding、向量存储、技术栈、页面结构或部署方式决策；普通实现细节按 15/16 的冻结方案处理。
 
 ## 3. 启动路由
@@ -223,6 +224,8 @@ AI 不得因为发现 `doc/handbook` 中存在某项标准，就自动将其升�
 “代码已经写好”只能证明代码产出，不能自动证明其他状态。
 
 今后每个开发批次的 Git commit message 必须使用中文，一句话总结本批任务目的；完成推送后的交付说明也用中文，列出分支、提交及远端 SHA。
+
+近期交付顺序是 Demo 首先完成，完整 V1 以后精进。求职 Demo 优先打通文件整理/导入、建库、带来源问答、最小学习陪练和重启恢复；默认演示保持无费用 Mock。真实 DeepSeek 只有在设置中显式选择、完成本地同意和系统凭据、并由用户主动确认费用估算后才允许外发。进度报告分别给出 Demo 可用性与完整 V1 阶段状态。
 
 ## 11. 安全红线
 
