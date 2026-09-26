@@ -467,6 +467,21 @@
 .home-shortcuts > div > p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
 .home-shortcuts__actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .home-shortcuts__actions a { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+.home-recent { display: grid; gap: 12px; padding: 20px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.home-recent h2 { margin: 4px 0 8px; color: var(--text); font-size: 22px; }
+.home-recent__heading { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.home-recent__heading p, .home-recent__empty, .home-recent__card p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.home-recent__list { display: grid; gap: 10px; }
+.home-recent__card { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 12px; padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+.home-recent__card h3 { margin: 0 0 6px; font-size: 16px; }
+.home-recent__card h3 a { color: inherit; }
+.home-recent__facts { display: grid; gap: 4px; margin: 8px 0 0; }
+.home-recent__facts div { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 8px; font-size: 13px; }
+.home-recent__facts dt { color: var(--muted); }
+.home-recent__facts dd { margin: 0; }
+.home-recent__reason { margin-top: 8px; color: var(--danger); }
+.home-recent__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.home-recent__actions a, .home-recent__actions button { color: var(--brand); font-size: 13px; background: none; border: 0; padding: 0; cursor: pointer; text-decoration: none; }
 .learning-kb-choices, .chat-scope-picker { display: grid; gap: 8px; }
 .learning-kb-choices ul, .chat-scope-picker__choices { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .chat-scope-picker { margin: 0 18px 12px; }

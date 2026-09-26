@@ -24,6 +24,13 @@ export function installEmbeddingModel(): Promise<EmbeddingModelStatus> {
   return apiRequest('/api/v1/embedding-model/install', { method: 'POST' })
 }
 
+export function listKnowledgeBases(limit?: number): Promise<KnowledgeBaseListResponse> {
+  const params = new URLSearchParams()
+  if (limit !== undefined) params.set('limit', String(limit))
+  const query = params.toString()
+  return apiRequest(`/api/v1/knowledge-bases${query ? `?${query}` : ''}`)
+}
+
 export function createKnowledgeBase(payload: KnowledgeBaseCreate): Promise<KnowledgeBaseItem> {
   return apiRequest('/api/v1/knowledge-bases', {
     method: 'POST',

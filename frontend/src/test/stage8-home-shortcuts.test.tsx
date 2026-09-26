@@ -111,7 +111,8 @@ describe('home shortcuts', () => {
     const calls = installFetch({ knowledgeBases: [readyBase] })
     render(<BrowserRouter><App /></BrowserRouter>)
 
-    fireEvent.click(await screen.findByRole('link', { name: '开始学习' }))
+    const shortcuts = await screen.findByRole('region', { name: '快捷操作' })
+    fireEvent.click(within(shortcuts).getByRole('link', { name: '开始学习' }))
     const learningChoice = await screen.findByRole('link', { name: '服务超时演示库' })
     expect(learningChoice).toHaveAttribute('href', '/learning/new?knowledge_base_id=kb-ready')
     fireEvent.click(learningChoice)

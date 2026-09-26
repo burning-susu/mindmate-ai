@@ -858,12 +858,18 @@ def _create_index_operation(
 
 
 @router.get("/knowledge-bases", response_model=KnowledgeBaseListResponse, tags=["knowledge-bases"])
-def list_knowledge_bases(session: Session = Depends(get_session)) -> dict[str, Any]:
-    records = session.scalars(
+def list_knowledge_bases(
+    session: Session = Depends(get_session),
+    limit: int | None = Query(default=None, ge=1, le=100),
+) -> dict[str, Any]:
+    statement = (
         select(KnowledgeBase)
         .where(KnowledgeBase.deleted_at.is_(None))
         .order_by(KnowledgeBase.updated_at.desc(), KnowledgeBase.knowledge_base_id.desc())
     )
+    if limit is not None:
+        statement = statement.limit(limit)
+    records = session.scalars(statement)
     return {"items": [_payload(session, record) for record in records], "next_cursor": None}
 
 

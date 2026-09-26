@@ -186,6 +186,26 @@
         ],
         "summary": "List Knowledge Bases",
         "operationId": "list_knowledge_bases_api_v1_knowledge_bases_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 100,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -193,6 +213,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/KnowledgeBaseListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -206,14 +236,14 @@
         "summary": "Create Knowledge Base",
         "operationId": "create_knowledge_base_api_v1_knowledge_bases_post",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/KnowledgeBaseCreate"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "201": {

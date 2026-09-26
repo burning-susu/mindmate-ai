@@ -10,6 +10,14 @@ export type TagListResponse = components['TagListResponse']
 export type TrashResponse = components['TrashResponse']
 export type TrashFolderItem = components['TrashFolderResponse']
 
+export function listRecentFiles(limit = 5): Promise<FileListResponse> {
+  const params = new URLSearchParams({
+    limit: String(limit),
+    sort: 'updated_at',
+  })
+  return apiRequest(`/api/v1/files?${params}`)
+}
+
 export function isVersionConflict(error: unknown): error is ApiError {
   return error instanceof ApiError && error.status === 412
 }
