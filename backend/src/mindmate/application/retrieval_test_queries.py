@@ -13,9 +13,17 @@ if TYPE_CHECKING:
 
 
 class RetrievalQueryEncoderError(RuntimeError):
-    def __init__(self, code: str) -> None:
+    def __init__(
+        self,
+        code: str,
+        *,
+        phase: str | None = None,
+        model_state: str | None = None,
+    ) -> None:
         super().__init__(code)
         self.code = code
+        self.phase = phase
+        self.model_state = model_state
 
 
 class LocalRetrievalQueryEncoder:
@@ -29,18 +37,26 @@ class LocalRetrievalQueryEncoder:
     def embed_query(self, text: str) -> NDArray[Any]:
         with self._lock:
             if self._adapter is None:
-                status = self._manager.status(offline=True)
+                status = self._manager.status(offline=True, block=True)
                 if status.state is not ModelState.READY:
                     code = status.error_code or (
                         "MODEL_MISSING_OFFLINE"
                         if status.state is ModelState.MISSING_OFFLINE
                         else "MODEL_UNAVAILABLE"
                     )
-                    raise RetrievalQueryEncoderError(code)
+                    raise RetrievalQueryEncoderError(
+                        code,
+                        phase="status_precheck",
+                        model_state=status.state.value,
+                    )
                 try:
                     paths = self._manager.ensure_installed(allow_download=False)
                 except ModelManagerError as error:
-                    raise RetrievalQueryEncoderError(error.code) from None
+                    raise RetrievalQueryEncoderError(
+                        error.code,
+                        phase="ensure_installed",
+                        model_state=status.state.value,
+                    ) from None
 
                 from mindmate.ai.embeddings.adapter import (
                     EmbeddingAdapterError,
@@ -50,11 +66,19 @@ class LocalRetrievalQueryEncoder:
                 try:
                     self._adapter = OnnxEmbeddingAdapter(paths)
                 except EmbeddingAdapterError as error:
-                    raise RetrievalQueryEncoderError(error.code) from None
+                    raise RetrievalQueryEncoderError(
+                        error.code,
+                        phase="adapter_load",
+                        model_state=status.state.value,
+                    ) from None
 
             from mindmate.ai.embeddings.adapter import EmbeddingAdapterError
 
             try:
                 return self._adapter.embed_query(text)
             except EmbeddingAdapterError as error:
-                raise RetrievalQueryEncoderError(error.code) from None
+                raise RetrievalQueryEncoderError(
+                    error.code,
+                    phase="embed",
+                    model_state=ModelState.READY.value,
+                ) from None
