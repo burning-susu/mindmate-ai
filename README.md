@@ -49,4 +49,16 @@ Windows PowerShell 等价脚本位于 `scripts/`。完成阶段 0 后使用：
 .\scripts\dev.ps1
 ```
 
-前端默认运行在 `http://127.0.0.1:5173`，本地 API 默认运行在 `http://127.0.0.1:8000`。阶段 0 只提供健康检查和应用壳，不代表业务闭环已完成。
+前端默认运行在 `http://127.0.0.1:5173`，本地 API 默认运行在 `http://127.0.0.1:8000`。阶段 0 只提供健康检查和应用壳，不代表业务闭环已完成。`.\scripts\dev.ps1` 使用这两个回环端口；端口已被占用时会停止并说明原因，不会悄悄换端口。Ctrl+C 会结束脚本本次启动的后端和前端进程。
+
+## 求职 Demo
+
+固定合成资料、真实本地 ONNX Embedding、Mock Chat Provider。这条入口不调用真实 DeepSeek，不读取真实 Key，也不使用默认用户数据目录。
+
+```powershell
+.\scripts\demo.ps1
+```
+
+默认数据根是 `%TEMP%\mindmate-ai-stage36-job-demo`。系统可能清理 `%TEMP%`；目录被清空后，脚本只在空目录或带所有权标记的目录里重新准备，不会接管或清空 `%LOCALAPPDATA%\MindMateAI`。API 是 `http://127.0.0.1:8001`，页面是 `http://127.0.0.1:5174/knowledge-bases/<固定主库>`。启动前会核对运行中的模型指纹和主库 `READY`。Ctrl+C 停止本次启动的进程。
+
+端口被占用、固定模型缓存 `backend/model-cache/manager-validation` 缺失，或准备失败时，脚本会停下来说明原因，不会下载模型、更换模型或切换到真实 Provider。浏览器里的回答正文是 Mock 生成，用来证明检索、引用、保存和页面显示；它不证明 DeepSeek 已经答出资料事实。用户界面上的文件上传和建库不由这条命令代替。
