@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { BookOpen, ExternalLink, FileText, LoaderCircle, MessageSquare, Plus, RefreshCw, Send, Square, WifiOff, X } from 'lucide-react'
+import { BookOpen, LoaderCircle, MessageSquare, Plus, RefreshCw, Send, Square, WifiOff } from 'lucide-react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 
@@ -20,6 +20,7 @@ import {
 } from '../api/chat'
 import { getAiProviderStatus } from '../api/aiProvider'
 import { ApiError, apiRequest } from '../api/client'
+import { SourceCitationPanel } from '../components/SourceCitationPanel'
 
 const ACTIVE_STATES = new Set(['QUEUED', 'RUNNING', 'STOPPING'])
 const TERMINAL_STATES = new Set(['COMPLETED', 'FAILED', 'STOPPED', 'INTERRUPTED'])
@@ -51,15 +52,6 @@ function mergeMessage(messages: Message[], next: Message): Message[] {
   return copy
 }
 
-function citationLocation(citation: Citation): string {
-  const location: string[] = []
-  if (citation.heading_path?.length) location.push(citation.heading_path.join(' / '))
-  if (citation.page_start) location.push(`第 ${citation.page_start}${citation.page_end && citation.page_end !== citation.page_start ? `-${citation.page_end}` : ''} 页`)
-  if (citation.slide_number) location.push(`第 ${citation.slide_number} 张`)
-  if (citation.line_start) location.push(`第 ${citation.line_start}${citation.line_end && citation.line_end !== citation.line_start ? `-${citation.line_end}` : ''} 行`)
-  return location.join(' · ') || '未提供结构定位'
-}
-
 function AssistantBody({ content, citations, onCitation }: { content: string; citations: Citation[]; onCitation: (citation: Citation) => void }) {
   if (!content) return <span className="chat-message__placeholder">回答将在这里显示</span>
   const citationByNumber = new Map(citations.map((citation) => [citation.display_number, citation]))
@@ -76,16 +68,6 @@ function AssistantBody({ content, citations, onCitation }: { content: string; ci
       ))}
     </div>
   )
-}
-
-function CitationPanel({ citation, onClose }: { citation: Citation; onClose: () => void }) {
-  const unavailable = citation.source_status !== 'AVAILABLE'
-  return <aside className="citation-panel" aria-label={`引用 ${citation.display_number}`}>
-    <div className="citation-panel__header"><div><span className="eyebrow">引用 {citation.display_number}</span><strong>{citation.file_name}</strong></div><button className="icon-button" type="button" onClick={onClose} aria-label="关闭引用"><X size={16} /></button></div>
-    <div className="citation-panel__location"><FileText size={14} aria-hidden="true" />{citationLocation(citation)}</div>
-    {unavailable ? <p className="citation-panel__unavailable">来源状态：{citation.source_status === 'SOURCE_IN_TRASH' ? '文件已在回收站' : citation.source_status === 'SOURCE_DELETED' ? '来源已永久删除' : '来源版本已变化'}。当前不能打开原文。</p> : <p className="citation-panel__excerpt">{citation.excerpt || '当前来源没有可展示摘录。'}</p>}
-    {citation.can_open_source && citation.file_id ? <a className="quiet-button citation-panel__open" href={`/files/${citation.file_id}`}><ExternalLink size={14} />打开文件详情</a> : null}
-  </aside>
 }
 
 export default function ChatPage() {
@@ -347,7 +329,7 @@ export default function ChatPage() {
                 {message.role === 'ASSISTANT' ? <>
                   <AssistantBody content={message.content} citations={message.citations ?? []} onCitation={setSelectedCitation} />
                   {message.citations?.length ? <div className="citation-strip"><span>来源</span>{message.citations.map((citation) => <button className="citation-chip" type="button" key={citation.citation_id} onClick={() => setSelectedCitation(citation)}>[{citation.display_number}] {citation.file_name}</button>)}</div> : null}
-                  {selectedCitation && message.citations?.some((citation) => citation.citation_id === selectedCitation.citation_id) ? <CitationPanel citation={selectedCitation} onClose={() => setSelectedCitation(null)} /> : null}
+                  {selectedCitation && message.citations?.some((citation) => citation.citation_id === selectedCitation.citation_id) ? <SourceCitationPanel citation={selectedCitation} onClose={() => setSelectedCitation(null)} /> : null}
                 </> : <p className="chat-user-content">{message.content}</p>}
               </article>
             ))}

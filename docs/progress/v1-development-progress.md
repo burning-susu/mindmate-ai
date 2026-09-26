@@ -374,3 +374,12 @@
 - 迁移：`e8b2c41d7a90`。改 `citations` 前必须先删除文件净化触发器，批量变更后再重建。
 - 门禁：定向 9 项通过。Ruff `src tests` 通过。Pyright `src tests` 0 错误。OpenAPI 3.1 为 `73 schemas / 77 operations`，前端 typecheck 通过。全量 pytest 一轮 237 项中 1 项失败，为既有切块 Worker 领取时序；该项单独重跑通过，未改 Worker，全量未跑第二轮。
 - 下一批唯一目标：连接本批学习 API 到最小前端会话，并验证一题一反馈。
+
+### 第四十批：最小学习陪练前端与 Windows 演示
+
+- 状态：页面与隔离浏览器 `PASS`。Demo 可用性：一题一反馈可以在浏览器里创建、提交、看来源并刷新恢复。真实 DeepSeek 仍为 `PENDING`。阶段 5、6、7 的完整 V1 仍为 `PARTIAL`。进场分支 `feat/v1-bootstrap`，本地与远端 SHA 均为 `f3b001c6cc687e99ec979814b175397bc6b8f06c`，工作区干净。
+- 交付：已就绪知识库详情进入 `/learning/new`。页面显示资料范围、主题和目标，题量固定为 1，不提供难度、题型和题量切换。空白或资料不可用不能提交，只打开页面不创建会话。会话页一次显示一题和四个选项；未选择不能提交，重复点击保持同一个请求标识。提交前不返回摘录或答案键。提交后展示服务端原答案、对错、解释和可点击引用。`SOURCE_INVALID`、资料不足、模型或索引不可用都停在学习页并给出返回动作，不改去普通聊天。页眉写明本地规则模拟，未调用真实 DeepSeek。
+- Windows 现场：数据根 `%TEMP%\mindmate-ai-stage40-learning-demo`。准备脚本复用固定公开样本和 `backend/model-cache/manager-validation`，模型 `READY`，`deepseek_called=false`，主库检索检查为 `supported`。API `127.0.0.1:8002`，Vite `127.0.0.1:5175`。`npx playwright test e2e/stage7-learning-demo.spec.ts --reporter=line` 为 `1 passed`（6.8 秒）。反馈正文与接口一致，引用文件是 `服务超时策略.txt`；刷新后 Attempt 不变。南极冰芯主题返回 `EVIDENCE_INSUFFICIENT`，页面没有单选项。验证结束后 8002 和 5175 已释放。截图在隔离根 `evidence/`，未入库。这不代表界面上传建库已验收。
+- 门禁：`src/test/stage7-learning.test.tsx` 为 `7 passed`。`npm run typecheck`、`npm run lint`、`npm run build` 通过。没有改后端契约，OpenAPI 仍是第三十九批的 `73 schemas / 77 operations`。没有重跑后端全量。第三十九批切块 Worker 领取时序失败没有在本批再现，也没有被单独重跑宣布消失。
+- 精进待办：多题、提示、重试、自适应难度、掌握度、间隔复习、完整学习首页、结束总结、真实在线学习生成。
+- 下一批唯一目标：把这一题学习回合接到现有 Windows 演示启动，并在后端进程重启后复核同一 URL 的题目、作答和引用仍一致。不扩展多题、掌握度或真实 DeepSeek。

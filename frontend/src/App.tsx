@@ -12,6 +12,8 @@ import KnowledgeBasesPage from './pages/KnowledgeBasesPage'
 import SettingsPage from './pages/SettingsPage'
 import TrashPage from './pages/TrashPage'
 import ChatPage from './pages/ChatPage'
+import LearningNewPage from './pages/LearningNewPage'
+import LearningSessionPage from './pages/LearningSessionPage'
 import { queryClient } from './queryClient'
 import './App.css'
 
@@ -102,7 +104,9 @@ function AppShell() {
         <div className="content-area">
           <Routes>
             <Route path="/" element={<Placeholder title="欢迎回到 MindMate" description="阶段 0 工程基线已建立，下一步进入本地应用壳和安全运行验证。" />} />
-            <Route path="/learning" element={<Placeholder title="学习" description="学习首页和陪练闭环将在后续开发阶段接入。" />} />
+            <Route path="/learning" element={<Placeholder title="学习" description="最小演示从已索引就绪的知识库进入，一次只做一题。打开本页不会创建学习会话。本地规则模拟演示，未调用真实 DeepSeek。" />} />
+            <Route path="/learning/new" element={<LearningNewPage />} />
+            <Route path="/learning/session/:sessionId" element={<LearningSessionPage />} />
             <Route path="/chat" element={<ChatPage />} />
             <Route path="/chat/:conversationId" element={<ChatPage />} />
             <Route path="/knowledge-bases" element={<KnowledgeBasesPage />} />

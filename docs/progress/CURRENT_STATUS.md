@@ -7,7 +7,7 @@
 - 最后更新时间：`2026-09-26`
 - 当前开发阶段：阶段 7 开发中，状态 `PARTIAL`；阶段 5、阶段 6 继续 `PARTIAL`
 - 交付顺序：Demo 首先完成，完整 V1 以后精进。求职 Demo 优先文件整理/导入、建库、带来源问答、最小学习陪练和重启恢复。Demo 可用性与完整 V1 阶段状态分开报告。
-- 当前批次状态：第三十九批完成后端最小学习闭环。已有 `READY` 知识库可创建持久会话、一道单选题和一次作答反馈；提交前不返回答案，提交后保存结果与来源快照。前端学习页仍未接入。默认演示仍是无费用 Mock。真实 DeepSeek：`PENDING`。阶段 5、6、7 的完整 V1 仍为 `PARTIAL`。详细证据见 `docs/test-reports/stage-39-learning-backend.md`。
+- 当前批次状态：第四十批把最小学习回合接到浏览器。已就绪知识库可以进入 `/learning/new`，创建一题并在 `/learning/session/:id` 提交、看来源、刷新恢复。Windows 隔离数据根上的真实 ONNX 浏览器用例 `1 passed`。默认演示仍是无费用 Mock，模型标识 `learning-demo-fixture-v1`。真实 DeepSeek：`PENDING`。阶段 5、6、7 的完整 V1 仍为 `PARTIAL`。详细证据见 `docs/test-reports/stage-40-learning-frontend.md`。
 
 ## 已完成阶段
 
@@ -269,3 +269,12 @@
 - 锁对照：在不占用演示数据根的前提下，定向测试 `4 passed`。空目录锁释放后为 `MISSING_OFFLINE`。固定缓存上非阻塞状态为 `INSTALLING`，释放后为 `READY`；查询编码在持锁期间等待，释放后返回 512 维向量，没有 `MODEL_UNAVAILABLE`。本批浏览器与受控审计也没有出现 `MODEL_UNAVAILABLE`。历史两次现场失败没有被重放成同一次请求，不能改写成已经逐条证实。
 - 未跑：没有重跑后端全量，没有真实 DeepSeek、真实 Key、付费请求、用户界面上传建库、发布性能或 10 万 Chunk。第三十六批的 `225 passed, 2 skipped` 仍是历史基线。
 - 下一批唯一目标：在获得明确授权和单次预算上限之后，用同一套公开合成资料做一次手动真实 DeepSeek 小型冒烟；未授权前默认 `.\scripts\demo.ps1` 继续使用 Mock。
+
+## 第四十批交接
+
+- 本批状态：最小学习页与 Windows 浏览器演示 `PASS`。Demo 可用性：可以从已就绪知识库走完一题、一次反馈、来源点击和刷新恢复。真实 DeepSeek 仍为 `PENDING`。阶段 5、6、7 的完整 V1 仍为 `PARTIAL`。进场分支 `feat/v1-bootstrap`，本地与远端 SHA 均为 `f3b001c6cc687e99ec979814b175397bc6b8f06c`，工作区干净。
+- 页面：知识库详情在索引就绪且有可用文件时提供“基于此知识库学习”。`/learning/new` 只展示资料范围、主题和目标，题量固定为 1。空白或资料不可用不能提交，打开页面不创建会话。提交后进入 `/learning/session/:id`。提交前不展示摘录、点评或答案键；提交后锁定原答案，并复用聊天来源面板。页面标明本地规则模拟，不把聊天设置里的在线模式当成学习出题。
+- Windows 现场：隔离数据根 `%TEMP%\mindmate-ai-stage40-learning-demo`，固定公开样本和已校验 ONNX，没有下载模型，没有调用 DeepSeek，没有碰默认用户数据库。API `127.0.0.1:8002`，页面 `127.0.0.1:5175`。Playwright `1 passed`（6.8 秒）。正例反馈与服务端说明一致，引用文件为 `服务超时策略.txt`；刷新后同一 Attempt 仍在。无证据主题为 `FAILED / EVIDENCE_INSUFFICIENT`，没有题目。截图留在隔离根 `evidence/`，不进 Git。
+- 门禁：前端学习 Vitest `7 passed`；typecheck、lint、build 通过。本批没有改后端，没有重跑全量 pytest，也没有把第三十九批的 `236 passed / 1 failed` 算进本批。切块 Worker 领取时序失败仍是既有风险，本批未改 Worker，演示链路没有碰到该任务。
+- 未做：多题、提示、重试、自适应难度、掌握度、间隔复习、完整学习首页、结束总结、真实在线学习生成。
+- 下一批唯一目标：把这一题学习回合接到现有 Windows 演示启动，并在后端进程重启后复核同一 URL 的题目、作答和引用仍一致。不扩展多题、掌握度或真实 DeepSeek。

@@ -450,6 +450,14 @@
 .chat-alert--warning { border: 1px solid #ead8aa; background: #fffaf0; color: #71511c; }
 .chat-alert--error { border: 1px solid #efd0cd; background: #fff7f6; color: var(--danger); }
 .chat-alert .quiet-button { margin-left: auto; }
+.learning-page { display: grid; gap: 16px; }
+.learning-mock-banner { margin: 0; padding: 10px 12px; border: 1px solid #d7b15a; border-radius: 7px; background: #fff8e8; color: #6b4e00; font-size: 13px; line-height: 1.6; }
+.learning-scope-list { margin: 0 0 16px; padding-left: 18px; color: var(--text); }
+.learning-question fieldset { display: grid; gap: 8px; margin: 0 0 14px; padding: 12px; border: 1px solid var(--border); border-radius: 8px; }
+.learning-question legend { padding: 0 4px; font-weight: 700; }
+.learning-question label { display: flex; align-items: center; gap: 8px; }
+.learning-feedback { display: grid; gap: 8px; margin-top: 14px; }
+.learning-feedback p { margin: 0; line-height: 1.6; }
 
 @media (max-width: 840px) {
   .chat-layout { grid-template-columns: 1fr; }
