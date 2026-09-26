@@ -709,6 +709,12 @@ class LearningSession(Base):
         UniqueConstraint("idempotency_key", name="uq_learning_session_idempotency_key"),
         UniqueConstraint("client_request_id", name="uq_learning_session_client_request_id"),
         Index("ix_learning_sessions_status", "status", "updated_at"),
+        Index(
+            "ix_learning_sessions_active_updated",
+            "updated_at",
+            "learning_session_id",
+            sqlite_where=text("deleted_at IS NULL"),
+        ),
     )
 
     learning_session_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)

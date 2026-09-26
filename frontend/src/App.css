@@ -451,6 +451,11 @@
 .chat-alert--error { border: 1px solid #efd0cd; background: #fff7f6; color: var(--danger); }
 .chat-alert .quiet-button { margin-left: auto; }
 .history-page { display: grid; gap: 16px; min-width: 0; }
+.history-tabs { display: flex; gap: 8px; }
+.history-tab { min-height: 34px; padding: 0 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; cursor: pointer; }
+.history-tab--active { border-color: #75aebb; background: #f6fbfc; font-weight: 700; }
+.history-panel { display: grid; gap: 12px; }
+.history-panel > p { margin: 0; color: var(--muted); font-size: 13px; }
 .history-state { display: flex; align-items: center; gap: 8px; padding: 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--muted); font-size: 13px; }
 .history-state--error { color: var(--danger); }
 .history-list { display: grid; gap: 8px; }

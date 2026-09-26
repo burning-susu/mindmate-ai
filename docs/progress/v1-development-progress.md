@@ -407,7 +407,14 @@
 ## 阶段 8
 
 - 状态：`PARTIAL`
-- 第四十三批只完成对话历史的只读找回，不代表首页、学习历史、设置、备份或完整恢复已验收。
+- 第四十三批完成对话历史的只读找回，第四十四批完成学习历史的只读找回。首页、历史筛选和删除、设置、备份与完整恢复仍未验收。
+
+### 第四十四批：学习历史找回与原会话继续
+
+- 状态：本批学习历史切片 `PASS`；阶段 8 整体 `PARTIAL`。求职 Demo 维持第四十二批 `PASS`。真实 DeepSeek 仍为 `PENDING`。阶段 5、6、7 仍为 `PARTIAL`。进场 SHA `e6f1b4cedef8527b10c77a836348b4424b78f0e7`。
+- 契约：新增查询投影 `GET /api/v1/history/learning-sessions`。不新建学习表，不复制题目或反馈，不改学习创建和幂等提交。OpenAPI 3.1 现为 `77 schemas / 79 operations`。Alembic head `c8d4f1a27b63`。
+- 证据：后端历史定向 `6 passed`；前端历史 Vitest `7 passed`；真实 Chrome 在隔离根完成空列表、未作答继续一次、已作答来源、刷新、后端重启和回收站来源门禁。报告见 `docs/test-reports/stage-44-learning-history.md`。
+- 下一批唯一目标：在首页放一个只读的继续学习入口，只打开已经保存的学习会话。
 
 ### 第四十三批：对话历史找回与只读恢复
 

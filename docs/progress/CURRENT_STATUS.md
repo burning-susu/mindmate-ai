@@ -7,7 +7,7 @@
 - 最后更新时间：`2026-09-26`
 - 当前开发阶段：阶段 8 开发中，状态 `PARTIAL`；阶段 5、阶段 6、阶段 7 继续 `PARTIAL`
 - 交付顺序：Demo 首先完成，完整 V1 以后精进。求职 Demo 优先文件整理/导入、建库、带来源问答、最小学习陪练和重启恢复。Demo 可用性与完整 V1 阶段状态分开报告。
-- 当前批次状态：第四十三批完成对话历史的只读找回。侧栏和聊天页进入 `/history`，按最近活动时间分页读取未回收会话；打开原会话 ID 后可读已保存问题和回答、可点来源。本批历史切片 `PASS`，整个阶段 8 仍为 `PARTIAL`。求职 Demo 维持第四十二批 `PASS`，本批没有重跑空库上传全链路。真实 DeepSeek 仍为 `PENDING`。阶段 5、6、7 的完整 V1 仍为 `PARTIAL`。详细证据见 `docs/test-reports/stage-43-conversation-history.md`。
+- 当前批次状态：第四十四批完成学习历史的只读找回。`/history?tab=learning` 按最近活动时间分页读取未回收学习会话；打开原会话 ID 后，未作答可以继续提交一次，已作答只读显示原选择、对错和来源。本批学习历史切片 `PASS`，整个阶段 8 仍为 `PARTIAL`。求职 Demo 维持第四十二批 `PASS`，本批没有重跑空库上传全链路。真实 DeepSeek 仍为 `PENDING`。阶段 5、6、7 的完整 V1 仍为 `PARTIAL`。详细证据见 `docs/test-reports/stage-44-learning-history.md`。
 
 ## 已完成阶段
 
@@ -304,3 +304,11 @@
 - 浏览器：隔离根 `%TEMP%\mindmate-ai-stage43-history`，公开合成资料和已校验 ONNX，主库 `01a0ddd1-f454-70e9-937d-104b8d73009f`。API `127.0.0.1:8002`，页面 `127.0.0.1:5175`，Provider 固定 Mock。建会话前历史页文字为“还没有可阅读的对话”。随后一条普通聊天和一条知识库问答；历史最新项是知识库会话 `01a0dde1-fe15-7a81-9966-e03920ce27d7`，打开时没有新的会话 POST。引用面板含“30 秒”和“打开文件详情”。刷新后同一 URL 的两条消息 ID 不变。文件进入回收站后，列表为 `SOURCE_INVALID / SOURCE_IN_TRASH`，面板写明“文件已在回收站”，历史摘录不再被说成当前资料可用。
 - 重启：旧监听 PID `39524` 停止后，新监听 PID `39068`。同一历史项再次打开，消息 ID 仍是 `01a0dde1-fe17-78f5-aa88-20472f1ae986` 与 `01a0dde1-fe18-7601-9deb-8853022ef445`，没有新的会话 POST。页面仍显示 Mock，不外发。
 - 下一批唯一目标：为已保存的学习会话增加历史列表和继续入口。不展开首页、设置、搜索、删除恢复或真实 DeepSeek。
+
+## 第四十四批交接
+
+- 本批状态：学习历史只读切片 `PASS`。整个阶段 8 仍为 `PARTIAL`。求职 Demo 维持第四十二批 `PASS`。真实 DeepSeek 仍为 `PENDING`。阶段 5、6、7 的完整 V1 仍为 `PARTIAL`。进场分支 `feat/v1-bootstrap`，本地与远端 SHA 均为 `e6f1b4cedef8527b10c77a836348b4424b78f0e7`，工作区干净。
+- 入口：学习页、新建学习和学习会话都可进入 `/history?tab=learning`。侧栏“历史记录”和 `/history` 默认仍是对话历史。列表调用 `GET /api/v1/history/learning-sessions`，只返回主题、目标类型、知识库名、范围内文件数、真实状态、来源状态、已作答数、目标题量和时间。不返回题目、选项、答案键、反馈或摘录。
+- 浏览器：隔离根 `%TEMP%\mindmate-ai-stage44-learning-history`，公开合成资料和已校验 ONNX。主库 `01a0ddfd-32bb-7a0b-b0a9-3dfd8a990bfa`。API `127.0.0.1:8003`，页面 `127.0.0.1:5176`，Provider 固定 Mock。学习模型标识 `learning-demo-fixture-v1`，`live_model_called=false`。已作答会话 `01a0de00-99c8-7027-bbcb-e67c916eca75` 从历史打开后引用可点，Attempt `01a0de00-f21d-760c-8751-924da6ab0a2b` 不变。未作答会话 `01a0ddff-f0b7-75c2-ad63-96beababab14` 从历史继续提交一次，Attempt `01a0de0f-2560-7441-885e-c3c3f8d77bc6`，随后没有第二次提交按钮。
+- 重启：旧监听 PID `28668` 停止后端口释放，脚本退出码 0。新监听 PID `29352` 上，三个会话的题目 ID 和 Attempt 数量不变。文件 `01a0ddfd-34ad-7470-8fa6-51c94818051c` 进入回收站后，列表为 `SOURCE_INVALID / SOURCE_IN_TRASH`。未作答会话 `01a0de10-4b07-7575-84a9-3602defff507` 不能继续，Attempt 仍为 0。已作答反馈仍可读，引用写明“文件已在回收站”，不能打开文件详情。验证后 8003/5176 已释放。
+- 下一批唯一目标：在首页放一个只读的继续学习入口，只打开已经保存的学习会话。不展开历史筛选、删除、设置、备份或真实 DeepSeek。

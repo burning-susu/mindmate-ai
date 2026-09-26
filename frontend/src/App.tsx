@@ -1,6 +1,6 @@
 import { QueryClientProvider, useQuery } from '@tanstack/react-query'
 import { Activity, BookOpen, Boxes, FileText, History, Home, Menu, MessageSquare, Settings2, Trash2 } from 'lucide-react'
-import { NavLink, Route, Routes } from 'react-router-dom'
+import { Link, NavLink, Route, Routes } from 'react-router-dom'
 import { create } from 'zustand'
 
 import { apiRequest } from './api/client'
@@ -47,12 +47,13 @@ function BackendStatus() {
   return <span className={`status-dot ${isError ? 'status-dot--error' : ''}`}>{label}</span>
 }
 
-function Placeholder({ title, description }: { title: string; description: string }) {
+function Placeholder({ title, description, action }: { title: string; description: string; action?: { to: string; label: string } }) {
   return (
     <section className="placeholder-panel">
       <span className="eyebrow">V1 开发基线</span>
       <h2>{title}</h2>
       <p>{description}</p>
+      {action ? <Link className="quiet-button" to={action.to}>{action.label}</Link> : null}
     </section>
   )
 }
@@ -83,7 +84,7 @@ function AppShell() {
         <div className="sidebar-footer">
           <NavLink to="/history" className="nav-item">
             <History size={18} aria-hidden="true" />
-            {sidebarOpen && <span>对话历史</span>}
+            {sidebarOpen && <span>历史记录</span>}
           </NavLink>
           <NavLink to="/trash" className="nav-item">
             <Trash2 size={18} aria-hidden="true" />
@@ -109,7 +110,7 @@ function AppShell() {
         <div className="content-area">
           <Routes>
             <Route path="/" element={<Placeholder title="欢迎回到 MindMate" description="阶段 0 工程基线已建立，下一步进入本地应用壳和安全运行验证。" />} />
-            <Route path="/learning" element={<Placeholder title="学习" description="最小演示从已索引就绪的知识库进入，一次只做一题。打开本页不会创建学习会话。本地规则模拟演示，未调用真实 DeepSeek。" />} />
+            <Route path="/learning" element={<Placeholder title="学习" description="最小演示从已索引就绪的知识库进入，一次只做一题。打开本页不会创建学习会话。本地规则模拟演示，未调用真实 DeepSeek。" action={{ to: '/history?tab=learning', label: '学习历史' }} />} />
             <Route path="/learning/new" element={<LearningNewPage />} />
             <Route path="/learning/session/:sessionId" element={<LearningSessionPage />} />
             <Route path="/chat" element={<ChatPage />} />

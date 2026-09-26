@@ -471,6 +471,23 @@ export interface components {
     "live_model_called": boolean;
     "citations": Array<components["LearningCitationResponse"]>
   };
+  "LearningHistoryItem": {
+    "learning_session_id": string;
+    "topic": string;
+    "goal_type": string;
+    "scope_name": string | null;
+    "scope_file_count": number;
+    "status": string;
+    "source_status": string;
+    "answered_count": number;
+    "target_question_count": number;
+    "created_at": string;
+    "updated_at": string
+  };
+  "LearningHistoryListResponse": {
+    "items": Array<components["LearningHistoryItem"]>;
+    "next_cursor"?: string | null
+  };
   "LearningOptionResponse": {
     "option_id": string;
     "label": string
@@ -808,6 +825,9 @@ export interface operations {
   };
   "GET /api/v1/history/conversations": {
     operationId: "list_history_conversations_api_v1_history_conversations_get"
+  };
+  "GET /api/v1/history/learning-sessions": {
+    operationId: "list_history_learning_sessions_api_v1_history_learning_sessions_get"
   };
   "POST /api/v1/learning-sessions": {
     operationId: "create_session_api_v1_learning_sessions_post"

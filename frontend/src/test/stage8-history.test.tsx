@@ -191,3 +191,168 @@ describe('conversation history', () => {
     await waitFor(() => expect(screen.queryByText('还没有可阅读的对话。发送过的对话会保留在这里。')).not.toBeInTheDocument())
   })
 })
+
+const learningHistoryItem = {
+  learning_session_id: 'learn-1',
+  topic: '超时时间',
+  goal_type: 'CUSTOM',
+  scope_name: '服务超时演示库',
+  scope_file_count: 1,
+  status: 'IN_PROGRESS',
+  source_status: 'AVAILABLE',
+  answered_count: 0,
+  target_question_count: 1,
+  created_at: '2026-09-26T12:00:00Z',
+  updated_at: '2026-09-26T12:05:00Z',
+}
+
+function learningSession(answered: boolean) {
+  return {
+    learning_session_id: 'learn-1',
+    topic: '超时时间',
+    goal_type: 'CUSTOM',
+    goal_text: '记住请求超时上限',
+    knowledge_base_id: 'kb-1',
+    target_question_count: 1,
+    status: answered ? 'IN_PROGRESS' : 'IN_PROGRESS',
+    failure_code: null,
+    failure_detail: null,
+    completed_question_count: answered ? 1 : 0,
+    current_question_id: 'question-1',
+    provider: 'mock',
+    model: 'learning-demo-fixture-v1',
+    live_model_called: false,
+    row_version: 2,
+    created_at: learningHistoryItem.created_at,
+    started_at: learningHistoryItem.created_at,
+    scope: {
+      knowledge_base_id: 'kb-1',
+      index_version_id: 'index-1',
+      source_set_hash: 'abc',
+      file_ids: ['file-1'],
+    },
+    plan: null,
+    question: {
+      question_id: 'question-1',
+      learning_session_id: 'learn-1',
+      question_type: 'SINGLE_CHOICE',
+      prompt_text: '普通请求的等待上限是多久？',
+      options: [
+        { option_id: 'opt-a', label: '30 秒' },
+        { option_id: 'opt-b', label: '13 秒' },
+      ],
+      sequence_number: 1,
+      status: answered ? 'ANSWERED' : 'OPEN',
+      difficulty: 'BASIC',
+      row_version: 1,
+      feedback: answered ? {
+        feedback_id: 'feedback-1',
+        attempt_id: 'attempt-1',
+        selected_option: 'opt-a',
+        result: 'CORRECT',
+        explanation: '与资料记载一致 [1]',
+        provider: 'mock',
+        model: 'learning-demo-fixture-v1',
+        live_model_called: false,
+        citations: [{
+          citation_id: 'citation-1',
+          display_number: 1,
+          file_name: '服务超时策略.txt',
+          file_id: 'file-1',
+          chunk_id: 'chunk-1',
+          line_start: 1,
+          line_end: 12,
+          page_start: null,
+          page_end: null,
+          excerpt: 'API 单次请求超时时间为 30 秒。',
+          source_status: 'AVAILABLE',
+          can_open_source: true,
+        }],
+      } : null,
+    },
+  }
+}
+
+describe('learning history', () => {
+  it('opens an empty learning tab from the learning page without creating a session', async () => {
+    window.history.pushState({}, '', '/learning')
+    const calls: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      calls.push(`${init?.method ?? 'GET'} ${url}`)
+      if (url.includes('/system/session')) return response({ status: 'ready' })
+      if (url.includes('/history/learning-sessions')) return response({ items: [], next_cursor: null })
+      return response({ status: 'ok', version: '0.1.0' })
+    }))
+    render(<BrowserRouter><App /></BrowserRouter>)
+    fireEvent.click(await screen.findByRole('link', { name: '学习历史' }))
+    expect(await screen.findByText('还没有可找回的学习会话。从知识库开始的一题会保留在这里。')).toBeInTheDocument()
+    expect(calls.some((call) => call.startsWith('POST') && call.includes('/learning-sessions'))).toBe(false)
+  })
+
+  it('returns to an unanswered session without submitting', async () => {
+    window.history.pushState({}, '', '/history?tab=learning')
+    const calls: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      calls.push(`${init?.method ?? 'GET'} ${url}`)
+      if (url.includes('/system/session')) return response({ status: 'ready' })
+      if (url.includes('/history/learning-sessions')) return response({ items: [learningHistoryItem], next_cursor: null })
+      if (url.includes('/learning-sessions/learn-1')) return response(learningSession(false))
+      if (url.includes('/knowledge-bases/kb-1')) return response({ knowledge_base_id: 'kb-1', name: '服务超时演示库', status: 'READY', available_file_count: 1, file_count: 1, row_version: 1 })
+      return response({ status: 'ok', version: '0.1.0' })
+    }))
+    render(<BrowserRouter><App /></BrowserRouter>)
+    fireEvent.click(await screen.findByRole('button', { name: /超时时间/ }))
+    expect(await screen.findByText('普通请求的等待上限是多久？')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '提交答案' })).toBeInTheDocument()
+    expect(calls.filter((call) => call.startsWith('POST') && call.includes('/attempts'))).toEqual([])
+    expect(window.location.pathname).toBe('/learning/session/learn-1')
+  })
+
+  it('returns to a submitted answer and its source without a new attempt', async () => {
+    window.history.pushState({}, '', '/history?tab=learning')
+    const calls: string[] = []
+    const item = { ...learningHistoryItem, answered_count: 1 }
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      calls.push(`${init?.method ?? 'GET'} ${url}`)
+      if (url.includes('/system/session')) return response({ status: 'ready' })
+      if (url.includes('/history/learning-sessions')) return response({ items: [item], next_cursor: null })
+      if (url.includes('/learning-sessions/learn-1')) return response(learningSession(true))
+      if (url.includes('/knowledge-bases/kb-1')) return response({ knowledge_base_id: 'kb-1', name: '服务超时演示库', status: 'READY', available_file_count: 1, file_count: 1, row_version: 1 })
+      return response({ status: 'ok', version: '0.1.0' })
+    }))
+    render(<BrowserRouter><App /></BrowserRouter>)
+    fireEvent.click(await screen.findByRole('button', { name: /已作答 1 \/ 1/ }))
+    expect(await screen.findByText('结果：正确')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '提交答案' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '[1] 服务超时策略.txt' }))
+    expect(await screen.findByText(/API 单次请求超时时间为 30 秒/)).toBeInTheDocument()
+    expect(calls.filter((call) => call.startsWith('POST') && call.includes('/attempts'))).toEqual([])
+  })
+
+  it('keeps a readable failure state when learning history cannot load', async () => {
+    window.history.pushState({}, '', '/history?tab=learning')
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/system/session')) return response({ status: 'ready' })
+      if (url.includes('/history/learning-sessions')) {
+        return response({
+          type: 'about:blank',
+          title: '失败',
+          status: 500,
+          code: 'HISTORY_UNAVAILABLE',
+          detail: '读取失败',
+          instance: url,
+          request_id: 'req-1',
+        }, 500)
+      }
+      return response({ status: 'ok', version: '0.1.0' })
+    }))
+    render(<BrowserRouter><App /></BrowserRouter>)
+    expect(await screen.findByRole('alert')).toHaveTextContent('学习历史暂时读不出来。')
+    expect(screen.getByRole('button', { name: '重新加载' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByText('还没有可找回的学习会话。从知识库开始的一题会保留在这里。')).not.toBeInTheDocument())
+  })
+})

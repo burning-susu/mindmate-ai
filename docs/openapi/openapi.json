@@ -1759,6 +1759,68 @@
         }
       }
     },
+    "/api/v1/history/learning-sessions": {
+      "get": {
+        "tags": [
+          "history"
+        ],
+        "summary": "List History Learning Sessions",
+        "operationId": "list_history_learning_sessions_api_v1_history_learning_sessions_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 30,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 512
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningHistoryListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/learning-sessions": {
       "post": {
         "tags": [
@@ -6775,6 +6837,105 @@
           "citations"
         ],
         "title": "LearningFeedbackResponse"
+      },
+      "LearningHistoryItem": {
+        "properties": {
+          "learning_session_id": {
+            "type": "string",
+            "title": "Learning Session Id"
+          },
+          "topic": {
+            "type": "string",
+            "title": "Topic"
+          },
+          "goal_type": {
+            "type": "string",
+            "title": "Goal Type"
+          },
+          "scope_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Name"
+          },
+          "scope_file_count": {
+            "type": "integer",
+            "title": "Scope File Count"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "source_status": {
+            "type": "string",
+            "title": "Source Status"
+          },
+          "answered_count": {
+            "type": "integer",
+            "title": "Answered Count"
+          },
+          "target_question_count": {
+            "type": "integer",
+            "title": "Target Question Count"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "learning_session_id",
+          "topic",
+          "goal_type",
+          "scope_name",
+          "scope_file_count",
+          "status",
+          "source_status",
+          "answered_count",
+          "target_question_count",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "LearningHistoryItem"
+      },
+      "LearningHistoryListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LearningHistoryItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "LearningHistoryListResponse"
       },
       "LearningOptionResponse": {
         "properties": {

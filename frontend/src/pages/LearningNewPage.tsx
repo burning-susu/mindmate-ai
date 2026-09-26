@@ -58,9 +58,12 @@ export default function LearningNewPage() {
 
   return (
     <section className="detail-page learning-page">
-      <Link className="back-link" to={knowledgeBaseId ? `/knowledge-bases/${knowledgeBaseId}` : '/knowledge-bases'}>
-        <ArrowLeft size={16} aria-hidden="true" />返回知识库
-      </Link>
+      <div className="detail-heading__actions">
+        <Link className="back-link" to={knowledgeBaseId ? `/knowledge-bases/${knowledgeBaseId}` : '/knowledge-bases'}>
+          <ArrowLeft size={16} aria-hidden="true" />返回知识库
+        </Link>
+        <Link className="quiet-button" to="/history?tab=learning">学习历史</Link>
+      </div>
       <p className="learning-mock-banner" role="status">{MOCK_BANNER}</p>
       <div className="detail-heading">
         <div>
