@@ -1,0 +1,18 @@
+P\mindmate-ai-stage5-fixed-ready"`。数据根通过专用所有权标记保护；脚本两轮运行后仍是 3 文件、3 知识库、13 持久任务，没有新增重复记录。最终验证摘要在隔离根的 `stage5-fixed-ready-report.json`。
+- 模型：离线复验并复制 Git 忽略缓存 `backend/model-cache/manager-validation` 的真实 `BAAI/bge-small-zh-v1.5`（base revision `7999e1d3359715c523056ef9478215996d62a620`）与 `Xenova/bge-small-zh-v1.5` ONNX revision `75c43b069aac4d136ba6bc1122f995fedcfd2781`；manifest fingerprint `4d07bfc3eefa75de01924a4350eef08182c163b0060228410c3d882c9f07c6a5`。源与隔离副本的 manifest 大小/SHA-256 校验均为 `READY`；无联网、无下载、无 Mock 向量。
+- 构建闭环：真实文件导入/解析、知识库成员任务和预处理服务后，准备脚本分别入队现有 `INDEX_CHUNK`、`INDEX_EMBED`、`INDEX_FTS` 持久 Worker，由激活 Worker 原子切换。主库与干扰库活动 IndexVersion 均为 `READY`。主库 2 输入产生 2 Chunk/2 Embedding/2 vector/2 FTS 映射；干扰库 1 输入各产物均为 1。任务检查点四阶段均 `COMPLETED`；FTS integrity/consistency 和向量 ID、哈希、512 维、有限值、单位范数核验通过。
+- 检索与浏览器：真实 `POST /api/v1/knowledge-bases/{id}/retrieval-tests` 在主库返回 `服务超时策略.txt`、含 `30 秒` 的摘录与 `line_start=1`；相似库只返回 `相似服务超时策略.txt` 及 `47 秒`。两个目标查询的门控结果都是 `insufficient / VECTOR_SIMILARITY_BELOW_THRESHOLD`，余弦相似度 `0.5867/0.6568`，未调整既有 `0.82` 门槛。回收站内容没有泄漏；资料外问题返回 `insufficient / NUMERIC_ANSWER_VALUE_NOT_FOUND`，没有答案或正式 Citation 字段。Chromium `1440x1000` 与 `390x844` 真实浏览器均通过键盘 Tab/Enter 提交和候选显示；E2E `2 passed`。截图位于 `%TEMP%\mindmate-ai-stage5-fixed-ready\evidence\`。
+- 验收：`uv run pytest` 为 `176 passed, 143 warnings`；`uv run ruff check src tests scripts`、`uv run pyright src tests scripts/prepare_stage5_fixed_ready.py`（0 errors）、`uv run python -m compileall -q src tests migrations scripts`、`uv run alembic heads`（`6b3e91a0c4d7`）通过。前端 `npm run typecheck`、`npm run lint`、`npm test -- --run`（21 passed）、`npm run build`、真实 Playwright E2E（2 passed）与 `git diff --check` 通过。
+- 未验证：几份固定资料不替代 Recall@10、10 万 Chunk 性能、门控阈值校准或 AC-KB-* 全量验收。无 DeepSeek、真实凭据、付费服务或个人资料；Citation owner 仍延期到阶段 6/7。
+
+### 第二十六批：真实 ONNX 证据门控基线评测
+
+- 状态：本批 `PASS`；阶段 5 继续 `PARTIAL`。进场本地与 `origin/feat/v1-bootstrap` SHA 均为 `3ef9a33adcdae5adb06e6a6835d44fdbbf84ed3d`，工作区干净。
+- 语料与标注：`docs/test-data/stage5-fixed-ready/evidence-gate-v1-queries.json` 保存独立人工真值，31 条核心样本及 2 条 `needs_review`。新增 6 份合成资料进入独立评测库；原第二十五批主库、相似库和浏览器数据保持独立。每项包含知识库范围、证据充分性、允许支持文件或拒答理由；复核项不进核心分母。
+- 构建与模型：离线复制并验证 BAAI `7999e1d3359715c523056ef9478215996d62a620` 与 Xenova ONNX `75c43b069aac4d136ba6bc1122f995fedcfd2781`，fingerprint `4d07bfc3eefa75de01924a4350eef08182c163b0060228410c3d882c9f07c6a5`。通过现有导入、持久预处理/Chunk/Embedding/FTS Worker 和激活器建立 READY；无 Mock 向量、下载或 DeepSeek 调用。原固定 READY 根被运行中的本地验收服务使用，因此本批使用同样有所有权标记的新隔离根 `%TEMP%\mindmate-ai-stage5-evidence-gate-v1`。
+- 真实门控混淆表：TP `0`、FN `16`、FP `0`、TN `15`，核心样本共 `31`。16 个假阴性全部在 Top 8 找到允许支持文件，召回缺失型 FN `0`；顶层拒绝原因 `VECTOR_SIMILARITY_BELOW_THRESHOLD` 11 条、`NUMERIC_ANSWER_VALUE_NOT_FOUND` 3 条、复合问题拒绝 2 条。无资料不足放行或跨知识库候选；显式冲突 2 条、无答案 3 条、错误编号 1 条、回收站 2 条均正确拒答。2 条歧义项实际查询并从分母剔除。
+- 候选信号：首轮 Top 8 候选 101 条，Vector 命中 101，FTS 命中 2（均双路），Vector-only 99，FTS-only 0；两条 FTS 命中来自 `API?` / `ID?` 短词拒答项。所有排名、BM25 与余弦距离/相似度一致性校验通过。Top 8 相似度 min/median/max `0.3356/0.4835/0.7127`，可回答问题标注证据覆盖 `16/16`。
+- 离线敏感性：仅在已观察候选上模拟向量下限 `0.65`、`0.70`、`0.75`、`0.82`、`0.85`，混淆表均不变；不修改运行时 `0.82` 或其他规则。当前误拒没有证据支持仅靠调整余弦下限修复。
+- 重复性与写入：最终代码连续独立执行两次，每次双轮结果签名内部相同，两次签名均为 `c5d216439163910865464f3130edc1eafd18a445978c2d3ca42cafb0aabd4931`。评测查询前后数据计数保持 9 files / 4 knowledge bases / 24 tasks。报告只写入隔离根，不纳入 Git。
+- 命令：`uv run python scripts/evaluate_stage5_evidence_gate.py --data-dir "$env:TEMP\\mindmate-ai-stage5-evidence-gate-v1" --repeat 2`。脚本先运行 READY 准备流程，随后只通过本地只读检索 API 评测；任何 `unavailable`、模型离线校验失败、标注范围不符、资源计数变化或复跑不稳定均以失败退出。
+- 验收：串行 `uv run pytest` `179 
