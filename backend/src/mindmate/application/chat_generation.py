@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import logging
 import re
 import threading
 from collections.abc import Callable
@@ -15,6 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from uuid6 import uuid7
 
+from mindmate.ai.embeddings.manifest import MODEL_ARTIFACT_FINGERPRINT
 from mindmate.ai.providers.base import (
     ChatProviderPort,
     ChatRequest,
@@ -67,6 +69,7 @@ MAX_OUTPUT_CHARS = 64_000
 ACTIVE_OPERATION_STATES = {"QUEUED", "RUNNING", "STOPPING"}
 TERMINAL_OPERATION_STATES = {"COMPLETED", "FAILED", "STOPPED", "INTERRUPTED"}
 _SUBMISSION_LOCK = threading.RLock()
+_QUERY_LOG = logging.getLogger("uvicorn.error")
 
 
 @dataclass(frozen=True, slots=True)
@@ -748,7 +751,7 @@ def _evidence_blocks(candidates: tuple[HybridCandidate, ...]) -> tuple[dict[str,
                 page += f"-{candidate.page_end}"
             location.append("页=" + page)
         if candidate.slide_number is not None:
-            location.append("幻灯片=" + str(candidate.slide_number))
+            location.append("幻灯片" + str(candidate.slide_number))
         if candidate.line_start is not None:
             line = str(candidate.line_start)
             if candidate.line_end is not None and candidate.line_end != candidate.line_start:
@@ -960,6 +963,35 @@ class ChatGenerationWorker:
         }
         return messages.get(code, "知识库检索当前不可用，未调用 Chat Provider。")
 
+    @staticmethod
+    def _log_query_encoding_failure(
+        *,
+        operation_id: str | None,
+        request_id: str | None,
+        index_version_id: str | None,
+        error: BaseException | None,
+        error_code: str,
+        encoder_phase: str | None,
+        model_state: str | None,
+    ) -> None:
+        """Log a query-encoding failure without question text, secrets, or paths."""
+        # Alembic's fileConfig disables loggers created before migration startup.
+        if _QUERY_LOG.disabled:
+            _QUERY_LOG.disabled = False
+        _QUERY_LOG.warning(
+            "knowledge_chat_query_encoding_failed operation_id=%s request_id=%s "
+            "index_version_id=%s model_fingerprint=%s exception_type=%s "
+            "encoder_phase=%s model_state=%s error_code=%s",
+            operation_id or "-",
+            request_id or "-",
+            index_version_id or "-",
+            MODEL_ARTIFACT_FINGERPRINT,
+            type(error).__name__ if error is not None else "None",
+            encoder_phase or "-",
+            model_state or "-",
+            error_code,
+        )
+
     def _prepare_grounding(self, task_id: str) -> GroundingOutcome:
         with self._session_factory() as session:
             operation = session.scalar(select(AiOperation).where(AiOperation.task_id == task_id))
@@ -989,6 +1021,15 @@ class ChatGenerationWorker:
                     error_code=str(code), error_detail=self._retrieval_error_detail(str(code))
                 )
             if self._retrieval_query_encoder_getter is None:
+                self._log_query_encoding_failure(
+                    operation_id=operation.operation_id,
+                    request_id=operation.request_id,
+                    index_version_id=scope.index_version_id,
+                    error=None,
+                    error_code="MODEL_UNAVAILABLE",
+                    encoder_phase="encoder_missing",
+                    model_state=None,
+                )
                 return GroundingOutcome(
                     error_code="MODEL_UNAVAILABLE",
                     error_detail=self._retrieval_error_detail("MODEL_UNAVAILABLE"),
@@ -996,11 +1037,29 @@ class ChatGenerationWorker:
             try:
                 vector = self._retrieval_query_encoder_getter().embed_query(question)
             except RetrievalQueryEncoderError as error:
+                self._log_query_encoding_failure(
+                    operation_id=operation.operation_id,
+                    request_id=operation.request_id,
+                    index_version_id=scope.index_version_id,
+                    error=error,
+                    error_code=error.code,
+                    encoder_phase=error.phase,
+                    model_state=error.model_state,
+                )
                 return GroundingOutcome(
                     error_code=error.code,
                     error_detail=self._retrieval_error_detail(error.code),
                 )
-            except Exception:
+            except Exception as error:
+                self._log_query_encoding_failure(
+                    operation_id=operation.operation_id,
+                    request_id=operation.request_id,
+                    index_version_id=scope.index_version_id,
+                    error=error,
+                    error_code="MODEL_UNAVAILABLE",
+                    encoder_phase="embed_query",
+                    model_state=None,
+                )
                 return GroundingOutcome(
                     error_code="MODEL_UNAVAILABLE",
                     error_detail=self._retrieval_error_detail("MODEL_UNAVAILABLE"),
