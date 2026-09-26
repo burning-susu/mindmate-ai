@@ -383,3 +383,14 @@
 - 门禁：`src/test/stage7-learning.test.tsx` 为 `7 passed`。`npm run typecheck`、`npm run lint`、`npm run build` 通过。没有改后端契约，OpenAPI 仍是第三十九批的 `73 schemas / 77 operations`。没有重跑后端全量。第三十九批切块 Worker 领取时序失败没有在本批再现，也没有被单独重跑宣布消失。
 - 精进待办：多题、提示、重试、自适应难度、掌握度、间隔复习、完整学习首页、结束总结、真实在线学习生成。
 - 下一批唯一目标：把这一题学习回合接到现有 Windows 演示启动，并在后端进程重启后复核同一 URL 的题目、作答和引用仍一致。不扩展多题、掌握度或真实 DeepSeek。
+
+### 第四十一批：Windows 学习演示启动与重启恢复
+
+- 状态：本批 `PASS`。Demo 可用性：同一条 `.\scripts\demo.ps1` 可以完成一题，并在后端进程重启后从同一 URL 读回题目、作答和引用。真实 DeepSeek 仍为 `PENDING`。阶段 5、6、7 的完整 V1 仍为 `PARTIAL`。进场分支 `feat/v1-bootstrap`，本地与远端 SHA 均为 `3c71745231fe06e2c679178611c9a02e68152234`，工作区干净。
+- 入口：没有新增第二套演示脚本。验收数据根是 `%TEMP%\mindmate-ai-stage41-learning-demo`，公开样本仍是 `docs/test-data/stage5-fixed-ready/`，ONNX 来自已校验的 `backend/model-cache/manager-validation`。主库 `01a0dd83-4e9c-7593-85bb-d416956cd860`，活动索引 `01a0dd83-5d58-7169-9684-6a20e75c3390`，检索检查 `supported`。API `127.0.0.1:8001`，页面 `127.0.0.1:5174`。端口占用会直接停止。默认用户数据库最后写入时间停在本批开始之前。
+- 浏览器：`e2e/stage7-learning-restart.spec.ts` 先 `1 passed`（13.9 秒）。旧监听 PID `1668` 已退出，新监听 PID `4692`。会话 `01a0dd85-4fe7-7d9c-b95b-e84b34e8a5ee`，题目和四个选项不变，所选“13 秒”，结果 `INCORRECT`，解释和 `服务超时策略.txt` 摘录一致。重启前后会话、Attempt、反馈计数都是 1。文件详情预览含“30 秒”。南极冰芯主题为 `FAILED / EVIDENCE_INSUFFICIENT`，没有单选项，也没有作答反馈；题目数仍为 1，Attempt 仍为 1。
+- 正式入口复启：同一数据根再次运行 `.\scripts\demo.ps1 -NoBrowser`。准备计数仍是文件 9、知识库 4、任务 24。新监听 PID `15796`。只重开同一 URL 的 Playwright `1 passed`（3.3 秒）。Stop-Process 后脚本退出码 0，8001/5174 已释放。证据 JSON 在隔离根 `evidence/learning-restart.json`，未入库。
+- 恢复动作：后端未就绪时，会话页显示“学习会话暂时读不到”和“重新读取”。本地会话建立失败会清掉缓存，服务恢复后这次点击能重新建立会话并读回原题。这不是只刷新页面。
+- 界线：页面和数据都是 `learning-demo-fixture-v1`，`live_model_called=false`。聊天设置里的在线模式不参与出题。界面上传建库未在本批验收。
+- 门禁：`src/test/stage7-learning.test.tsx` 为 `8 passed`。`npm run typecheck`、`npm run lint`、`npm run build`、`git diff --check` 通过。没有改后端契约，没有重跑全量 pytest。第三十九批切块 Worker 领取时序失败没有在本批复现，也没有被单独重跑宣布消失。
+- 下一批唯一目标：做整体求职 Demo 的最后一轮验收和交接。不自动进入多题、提示、掌握度、复习或真实 DeepSeek 学习生成。

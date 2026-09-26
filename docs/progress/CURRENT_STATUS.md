@@ -7,7 +7,7 @@
 - 最后更新时间：`2026-09-26`
 - 当前开发阶段：阶段 7 开发中，状态 `PARTIAL`；阶段 5、阶段 6 继续 `PARTIAL`
 - 交付顺序：Demo 首先完成，完整 V1 以后精进。求职 Demo 优先文件整理/导入、建库、带来源问答、最小学习陪练和重启恢复。Demo 可用性与完整 V1 阶段状态分开报告。
-- 当前批次状态：第四十批把最小学习回合接到浏览器。已就绪知识库可以进入 `/learning/new`，创建一题并在 `/learning/session/:id` 提交、看来源、刷新恢复。Windows 隔离数据根上的真实 ONNX 浏览器用例 `1 passed`。默认演示仍是无费用 Mock，模型标识 `learning-demo-fixture-v1`。真实 DeepSeek：`PENDING`。阶段 5、6、7 的完整 V1 仍为 `PARTIAL`。详细证据见 `docs/test-reports/stage-40-learning-frontend.md`。
+- 当前批次状态：第四十一批把最小学习回合接到现有 `.\scripts\demo.ps1`。隔离数据根上完成后端进程重启，同一 `/learning/session/:id` 的题目、已选答案、对错、解释和引用保持不变。默认演示仍是无费用 Mock，模型标识 `learning-demo-fixture-v1`。真实 DeepSeek：`PENDING`。阶段 5、6、7 的完整 V1 仍为 `PARTIAL`。详细证据见 `docs/test-reports/stage-41-learning-restart.md`。
 
 ## 已完成阶段
 
@@ -278,3 +278,13 @@
 - 门禁：前端学习 Vitest `7 passed`；typecheck、lint、build 通过。本批没有改后端，没有重跑全量 pytest，也没有把第三十九批的 `236 passed / 1 failed` 算进本批。切块 Worker 领取时序失败仍是既有风险，本批未改 Worker，演示链路没有碰到该任务。
 - 未做：多题、提示、重试、自适应难度、掌握度、间隔复习、完整学习首页、结束总结、真实在线学习生成。
 - 下一批唯一目标：把这一题学习回合接到现有 Windows 演示启动，并在后端进程重启后复核同一 URL 的题目、作答和引用仍一致。不扩展多题、掌握度或真实 DeepSeek。
+
+## 第四十一批交接
+
+- 本批状态：Windows 学习演示启动与后端重启恢复 `PASS`。Demo 可用性：现有 `.\scripts\demo.ps1` 可以进入一题学习，停止后用同一数据根再启动，并打开同一会话地址。真实 DeepSeek 仍为 `PENDING`。阶段 5、6、7 的完整 V1 仍为 `PARTIAL`。进场分支 `feat/v1-bootstrap`，本地与远端 SHA 均为 `3c71745231fe06e2c679178611c9a02e68152234`，工作区干净。
+- 入口：仍是 `scripts/demo.ps1`。默认数据根不变。本批验收使用 `-DataDir %TEMP%\mindmate-ai-stage41-learning-demo`，API `127.0.0.1:8001`，页面 `127.0.0.1:5174`。准备报告为 Mock、`deepseek_called=false`、模型 `READY`、主库检索 `supported`。没有下载模型，没有读取 Key，没有写入默认用户数据库。
+- 重启：浏览器先在监听 PID `1668` 上完成一题。结束该进程后端口不再监听，页面显示可重新读取的失败状态。新监听 PID `4692` 起来后，点“重新读取”回到同一会话。随后用 `.\scripts\demo.ps1 -NoBrowser` 再启动，新监听 PID `15796`，浏览器再次打开同一 URL 仍是这一题。脚本在 Stop-Process 后退出码 0，8001/5174 已释放。
+- 会话：`01a0dd85-4fe7-7d9c-b95b-e84b34e8a5ee`。所选“13 秒”，结果 `INCORRECT`，引用文件 `服务超时策略.txt`。重启前后学习会话、Attempt、反馈各为 1。资料不足主题另有一条 `FAILED / EVIDENCE_INSUFFICIENT`，没有题目，Attempt 仍为 1。模型 `learning-demo-fixture-v1`，`live_model_called=false`。
+- 门禁：学习 Vitest `8 passed`；typecheck、lint、build 和 `git diff --check` 通过。没有改后端，没有重跑全量 pytest。切块 Worker 领取时序失败仍是既有风险，本批未改 Worker。
+- 未验收：界面上传建库、多题、提示、掌握度、复习、真实在线学习生成。
+- 下一批唯一目标：做整体求职 Demo 的最后一轮验收和交接，不自动展开阶段 7 的高级学习功能。

@@ -32,6 +32,11 @@ function blocksAnswer(session: LearningSession) {
   return session.status === 'FAILED' || session.status === 'SOURCE_INVALID' || Boolean(session.failure_code && !session.question)
 }
 
+function readFailureMessage(error: unknown) {
+  if (error instanceof ApiError) return error.message
+  return '学习会话暂时读不到。服务恢复后点“重新读取”，会回到同一题和已保存的反馈。'
+}
+
 export default function LearningSessionPage() {
   const { sessionId = '' } = useParams()
   const queryClient = useQueryClient()
@@ -121,7 +126,7 @@ export default function LearningSessionPage() {
       <section className="detail-page learning-page">
         <p className="learning-mock-banner" role="status">{MOCK_BANNER}</p>
         <div className="inline-error" role="alert">
-          <span>{sessionQuery.error instanceof Error ? sessionQuery.error.message : '学习会话读取失败。'}</span>
+          <span>{readFailureMessage(sessionQuery.error)}</span>
           <button className="quiet-button" type="button" onClick={() => void sessionQuery.refetch()}>重新读取</button>
           <Link className="quiet-button" to="/knowledge-bases">返回知识库</Link>
         </div>

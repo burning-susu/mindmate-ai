@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { BrowserRouter } from 'react-router-dom'
 
+import { clearLocalSessionCache } from '../api/client'
 import App from '../App'
 import { queryClient } from '../queryClient'
 
@@ -164,6 +165,7 @@ function renderAt(path: string) {
 
 describe.sequential('stage 7 learning demo', () => {
   afterEach(() => {
+    clearLocalSessionCache()
     queryClient.clear()
     vi.unstubAllGlobals()
   })
@@ -407,5 +409,31 @@ describe.sequential('stage 7 learning demo', () => {
       expect(window.location.pathname).not.toBe('/chat')
       view.unmount()
     }
+  })
+
+  it('shows a recoverable read failure and reloads the same saved feedback', async () => {
+    let sessionAttempts = 0
+    const saved = feedback('CORRECT')
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/system/session')) {
+        sessionAttempts += 1
+        if (sessionAttempts === 1) throw new TypeError('Failed to fetch')
+        return response({ status: 'ready' })
+      }
+      if (url.endsWith('/api/v1/knowledge-bases/kb-1')) return response(knowledgeBase)
+      if (url.endsWith('/api/v1/learning-sessions/session-1')) {
+        return response(session({ question: question(saved), completed_question_count: 1 }))
+      }
+      return response({ status: 'ok', version: '0.1.0' })
+    }))
+
+    renderAt('/learning/session/session-1')
+    expect(await screen.findByText('学习会话暂时读不到。服务恢复后点“重新读取”，会回到同一题和已保存的反馈。')).toBeInTheDocument()
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '重新读取' }))
+    expect(await screen.findByText('结果：正确')).toBeInTheDocument()
+    expect(screen.getByText('资料里的超时时间是多少？')).toBeInTheDocument()
+    expect(sessionAttempts).toBe(2)
   })
 })

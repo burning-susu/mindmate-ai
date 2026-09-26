@@ -27,6 +27,10 @@ export class ApiError extends Error {
 
 let sessionPromise: Promise<void> | null = null
 
+export function clearLocalSessionCache(): void {
+  sessionPromise = null
+}
+
 export async function ensureLocalSession(): Promise<void> {
   if (!sessionPromise) {
     sessionPromise = fetch('/api/v1/system/session', {
@@ -35,9 +39,11 @@ export async function ensureLocalSession(): Promise<void> {
       headers: { 'X-Request-ID': uuidv7() },
     }).then(async (response) => {
       if (!response.ok) {
-        sessionPromise = null
         throw new Error('无法建立本地会话')
       }
+    }).catch((error: unknown) => {
+      sessionPromise = null
+      throw error
     })
   }
   return sessionPromise

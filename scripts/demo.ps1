@@ -2,7 +2,9 @@
 param(
     [string]$DataDir = '',
     [int]$ApiPort = 8001,
-    [int]$WebPort = 5174
+    [int]$WebPort = 5174,
+    [switch]$NoBrowser,
+    [switch]$PrepareOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -54,12 +56,22 @@ if (-not $primary.knowledge_base_id -or -not $primary.index_version_id) {
 
 Write-Host "主库 $($primary.knowledge_base_id) 索引 $($primary.index_version_id) 已 READY。"
 Write-Host "重复准备计数：files=$($report.idempotency.counts.files) knowledge_bases=$($report.idempotency.counts.knowledge_bases) tasks=$($report.idempotency.counts.tasks)。任务数会随演示问答增加，不表示样本被重复导入。"
+Write-Host "学习演示：打开的知识库页点击“基于此知识库学习”。页面写明本地规则模拟，学习出题不调用真实 DeepSeek。"
+Write-Host "重启恢复：记下浏览器里的 /learning/session/<id>。Ctrl+C 停止后，用同一个 -DataDir 再运行本脚本，然后打开同一地址。已保存的题目、作答和引用仍在这个数据根里。"
+if ($PrepareOnly) {
+    Write-Host "固定资料已准备。未启动服务。"
+    return
+}
 
-& (Join-Path $PSScriptRoot 'dev.ps1') `
-    -ApiPort $ApiPort `
-    -WebPort $WebPort `
-    -DataDir $resolvedDataDir `
-    -KnowledgeBaseId $primary.knowledge_base_id `
-    -ExpectedFingerprint $report.real_model.artifact_fingerprint `
-    -ExpectedIndexVersionId $primary.index_version_id `
-    -OpenBrowser
+$devArgs = @{
+    ApiPort = $ApiPort
+    WebPort = $WebPort
+    DataDir = $resolvedDataDir
+    KnowledgeBaseId = $primary.knowledge_base_id
+    ExpectedFingerprint = $report.real_model.artifact_fingerprint
+    ExpectedIndexVersionId = $primary.index_version_id
+}
+if (-not $NoBrowser) {
+    $devArgs.OpenBrowser = $true
+}
+& (Join-Path $PSScriptRoot 'dev.ps1') @devArgs

@@ -59,6 +59,14 @@ Windows PowerShell 等价脚本位于 `scripts/`。完成阶段 0 后使用：
 .\scripts\demo.ps1
 ```
 
-默认数据根是 `%TEMP%\mindmate-ai-stage36-job-demo`。系统可能清理 `%TEMP%`；目录被清空后，脚本只在空目录或带所有权标记的目录里重新准备，不会接管或清空 `%LOCALAPPDATA%\MindMateAI`。API 是 `http://127.0.0.1:8001`，页面是 `http://127.0.0.1:5174/knowledge-bases/<固定主库>`。启动前会核对运行中的模型指纹和主库 `READY`。Ctrl+C 停止本次启动的进程。
+默认数据根是 `%TEMP%\mindmate-ai-stage36-job-demo`。要换一个隔离目录，仍用这一条命令：
 
-端口被占用、固定模型缓存 `backend/model-cache/manager-validation` 缺失，或准备失败时，脚本会停下来说明原因，不会下载模型、更换模型或切换到真实 Provider。浏览器里的回答正文是 Mock 生成，用来证明检索、引用、保存和页面显示；它不证明 DeepSeek 已经答出资料事实。用户界面上的文件上传和建库不由这条命令代替。
+```powershell
+.\scripts\demo.ps1 -DataDir "$env:TEMP\mindmate-ai-stage41-learning-demo"
+```
+
+系统可能清理 `%TEMP%`；目录被清空后，脚本只在空目录或带所有权标记的目录里重新准备，不会接管或清空 `%LOCALAPPDATA%\MindMateAI`。API 是 `http://127.0.0.1:8001`，页面是 `http://127.0.0.1:5174/knowledge-bases/<固定主库>`。启动前会核对运行中的模型指纹和主库 `READY`。Ctrl+C 停止本次启动的进程。
+
+学习回合从打开的知识库页进入：点击“基于此知识库学习”，填写主题和目标后创建一题。页面标明“本地规则模拟演示，未调用真实 DeepSeek”。做完一题后，地址栏是 `/learning/session/<id>`。用同一个 `-DataDir` 再运行 `.\scripts\demo.ps1`，然后打开这个地址，题目、已选答案、对错、解释和引用仍是这一条会话。服务短暂读不到时，页面提供“重新读取”，不会另开一题。
+
+端口被占用、固定模型缓存 `backend/model-cache/manager-validation` 缺失，或准备失败时，脚本会停下来说明原因，不会下载模型、更换模型或切换到真实 Provider。浏览器里的回答和题目正文是本地规则或 Mock，用来证明检索、引用、保存和页面显示；它不证明 DeepSeek 已经答出资料事实。用户界面上的文件上传和建库不由这条命令代替。
