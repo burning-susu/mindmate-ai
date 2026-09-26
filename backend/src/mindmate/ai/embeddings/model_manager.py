@@ -116,8 +116,11 @@ class ModelManager:
         self.error_path = self.model_parent / f"{manifest.fingerprint}.error.json"
         self._lock = _lock_for(self.install_directory)
 
-    def status(self, *, offline: bool = False) -> ModelStatus:
-        if not self._lock.acquire(blocking=False):
+    def status(self, *, offline: bool = False, block: bool = False) -> ModelStatus:
+        # Non-blocking callers, including the status API, observe INSTALLING while
+        # another caller holds the model lock. Query encoding passes block=True so
+        # a busy verification is not reported as a missing model.
+        if not self._lock.acquire(blocking=block):
             return self._status(ModelState.INSTALLING)
         try:
             if self._model_parent_is_unsafe():

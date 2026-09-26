@@ -69,7 +69,7 @@ MAX_OUTPUT_CHARS = 64_000
 ACTIVE_OPERATION_STATES = {"QUEUED", "RUNNING", "STOPPING"}
 TERMINAL_OPERATION_STATES = {"COMPLETED", "FAILED", "STOPPED", "INTERRUPTED"}
 _SUBMISSION_LOCK = threading.RLock()
-_logger = logging.getLogger("uvicorn.error")
+_QUERY_LOG = logging.getLogger("uvicorn.error")
 
 
 @dataclass(frozen=True, slots=True)
@@ -963,6 +963,35 @@ class ChatGenerationWorker:
         }
         return messages.get(code, "知识库检索当前不可用，未调用 Chat Provider。")
 
+    @staticmethod
+    def _log_query_encoding_failure(
+        *,
+        operation_id: str | None,
+        request_id: str | None,
+        index_version_id: str | None,
+        error: BaseException | None,
+        error_code: str,
+        encoder_phase: str | None,
+        model_state: str | None,
+    ) -> None:
+        """Log a query-encoding failure without question text, secrets, or paths."""
+        # Alembic's fileConfig disables loggers created before migration startup.
+        if _QUERY_LOG.disabled:
+            _QUERY_LOG.disabled = False
+        _QUERY_LOG.warning(
+            "knowledge_chat_query_encoding_failed operation_id=%s request_id=%s "
+            "index_version_id=%s model_fingerprint=%s exception_type=%s "
+            "encoder_phase=%s model_state=%s error_code=%s",
+            operation_id or "-",
+            request_id or "-",
+            index_version_id or "-",
+            MODEL_ARTIFACT_FINGERPRINT,
+            type(error).__name__ if error is not None else "None",
+            encoder_phase or "-",
+            model_state or "-",
+            error_code,
+        )
+
     def _prepare_grounding(self, task_id: str) -> GroundingOutcome:
         with self._session_factory() as session:
             operation = session.scalar(select(AiOperation).where(AiOperation.task_id == task_id))
@@ -992,6 +1021,15 @@ class ChatGenerationWorker:
                     error_code=str(code), error_detail=self._retrieval_error_detail(str(code))
                 )
             if self._retrieval_query_encoder_getter is None:
+                self._log_query_encoding_failure(
+                    operation_id=operation.operation_id,
+                    request_id=operation.request_id,
+                    index_version_id=scope.index_version_id,
+                    error=None,
+                    error_code="MODEL_UNAVAILABLE",
+                    encoder_phase="encoder_missing",
+                    model_state=None,
+                )
                 return GroundingOutcome(
                     error_code="MODEL_UNAVAILABLE",
                     error_detail=self._retrieval_error_detail("MODEL_UNAVAILABLE"),
@@ -999,34 +1037,28 @@ class ChatGenerationWorker:
             try:
                 vector = self._retrieval_query_encoder_getter().embed_query(question)
             except RetrievalQueryEncoderError as error:
-                _logger.warning(
-                    "query encoding failed operation_id=%s request_id=%s index_version_id=%s "
-                    "model_fingerprint=%s exception_type=%s encoder_phase=%s model_state=%s error_code=%s",
-                    operation.operation_id,
-                    operation.request_id,
-                    scope.index_version_id,
-                    MODEL_ARTIFACT_FINGERPRINT,
-                    type(error).__name__,
-                    error.phase,
-                    error.model_state,
-                    error.code,
+                self._log_query_encoding_failure(
+                    operation_id=operation.operation_id,
+                    request_id=operation.request_id,
+                    index_version_id=scope.index_version_id,
+                    error=error,
+                    error_code=error.code,
+                    encoder_phase=error.phase,
+                    model_state=error.model_state,
                 )
                 return GroundingOutcome(
                     error_code=error.code,
                     error_detail=self._retrieval_error_detail(error.code),
                 )
             except Exception as error:
-                _logger.warning(
-                    "query encoding failed operation_id=%s request_id=%s index_version_id=%s "
-                    "model_fingerprint=%s exception_type=%s encoder_phase=%s model_state=%s error_code=%s",
-                    operation.operation_id,
-                    operation.request_id,
-                    scope.index_version_id,
-                    MODEL_ARTIFACT_FINGERPRINT,
-                    type(error).__name__,
-                    "unknown",
-                    "unknown",
-                    "MODEL_UNAVAILABLE",
+                self._log_query_encoding_failure(
+                    operation_id=operation.operation_id,
+                    request_id=operation.request_id,
+                    index_version_id=scope.index_version_id,
+                    error=error,
+                    error_code="MODEL_UNAVAILABLE",
+                    encoder_phase="embed_query",
+                    model_state=None,
                 )
                 return GroundingOutcome(
                     error_code="MODEL_UNAVAILABLE",

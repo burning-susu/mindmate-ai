@@ -331,3 +331,13 @@
 - 首次准备遇到脚本与运行时自动索引接力争抢同一幂等键；已局部修复并补定向回归，全新隔离目录首次准备 `PASS`。另一次与全量测试并行的浏览器复核返回 `MODEL_UNAVAILABLE`，独占复跑 `1 passed`，根因未证实，已如实保留在报告。
 - 门禁：后端定向 `4 passed`、全量 pytest 退出码 0、Ruff 全通过、Pyright 0 错误、Alembic `c3d4e5f6a7b8 (head)`；前端 `27 passed`、lint/typecheck/build 通过；浏览器 E2E 独占复核 `1 passed`，`git diff --check` 通过。详见 `docs/test-reports/stage-6-real-onnx-knowledge-chat-browser.md`。
 - 下一批唯一建议：封装可重复的本地求职 Demo 演示入口，并针对并发下偶发的 `MODEL_UNAVAILABLE` 建立可复现诊断；不默认启用真实 DeepSeek 或私人资料。
+
+### 第三十六批：求职 Demo 稳定启动与模型不可用诊断
+
+- 状态：本批代码与定向回归 `PASS`；Windows 现场演示闭环未在本环境重跑。阶段 5、阶段 6 的完整 V1 仍为 `PARTIAL`。进场分支 `feat/v1-bootstrap`，起点 `af8e9c7`，与 `origin/feat/v1-bootstrap` 一致。用户本机暂停前的未提交改动不在远端，本批按续接记录重新落地，没有覆盖默认用户数据。
+- 演示入口：新增 `scripts/demo.ps1`，复用 `prepare_stage5_fixed_ready.py` 和扩展后的 `scripts/dev.ps1`。默认数据根 `%TEMP%\mindmate-ai-stage36-job-demo`，API `127.0.0.1:8001`，页面 `127.0.0.1:5174`。Provider 固定 Mock。端口占用、固定模型缓存缺失或准备失败时停止，不换端口、不下载模型、不调用真实 DeepSeek。`%TEMP%` 可能被系统清理；所有权标记仍由准备脚本保护。
+- 正例正文：浏览器 E2E 现在按段落渲染规范化空白后，把助手消息区域的可见正文与 Operation / 持久消息逐字比较，刷新和重开后再比一次。负例断言可见拒答正文且该条回答没有引用按钮。SSE 只检查 HTTP 200 和 Operation 终态，不再读取可能失效的响应体。
+- `MODEL_UNAVAILABLE`：查询编码原先调用非阻塞 `ModelManager.status()`。锁被占用时状态是 `INSTALLING`，即使磁盘模型仍是 `READY`，编码器也会把它映射成 `MODEL_UNAVAILABLE`。知识库页会查询模型状态，而状态检查会在锁内校验约 95MB 模型，因此第一次提问可能撞上这把锁。定向测试让编码器在锁释放前保持等待，随后得到真实的 `MODEL_MISSING_OFFLINE`，不再得到 `MODEL_UNAVAILABLE`。修复是等待这把已有的锁，不是重试，也没有把不可用改成资料不足。
+- 第三十五批与全量测试并行的那次失败，以及暂停前第二次独占浏览器失败（Operation `01a0db04-bcbd-7687-ad8a-ab3e14be77bf`，request `01a0db04-bcaa-717f-bf8a-508f181ae279`）仍然单独保留。本环境没有那次 Windows 进程，也没有固定模型缓存，不能把本批单测说成已经回放了那两个现场 Operation。意外异常仍记为 `MODEL_UNAVAILABLE`，并写入 `uvicorn.error` 的安全字段。
+- 门禁：后端 `python -m pytest -q --disable-warnings` 退出码 0，227 项里 225 通过、2 跳过（固定模型缓存不存在、Windows Credential Manager）。Ruff 通过。本批改动的 Pyright 为 0 错误；Linux 全量 Pyright 仍有一处既有的 `ctypes.WinDLL` 报错，文件未改。前端 Vitest 27 通过，lint、typecheck、build 通过。`git diff --check` 通过。没有真实 ONNX 浏览器复跑，没有真实 Key 或付费调用。
+- 下一批唯一建议：在你当场确认后，用固定合成资料做一次手动真实 DeepSeek 小范围验收。默认 `.\scripts\demo.ps1` 继续使用 Mock，不要把真实 Key 放进自动化。
