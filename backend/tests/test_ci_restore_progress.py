@@ -6,7 +6,6 @@ import json
 import os
 import urllib.error
 import urllib.request
-from pathlib import Path
 
 EXPECTED_BLOB = "2ca50ee8eff99795ab887303d92d518372956804"
 PASTE_URLS = (
