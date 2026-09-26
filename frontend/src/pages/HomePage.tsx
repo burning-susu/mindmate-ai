@@ -1,10 +1,11 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
 import { BookOpen, FileText, FileUp, GraduationCap, LoaderCircle, MessageSquare, Plus } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { apiRequest } from '../api/client'
 import { listRecentFiles, type FileItem } from '../api/files'
+import { getHomeOverview, type HomeOverview, type HomeTaskItem } from '../api/home'
 import { listConversationHistory, listLearningHistory, type ConversationHistoryItem, type LearningHistoryItem } from '../api/history'
 import { listKnowledgeBases, type KnowledgeBaseItem } from '../api/knowledgeBases'
 import { sourceStatusLabel } from '../components/sourceStatus'
@@ -348,20 +349,246 @@ function RecentConversations() {
   )
 }
 
+const TASK_STATUS_LABEL: Record<string, string> = {
+  CREATED: '已创建',
+  QUEUED: '排队',
+  RUNNING: '运行中',
+  BLOCKED: '等待处理',
+  PAUSED: '已暂停',
+  CANCELLED: '已取消',
+  SUCCEEDED: '已成功',
+  COMPLETED: '已完成',
+  PARTIAL: '部分完成',
+  FAILED: '失败',
+  INTERRUPTED: '已中断',
+}
+
+const TASK_TYPE_LABEL: Record<string, string> = {
+  FILE_IMPORT: '导入文件',
+  FILE_REPROCESS: '重新处理文件',
+  INDEX_PREPROCESS: '索引预处理',
+  INDEX_CHUNK: '索引切块',
+  INDEX_EMBED: '索引向量',
+  INDEX_FTS: '索引全文',
+  KB_MEMBERSHIP: '知识库成员',
+}
+
+function taskStatusLabel(status: string): string {
+  return TASK_STATUS_LABEL[status] ?? status
+}
+
+function taskTypeLabel(taskType: string): string {
+  return TASK_TYPE_LABEL[taskType] ?? taskType
+}
+
+function taskProgressText(task: HomeTaskItem): string {
+  if (typeof task.progress_percent === 'number') return `${task.progress_percent}%`
+  if (task.phase) return task.phase
+  if (task.status === 'RUNNING') return '运行中'
+  return taskStatusLabel(task.status)
+}
+
+function overviewReady(data: HomeOverview | undefined): data is HomeOverview {
+  return Boolean(
+    data
+    && Number.isInteger(data.files)
+    && Number.isInteger(data.knowledge_bases)
+    && Number.isInteger(data.conversations)
+    && Number.isInteger(data.learning_sessions)
+    && data.tasks
+    && Number.isInteger(data.tasks.total_count)
+    && typeof data.count_scope?.files === 'string',
+  )
+}
+
+function HomeCounts({ query }: { query: UseQueryResult<HomeOverview> }) {
+  const data = overviewReady(query.data) ? query.data : undefined
+  if (query.isPending && !data) {
+    return <div className="history-state" role="status"><LoaderCircle className="spin" size={16} /> 正在读取概览</div>
+  }
+  if (!data) {
+    return (
+      <div className="history-state history-state--error" role="alert">
+        <span>概览暂时读不出来，不能把失败显示成 0。</span>
+        <button className="quiet-button" type="button" onClick={() => void query.refetch()}>重新读取概览</button>
+      </div>
+    )
+  }
+  const cards = [
+    ['文件', data.files, data.count_scope.files, '/files'],
+    ['知识库', data.knowledge_bases, data.count_scope.knowledge_bases, '/knowledge-bases'],
+    ['对话', data.conversations, data.count_scope.conversations, '/history'],
+    ['学习会话', data.learning_sessions, data.count_scope.learning_sessions, '/history?tab=learning'],
+  ] as const
+  return (
+    <section className="home-overview" aria-labelledby="home-overview-title">
+      <div>
+        <span className="eyebrow">本地概览</span>
+        <h2 id="home-overview-title">资料数量</h2>
+        <p>这些数字来自服务端计数。点击只打开已有列表，不会新建资料。</p>
+      </div>
+      {query.isError ? (
+        <div className="history-state history-state--error" role="alert">
+          <span>概览没有刷新成功，下面仍是上次读到的数字。</span>
+          <button className="quiet-button" type="button" onClick={() => void query.refetch()}>重新读取概览</button>
+        </div>
+      ) : null}
+      <div className="home-overview__counts">
+        {cards.map(([label, count, scope, to]) => (
+          <Link key={label} to={to}>
+            <strong>{count}</strong>
+            <span>{label}</span>
+            <small>{scope}</small>
+          </Link>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function TaskSummary({
+  query,
+  onOpen,
+}: {
+  query: UseQueryResult<HomeOverview>
+  onOpen: () => void
+}) {
+  const data = overviewReady(query.data) ? query.data : undefined
+  if (!data || data.tasks.total_count === 0) return null
+  const tasks = data.tasks
+  const latest = tasks.latest
+  return (
+    <section className="home-tasks" aria-labelledby="home-tasks-title">
+      <div>
+        <span className="eyebrow">后台任务</span>
+        <h2 id="home-tasks-title">任务状态</h2>
+        <p>只读取已经存在的任务。打开或刷新首页不会创建、取消或重试任务。</p>
+      </div>
+      <dl className="home-tasks__counts">
+        <div><dt>排队</dt><dd>{tasks.queued_count}</dd></div>
+        <div><dt>运行</dt><dd>{tasks.running_count}</dd></div>
+        <div><dt>失败</dt><dd>{tasks.failed_count}</dd></div>
+        {tasks.blocked_count > 0 ? <div><dt>等待处理</dt><dd>{tasks.blocked_count}</dd></div> : null}
+        {tasks.interrupted_count > 0 ? <div><dt>已中断</dt><dd>{tasks.interrupted_count}</dd></div> : null}
+      </dl>
+      {latest ? (
+        <p className="home-tasks__latest">
+          最近一条：{taskTypeLabel(latest.task_type)} · {taskStatusLabel(latest.status)} · {taskProgressText(latest)}
+          {latest.failure_code ? ` · ${latest.failure_code}` : ''}
+          {latest.failure_summary ? ` · ${latest.failure_summary}` : ''}
+        </p>
+      ) : null}
+      <button className="quiet-button" type="button" onClick={onOpen}>查看全部任务</button>
+    </section>
+  )
+}
+
+function TaskPanel({
+  query,
+  taskLimit,
+  onClose,
+  onShowMore,
+}: {
+  query: UseQueryResult<HomeOverview>
+  taskLimit: number
+  onClose: () => void
+  onShowMore: () => void
+}) {
+  const [detailId, setDetailId] = useState('')
+  const data = overviewReady(query.data) ? query.data : undefined
+  const tasks = data?.tasks
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  return (
+    <div className="home-task-layer" role="presentation" onClick={onClose}>
+      <div
+        className="home-task-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="home-task-panel-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="home-task-panel__heading">
+          <h2 id="home-task-panel-title">后台任务</h2>
+          <button className="quiet-button" type="button" onClick={onClose}>关闭</button>
+        </div>
+        {!tasks ? <p>任务列表暂时读不出来。</p> : null}
+        {tasks && tasks.total_count === 0 ? <p>当前没有后台任务。</p> : null}
+        {tasks && tasks.recent.length > 0 ? (
+          <ul className="home-task-panel__list">
+            {tasks.recent.map((task) => (
+              <li key={task.task_id}>
+                <p>{taskTypeLabel(task.task_type)} · {taskStatusLabel(task.status)} · {taskProgressText(task)}</p>
+                <p>任务 {task.task_id}</p>
+                {task.failure_code || task.failure_summary ? (
+                  <p>{[task.failure_code, task.failure_summary].filter(Boolean).join(' · ')}</p>
+                ) : null}
+                <button type="button" onClick={() => setDetailId((current) => current === task.task_id ? '' : task.task_id)}>
+                  {detailId === task.task_id ? '收起详情' : '查看详情'}
+                </button>
+                {detailId === task.task_id ? (
+                  <dl className="home-task-panel__detail">
+                    <div><dt>编号</dt><dd>{task.task_id}</dd></div>
+                    <div><dt>类型</dt><dd>{taskTypeLabel(task.task_type)}</dd></div>
+                    <div><dt>状态</dt><dd>{taskStatusLabel(task.status)}</dd></div>
+                    <div><dt>阶段</dt><dd>{task.phase || '无阶段'}</dd></div>
+                    <div><dt>进度</dt><dd>{taskProgressText(task)}</dd></div>
+                    <div><dt>失败概述</dt><dd>{task.failure_summary || '无'}</dd></div>
+                  </dl>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        {tasks && tasks.total_count > tasks.recent.length && taskLimit < 30 ? (
+          <button className="quiet-button" type="button" onClick={onShowMore}>显示最近 30 条</button>
+        ) : null}
+        {tasks && tasks.total_count > tasks.recent.length && taskLimit >= 30 ? (
+          <p>只显示最近 30 条，更早的任务仍留在本地记录里。</p>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
 export default function HomePage() {
+  const [taskLimit, setTaskLimit] = useState(8)
+  const [panelOpen, setPanelOpen] = useState(false)
+  const overviewQuery = useQuery({
+    queryKey: ['home-overview', taskLimit],
+    queryFn: () => getHomeOverview(taskLimit),
+    retry: false,
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchInterval: (query) => {
+      const tasks = query.state.data?.tasks
+      if (tasks && (tasks.queued_count > 0 || tasks.running_count > 0)) return 4000
+      return false
+    },
+  })
+  const data = overviewReady(overviewQuery.data) ? overviewQuery.data : undefined
+  const openPanel = () => setPanelOpen(true)
+
   return (
     <section className="home-page">
       <header className="page-heading">
         <div>
           <span className="eyebrow">首页</span>
           <h1>欢迎回到 MindMate</h1>
-          <p>从最近一次真实学习接着看，并读取最近更新的知识库、最近更新的文件和最近活动的对话。首页统计和任务摘要仍未在这里展开。</p>
+          <p>从最近一次真实学习接着看，并读取当前资料数量、最近内容和已经存在的后台任务。</p>
         </div>
+        {data && data.tasks.total_count === 0 ? (
+          <button className="quiet-button" type="button" onClick={openPanel}>查看后台任务</button>
+        ) : null}
       </header>
+      <HomeCounts query={overviewQuery} />
       <ContinueLearning />
-      <RecentKnowledgeBases />
-      <RecentFiles />
-      <RecentConversations />
       <section className="home-shortcuts" aria-labelledby="home-shortcuts-title">
         <div>
           <span className="eyebrow">快捷入口</span>
@@ -375,6 +602,18 @@ export default function HomePage() {
           <Link className="quiet-button" to="/knowledge-bases/new"><Plus size={16} aria-hidden="true" />创建知识库</Link>
         </div>
       </section>
+      <TaskSummary query={overviewQuery} onOpen={openPanel} />
+      <RecentKnowledgeBases />
+      <RecentFiles />
+      <RecentConversations />
+      {panelOpen ? (
+        <TaskPanel
+          query={overviewQuery}
+          taskLimit={taskLimit}
+          onClose={() => setPanelOpen(false)}
+          onShowMore={() => setTaskLimit(30)}
+        />
+      ) : null}
     </section>
   )
 }

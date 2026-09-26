@@ -34,6 +34,29 @@ function mutatingCalls(calls: string[]): string[] {
   return calls.filter((call) => /^(POST|PUT|PATCH|DELETE) /.test(call) && !call.includes('/system/session'))
 }
 
+const emptyHomeOverview = {
+  files: 0,
+  knowledge_bases: 0,
+  conversations: 0,
+  learning_sessions: 0,
+  count_scope: {
+    files: '未回收文件，包含解析失败和其他未进回收站的状态',
+    knowledge_bases: '未回收知识库，包含空库、准备中和索引失败',
+    conversations: '未回收对话，包含普通对话和知识库对话',
+    learning_sessions: '未回收学习会话，包含未完成、已完成和未能出题',
+  },
+  tasks: {
+    queued_count: 0,
+    running_count: 0,
+    failed_count: 0,
+    blocked_count: 0,
+    interrupted_count: 0,
+    total_count: 0,
+    latest: null,
+    recent: [],
+  },
+}
+
 afterEach(() => {
   vi.unstubAllGlobals()
   clearLocalSessionCache()
@@ -47,6 +70,7 @@ function installFetch(options: { knowledgeBases?: unknown[]; failKnowledgeBases?
     const url = String(input)
     calls.push(`${init?.method ?? 'GET'} ${url}`)
     if (url.includes('/system/session')) return response({ status: 'ready' })
+    if (url.includes('/home/overview')) return response(emptyHomeOverview)
     if (url.includes('/history/learning-sessions')) return response({ items: [], next_cursor: null })
     if (url.includes('/api/v1/knowledge-bases') && url.includes('/files')) return response({ items: [] })
     if (url.includes('/api/v1/knowledge-bases')) {

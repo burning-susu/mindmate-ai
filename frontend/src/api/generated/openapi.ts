@@ -308,6 +308,40 @@ export interface components {
   "HTTPValidationError": {
     "detail"?: Array<components["ValidationError"]>
   };
+  "HomeCountScopeResponse": {
+    "files": string;
+    "knowledge_bases": string;
+    "conversations": string;
+    "learning_sessions": string
+  };
+  "HomeOverviewResponse": {
+    "files": number;
+    "knowledge_bases": number;
+    "conversations": number;
+    "learning_sessions": number;
+    "count_scope": components["HomeCountScopeResponse"];
+    "tasks": components["HomeTaskSummaryResponse"]
+  };
+  "HomeTaskItemResponse": {
+    "task_id": string;
+    "task_type": string;
+    "status": string;
+    "phase"?: string | null;
+    "progress_percent"?: number | null;
+    "failure_code"?: string | null;
+    "failure_summary"?: string | null;
+    "updated_at": string
+  };
+  "HomeTaskSummaryResponse": {
+    "queued_count": number;
+    "running_count": number;
+    "failed_count": number;
+    "blocked_count": number;
+    "interrupted_count": number;
+    "total_count": number;
+    "latest"?: components["HomeTaskItemResponse"] | null;
+    "recent": Array<components["HomeTaskItemResponse"]>
+  };
   "ImportItemResponse": {
     "item_index": number;
     "original_name": string;
@@ -828,6 +862,9 @@ export interface operations {
   };
   "GET /api/v1/history/learning-sessions": {
     operationId: "list_history_learning_sessions_api_v1_history_learning_sessions_get"
+  };
+  "GET /api/v1/home/overview": {
+    operationId: "get_home_overview_api_v1_home_overview_get"
   };
   "POST /api/v1/learning-sessions": {
     operationId: "create_session_api_v1_learning_sessions_post"

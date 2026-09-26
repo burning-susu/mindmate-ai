@@ -29,6 +29,7 @@ from mindmate.api.files import FileApiError
 from mindmate.api.files import router as files_router
 from mindmate.api.history import HistoryApiError
 from mindmate.api.history import router as history_router
+from mindmate.api.home import router as home_router
 from mindmate.api.knowledge_bases import router as knowledge_bases_router
 from mindmate.api.learning import LearningApiError
 from mindmate.api.learning import router as learning_router
@@ -458,6 +459,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(ai_provider_router)
     app.include_router(chat_router)
     app.include_router(history_router)
+    app.include_router(home_router)
     app.include_router(learning_router)
     app.include_router(files_router)
 

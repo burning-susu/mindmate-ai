@@ -1851,6 +1851,51 @@
         }
       }
     },
+    "/api/v1/home/overview": {
+      "get": {
+        "tags": [
+          "home"
+        ],
+        "summary": "Get Home Overview",
+        "operationId": "get_home_overview_api_v1_home_overview_get",
+        "parameters": [
+          {
+            "name": "task_limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 30,
+              "minimum": 1,
+              "default": 8,
+              "title": "Task Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeOverviewResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/learning-sessions": {
       "post": {
         "tags": [
@@ -5706,6 +5751,203 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "HomeCountScopeResponse": {
+        "properties": {
+          "files": {
+            "type": "string",
+            "title": "Files"
+          },
+          "knowledge_bases": {
+            "type": "string",
+            "title": "Knowledge Bases"
+          },
+          "conversations": {
+            "type": "string",
+            "title": "Conversations"
+          },
+          "learning_sessions": {
+            "type": "string",
+            "title": "Learning Sessions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "files",
+          "knowledge_bases",
+          "conversations",
+          "learning_sessions"
+        ],
+        "title": "HomeCountScopeResponse"
+      },
+      "HomeOverviewResponse": {
+        "properties": {
+          "files": {
+            "type": "integer",
+            "title": "Files",
+            "description": "未回收文件数，包含解析失败。"
+          },
+          "knowledge_bases": {
+            "type": "integer",
+            "title": "Knowledge Bases",
+            "description": "未回收知识库数，包含空库和索引失败。"
+          },
+          "conversations": {
+            "type": "integer",
+            "title": "Conversations",
+            "description": "未回收对话数。"
+          },
+          "learning_sessions": {
+            "type": "integer",
+            "title": "Learning Sessions",
+            "description": "未回收学习会话数，包含已完成和未能出题。"
+          },
+          "count_scope": {
+            "$ref": "#/components/schemas/HomeCountScopeResponse"
+          },
+          "tasks": {
+            "$ref": "#/components/schemas/HomeTaskSummaryResponse"
+          }
+        },
+        "type": "object",
+        "required": [
+          "files",
+          "knowledge_bases",
+          "conversations",
+          "learning_sessions",
+          "count_scope",
+          "tasks"
+        ],
+        "title": "HomeOverviewResponse"
+      },
+      "HomeTaskItemResponse": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "title": "Task Id"
+          },
+          "task_type": {
+            "type": "string",
+            "title": "Task Type"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "phase": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phase"
+          },
+          "progress_percent": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Progress Percent"
+          },
+          "failure_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Code"
+          },
+          "failure_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Summary"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_id",
+          "task_type",
+          "status",
+          "updated_at"
+        ],
+        "title": "HomeTaskItemResponse"
+      },
+      "HomeTaskSummaryResponse": {
+        "properties": {
+          "queued_count": {
+            "type": "integer",
+            "title": "Queued Count"
+          },
+          "running_count": {
+            "type": "integer",
+            "title": "Running Count"
+          },
+          "failed_count": {
+            "type": "integer",
+            "title": "Failed Count"
+          },
+          "blocked_count": {
+            "type": "integer",
+            "title": "Blocked Count"
+          },
+          "interrupted_count": {
+            "type": "integer",
+            "title": "Interrupted Count"
+          },
+          "total_count": {
+            "type": "integer",
+            "title": "Total Count"
+          },
+          "latest": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HomeTaskItemResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recent": {
+            "items": {
+              "$ref": "#/components/schemas/HomeTaskItemResponse"
+            },
+            "type": "array",
+            "title": "Recent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "queued_count",
+          "running_count",
+          "failed_count",
+          "blocked_count",
+          "interrupted_count",
+          "total_count",
+          "recent"
+        ],
+        "title": "HomeTaskSummaryResponse"
       },
       "ImportItemResponse": {
         "properties": {
