@@ -21,6 +21,7 @@ import {
 } from '../api/chat'
 import { getAiProviderStatus } from '../api/aiProvider'
 import { ApiError, apiRequest } from '../api/client'
+import type { KnowledgeBaseListResponse } from '../api/knowledgeBases'
 import { SourceCitationPanel } from '../components/SourceCitationPanel'
 import { sourceStatusLabel } from '../components/sourceStatus'
 
@@ -120,6 +121,14 @@ export default function ChatPage() {
     [conversationQuery.data, conversations, selectedConversationId],
   )
   const pendingKnowledgeBaseId = selectedConversationId ? '' : (searchParams.get('knowledge_base_id') ?? '')
+  const scopeChoicesQuery = useQuery({
+    queryKey: ['knowledge-bases'],
+    queryFn: () => apiRequest<KnowledgeBaseListResponse>('/api/v1/knowledge-bases'),
+    enabled: !selectedConversationId,
+    retry: false,
+    staleTime: 5_000,
+  })
+  const readyScopeChoices = (scopeChoicesQuery.data?.items ?? []).filter((item) => item.status === 'READY' && item.available_file_count > 0)
   const pendingKnowledgeBaseQuery = useQuery({
     queryKey: ['chat-pending-knowledge-base', pendingKnowledgeBaseId],
     queryFn: () => apiRequest<{ knowledge_base_id: string; name: string; status: string; available_file_count: number }>(`/api/v1/knowledge-bases/${pendingKnowledgeBaseId}`),
@@ -348,6 +357,27 @@ export default function ChatPage() {
               </article>
             ))}
           </div>
+
+          {!selectedConversationId ? (
+            <div className="chat-scope-picker">
+              <strong id="chat-scope-title">资料范围</strong>
+              <div className="chat-scope-picker__choices" aria-labelledby="chat-scope-title">
+                <Link className="quiet-button" to="/chat" aria-current={pendingKnowledgeBaseId ? undefined : 'page'}>普通对话</Link>
+                {readyScopeChoices.map((item) => (
+                  <Link className="quiet-button" key={item.knowledge_base_id} to={`/chat?knowledge_base_id=${encodeURIComponent(item.knowledge_base_id)}`} aria-current={pendingKnowledgeBaseId === item.knowledge_base_id ? 'page' : undefined}>{item.name}</Link>
+                ))}
+              </div>
+              {scopeChoicesQuery.isLoading ? <p role="status">正在读取可提问的知识库…</p> : null}
+              {scopeChoicesQuery.isError ? <p role="alert">{scopeChoicesQuery.error instanceof Error ? scopeChoicesQuery.error.message : '知识库列表读取失败。'} 普通对话仍可使用。</p> : null}
+              {!scopeChoicesQuery.isLoading && !scopeChoicesQuery.isError && readyScopeChoices.length === 0 ? <p>还没有索引就绪的知识库。可以继续普通对话；带引用的资料问答要先导入文件并完成索引。打开本页不会建立知识库会话。</p> : null}
+              {!scopeChoicesQuery.isLoading && readyScopeChoices.length === 0 ? (
+                <div className="home-continue__actions">
+                  <Link className="quiet-button" to="/files">导入文件</Link>
+                  <Link className="quiet-button" to="/knowledge-bases">知识库</Link>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="chat-compose-area">
             {connectionState === 'disconnected' ? <div className="chat-alert chat-alert--warning"><WifiOff size={15} /><span>连接暂时断开，后台任务仍会继续。</span><button className="quiet-button" type="button" onClick={retryStream}><RefreshCw size={14} /> 重连{retryCount ? `（${retryCount}/3）` : ''}</button></div> : null}

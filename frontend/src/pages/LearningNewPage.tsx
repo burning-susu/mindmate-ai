@@ -6,7 +6,7 @@ import { v7 as uuidv7 } from 'uuid'
 
 import { ApiError, apiRequest } from '../api/client'
 import { createLearningSession } from '../api/learning'
-import { listKnowledgeBaseMembers, type KnowledgeBaseItem } from '../api/knowledgeBases'
+import { listKnowledgeBaseMembers, type KnowledgeBaseItem, type KnowledgeBaseListResponse } from '../api/knowledgeBases'
 
 const MOCK_BANNER = '本地规则模拟演示，未调用真实 DeepSeek。学习出题不读取聊天设置里的在线模式。'
 
@@ -25,6 +25,13 @@ export default function LearningNewPage() {
     queryFn: () => apiRequest<KnowledgeBaseItem>(`/api/v1/knowledge-bases/${knowledgeBaseId}`),
     enabled: Boolean(knowledgeBaseId),
   })
+  const knowledgeBaseListQuery = useQuery({
+    queryKey: ['knowledge-bases'],
+    queryFn: () => apiRequest<KnowledgeBaseListResponse>('/api/v1/knowledge-bases'),
+    enabled: !knowledgeBaseId,
+    retry: false,
+  })
+  const readyChoices = (knowledgeBaseListQuery.data?.items ?? []).filter((item) => item.status === 'READY' && item.available_file_count > 0)
   const membersQuery = useQuery({
     queryKey: ['knowledge-base-members', knowledgeBaseId],
     queryFn: () => listKnowledgeBaseMembers(knowledgeBaseId),
@@ -73,9 +80,34 @@ export default function LearningNewPage() {
         </div>
       </div>
       {!knowledgeBaseId && (
-        <div className="inline-error" role="alert">
-          <span>请从已索引就绪的知识库进入。</span>
-          <Link className="quiet-button" to="/knowledge-bases">前往知识库</Link>
+        <div className="learning-kb-choices detail-section">
+          <h2>选择知识库</h2>
+          <p>只列出索引就绪且有可用文件的知识库。打开或选择都不会创建题目。</p>
+          {knowledgeBaseListQuery.isLoading ? <p role="status">正在读取知识库…</p> : null}
+          {knowledgeBaseListQuery.isError ? (
+            <div className="inline-error" role="alert">
+              <span>{knowledgeBaseListQuery.error instanceof Error ? knowledgeBaseListQuery.error.message : '知识库列表读取失败。'}</span>
+              <button className="quiet-button" type="button" onClick={() => void knowledgeBaseListQuery.refetch()}>重新读取</button>
+            </div>
+          ) : null}
+          {!knowledgeBaseListQuery.isLoading && !knowledgeBaseListQuery.isError && readyChoices.length > 0 ? (
+            <ul aria-label="可选知识库">
+              {readyChoices.map((item) => (
+                <li key={item.knowledge_base_id}>
+                  <Link className="quiet-button" to={`/learning/new?knowledge_base_id=${encodeURIComponent(item.knowledge_base_id)}`}>{item.name}</Link>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {!knowledgeBaseListQuery.isLoading && !knowledgeBaseListQuery.isError && readyChoices.length === 0 ? (
+            <div role="status">
+              <p>还没有索引就绪、并且有可用文件的知识库。请先导入文件，加入知识库并完成索引。这里不会创建题目。</p>
+              <div className="home-continue__actions">
+                <Link className="quiet-button" to="/files">导入文件</Link>
+                <Link className="quiet-button" to="/knowledge-bases">知识库</Link>
+              </div>
+            </div>
+          ) : null}
         </div>
       )}
       {knowledgeBaseId && knowledgeBaseQuery.isLoading && <p>正在读取知识库…</p>}
@@ -98,7 +130,7 @@ export default function LearningNewPage() {
           )}
           {membersQuery.data && (
             <ul className="learning-scope-list" aria-label="已选资料">
-              {membersQuery.data.items.map((member) => <li key={member.file_id}>{member.display_name}</li>)}
+              {(membersQuery.data.items ?? []).map((member) => <li key={member.file_id}>{member.display_name}</li>)}
             </ul>
           )}
           {!ready && <div className="inline-error" role="alert">当前知识库没有可用索引或可用文件，不能开始学习。</div>}

@@ -462,6 +462,14 @@
 .home-continue__facts dd { margin: 0; }
 .home-continue__reason { margin-top: 8px; color: var(--danger); }
 .home-continue__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.home-shortcuts { display: grid; gap: 12px; padding: 20px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.home-shortcuts h2 { margin: 4px 0 8px; color: var(--text); font-size: 22px; }
+.home-shortcuts > div > p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.home-shortcuts__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.home-shortcuts__actions a { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+.learning-kb-choices, .chat-scope-picker { display: grid; gap: 8px; }
+.learning-kb-choices ul, .chat-scope-picker__choices { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.chat-scope-picker { margin: 0 18px 12px; }
 .history-page { display: grid; gap: 16px; min-width: 0; }
 .history-tabs { display: flex; gap: 8px; }
 .history-tab { min-height: 34px; padding: 0 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; cursor: pointer; }

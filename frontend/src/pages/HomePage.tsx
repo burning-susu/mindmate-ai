@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { GraduationCap, LoaderCircle } from 'lucide-react'
+import { FileUp, GraduationCap, LoaderCircle, MessageSquare, Plus } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import { listLearningHistory, type LearningHistoryItem } from '../api/history'
@@ -107,6 +107,19 @@ export default function HomePage() {
         </div>
       </header>
       <ContinueLearning />
+      <section className="home-shortcuts" aria-labelledby="home-shortcuts-title">
+        <div>
+          <span className="eyebrow">快捷入口</span>
+          <h2 id="home-shortcuts-title">快捷操作</h2>
+          <p>四个入口只打开已有流程。未提交表单或未发送消息前，不会新建文件、知识库、对话或学习会话。</p>
+        </div>
+        <div className="home-shortcuts__actions">
+          <Link className="primary-button" to="/learning/new"><GraduationCap size={16} aria-hidden="true" />开始学习</Link>
+          <Link className="quiet-button" to="/chat"><MessageSquare size={16} aria-hidden="true" />AI 提问</Link>
+          <Link className="quiet-button" to="/files"><FileUp size={16} aria-hidden="true" />导入文件</Link>
+          <Link className="quiet-button" to="/knowledge-bases/new"><Plus size={16} aria-hidden="true" />创建知识库</Link>
+        </div>
+      </section>
     </section>
   )
 }
