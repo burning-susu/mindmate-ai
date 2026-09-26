@@ -32,14 +32,53 @@ def bind_answer_citations(
 ) -> list[Citation]:
     """Copy only live, server-created snapshots into a durable answer owner."""
 
+    return _bind_citations(
+        session,
+        snapshots,
+        answer_version_id=answer_version_id,
+        learning_feedback_id=None,
+        created_at=created_at,
+    )
+
+
+def bind_feedback_citations(
+    session: Session,
+    *,
+    learning_feedback_id: str,
+    snapshots: Iterable[SourceSnapshotCreated],
+    created_at: datetime | None = None,
+) -> list[Citation]:
+    """Bind the same source snapshots to one learning feedback owner."""
+
+    return _bind_citations(
+        session,
+        snapshots,
+        answer_version_id=None,
+        learning_feedback_id=learning_feedback_id,
+        created_at=created_at,
+    )
+
+
+def _bind_citations(
+    session: Session,
+    snapshots: Iterable[SourceSnapshotCreated],
+    *,
+    answer_version_id: str | None,
+    learning_feedback_id: str | None,
+    created_at: datetime | None,
+) -> list[Citation]:
+    if (answer_version_id is None) == (learning_feedback_id is None):
+        raise CitationBindingError("CITATION_OWNER_REQUIRED")
     timestamp = created_at or datetime.now(UTC)
     citations: list[Citation] = []
     for display_number, snapshot in enumerate(snapshots, start=1):
+        owner_filter = (
+            Citation.answer_version_id == answer_version_id
+            if answer_version_id is not None
+            else Citation.learning_feedback_id == learning_feedback_id
+        )
         existing = session.scalar(
-            select(Citation).where(
-                Citation.answer_version_id == answer_version_id,
-                Citation.display_number == display_number,
-            )
+            select(Citation).where(owner_filter, Citation.display_number == display_number)
         )
         if existing is not None:
             citations.append(existing)
@@ -55,6 +94,7 @@ def bind_answer_citations(
         record = Citation(
             citation_id=_new_citation_id(),
             answer_version_id=answer_version_id,
+            learning_feedback_id=learning_feedback_id,
             source_snapshot_id=view.source_snapshot_id,
             display_number=display_number,
             knowledge_base_id=view.knowledge_base_id,
@@ -70,9 +110,7 @@ def bind_answer_citations(
             line_start=view.line_start,
             line_end=view.line_end,
             excerpt=view.excerpt,
-            excerpt_sha256=(
-                _sha256(view.excerpt) if view.excerpt is not None else None
-            ),
+            excerpt_sha256=(_sha256(view.excerpt) if view.excerpt is not None else None),
             source_status=view.source_status,
             created_at=timestamp,
         )
@@ -106,6 +144,7 @@ def citation_payload(session: Session, record: Citation) -> dict[str, Any]:
     return {
         "citation_id": record.citation_id,
         "answer_version_id": record.answer_version_id,
+        "learning_feedback_id": record.learning_feedback_id,
         "source_snapshot_id": record.source_snapshot_id,
         "display_number": record.display_number,
         "knowledge_base_id": record.knowledge_base_id,
@@ -132,6 +171,16 @@ def list_answer_citations(session: Session, answer_version_id: str) -> list[Cita
         session.scalars(
             select(Citation)
             .where(Citation.answer_version_id == answer_version_id)
+            .order_by(Citation.display_number)
+        )
+    )
+
+
+def list_feedback_citations(session: Session, learning_feedback_id: str) -> list[Citation]:
+    return list(
+        session.scalars(
+            select(Citation)
+            .where(Citation.learning_feedback_id == learning_feedback_id)
             .order_by(Citation.display_number)
         )
     )
@@ -191,8 +240,10 @@ def _new_citation_id() -> str:
 __all__ = [
     "CitationBindingError",
     "bind_answer_citations",
+    "bind_feedback_citations",
     "citation_payload",
     "list_answer_citations",
+    "list_feedback_citations",
     "sanitize_citations_for_file_purge",
     "sanitize_citations_for_knowledge_base_purge",
 ]

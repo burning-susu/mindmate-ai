@@ -79,7 +79,12 @@ def source_runtime(tmp_path: Path):
 
 
 def _seed_active_index(
-    factory, settings: Settings, *, with_location: bool = True
+    factory,
+    settings: Settings,
+    *,
+    with_location: bool = True,
+    content: str | None = None,
+    display_name: str = "vector-notes.txt",
 ) -> SnapshotData:
     now = datetime.now(UTC)
     knowledge_base_id = new_id()
@@ -90,7 +95,8 @@ def _seed_active_index(
     parse_revision_id = new_id()
     source_bytes = f"offline source file {file_id}".encode()
     content_hash = hashlib.sha256(source_bytes).hexdigest()
-    content = "向量数据库是一种用于存储和检索向量数据的系统。" + ("固定离线来源内容。" * 180)
+    if content is None:
+        content = "向量数据库是一种用于存储和检索向量数据的系统。" + ("固定离线来源内容。" * 180)
     chunk_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
     query_vector = np.zeros(512, dtype=np.float32)
     query_vector[0] = 1.0
@@ -121,11 +127,11 @@ def _seed_active_index(
                 FileRecord(
                     file_id=file_id,
                     content_object_id=content_object_id,
-                    display_name="vector-notes.txt",
+                    display_name=display_name,
                     extension=".txt",
                     document_type="TXT",
                     status="PARSED",
-                    source_name="vector-notes.txt",
+                    source_name=display_name,
                     content_hash=content_hash,
                     byte_size=len(source_bytes),
                     parse_revision_id=parse_revision_id,

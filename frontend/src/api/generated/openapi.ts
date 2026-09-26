@@ -425,6 +425,95 @@ export interface components {
     "summary"?: Record<string, unknown> | null;
     "error"?: string | null
   };
+  "LearningAttemptRequest": {
+    "selected_option": string;
+    "client_request_id"?: string | null;
+    "expected_question_version": number
+  };
+  "LearningCitationResponse": {
+    "citation_id": string;
+    "display_number": number;
+    "file_name": string;
+    "file_id": string | null;
+    "chunk_id": string | null;
+    "line_start": number | null;
+    "line_end": number | null;
+    "page_start": number | null;
+    "page_end": number | null;
+    "excerpt": string | null;
+    "source_status": string;
+    "can_open_source": boolean
+  };
+  "LearningFeedbackResponse": {
+    "feedback_id": string;
+    "attempt_id": string;
+    "selected_option": string;
+    "result": string;
+    "explanation": string;
+    "provider": string;
+    "model": string;
+    "live_model_called": boolean;
+    "citations": Array<components["LearningCitationResponse"]>
+  };
+  "LearningOptionResponse": {
+    "option_id": string;
+    "label": string
+  };
+  "LearningPlanResponse": {
+    "learning_plan_id": string;
+    "status": string;
+    "target_question_count": number;
+    "knowledge_point_title": string | null;
+    "prompt_template_version": string
+  };
+  "LearningQuestionResponse": {
+    "question_id": string;
+    "learning_session_id": string;
+    "question_type": string;
+    "prompt_text": string;
+    "options": Array<components["LearningOptionResponse"]>;
+    "sequence_number": number;
+    "status": string;
+    "difficulty": string;
+    "row_version": number;
+    "feedback"?: components["LearningFeedbackResponse"] | null
+  };
+  "LearningScopeResponse": {
+    "knowledge_base_id": string;
+    "index_version_id": string | null;
+    "source_set_hash": string;
+    "file_ids": Array<string>
+  };
+  "LearningSessionCreateRequest": {
+    "knowledge_base_id": string;
+    "topic": string;
+    "goal_text": string;
+    "goal_type"?: string;
+    "target_question_count"?: number;
+    "client_request_id"?: string | null
+  };
+  "LearningSessionResponse": {
+    "learning_session_id": string;
+    "topic": string;
+    "goal_type": string;
+    "goal_text": string;
+    "knowledge_base_id": string;
+    "target_question_count": number;
+    "status": string;
+    "failure_code": string | null;
+    "failure_detail": string | null;
+    "completed_question_count": number;
+    "current_question_id": string | null;
+    "provider": string;
+    "model": string;
+    "live_model_called": boolean;
+    "row_version": number;
+    "created_at": string;
+    "started_at": string | null;
+    "scope": components["LearningScopeResponse"] | null;
+    "plan": components["LearningPlanResponse"] | null;
+    "question": components["LearningQuestionResponse"] | null
+  };
   "MessageCreateRequest": {
     "content": string;
     "client_request_id"?: string | null;
@@ -700,6 +789,18 @@ export interface operations {
   };
   "GET /api/v1/ai-operations/{operation_id}/events": {
     operationId: "stream_ai_operation_api_v1_ai_operations__operation_id__events_get"
+  };
+  "POST /api/v1/learning-sessions": {
+    operationId: "create_session_api_v1_learning_sessions_post"
+  };
+  "GET /api/v1/learning-sessions/{learning_session_id}": {
+    operationId: "read_session_api_v1_learning_sessions__learning_session_id__get"
+  };
+  "GET /api/v1/learning-sessions/{learning_session_id}/current-question": {
+    operationId: "read_current_question_api_v1_learning_sessions__learning_session_id__current_question_get"
+  };
+  "POST /api/v1/learning-questions/{question_id}/attempts": {
+    operationId: "create_attempt_api_v1_learning_questions__question_id__attempts_post"
   };
   "POST /api/v1/file-imports": {
     operationId: "create_file_import_api_v1_file_imports_post"

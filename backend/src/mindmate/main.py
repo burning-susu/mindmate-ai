@@ -28,6 +28,8 @@ from mindmate.api.embedding_models import router as embedding_models_router
 from mindmate.api.files import FileApiError
 from mindmate.api.files import router as files_router
 from mindmate.api.knowledge_bases import router as knowledge_bases_router
+from mindmate.api.learning import LearningApiError
+from mindmate.api.learning import router as learning_router
 from mindmate.api.problem import ProblemDetail
 from mindmate.application.chat_generation import ChatGenerationWorker
 from mindmate.application.embedding_model_install import EmbeddingModelInstallWorker
@@ -334,6 +336,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             retryable=exc.retryable,
         )
 
+    @app.exception_handler(LearningApiError)
+    async def learning_api_error(request: Request, exc: LearningApiError) -> JSONResponse:
+        return problem(
+            request,
+            exc.status,
+            exc.code,
+            "学习请求失败",
+            exc.detail,
+            current_row_version=exc.current_row_version,
+        )
+
     @app.exception_handler(ChatApiError)
     async def chat_api_error(request: Request, exc: ChatApiError) -> JSONResponse:
         return problem(
@@ -432,6 +445,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(embedding_models_router)
     app.include_router(ai_provider_router)
     app.include_router(chat_router)
+    app.include_router(learning_router)
     app.include_router(files_router)
 
     return app

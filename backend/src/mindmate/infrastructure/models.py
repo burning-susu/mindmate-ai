@@ -566,13 +566,24 @@ class Citation(Base):
         UniqueConstraint(
             "answer_version_id", "source_snapshot_id", name="uq_citation_answer_snapshot"
         ),
+        UniqueConstraint(
+            "learning_feedback_id", "display_number", name="uq_citation_feedback_number"
+        ),
+        CheckConstraint(
+            "(answer_version_id IS NOT NULL AND learning_feedback_id IS NULL) OR "
+            "(answer_version_id IS NULL AND learning_feedback_id IS NOT NULL)",
+            name="ck_citation_single_owner",
+        ),
         Index("ix_citations_answer_version", "answer_version_id", "display_number"),
         Index("ix_citations_source_snapshot", "source_snapshot_id"),
     )
 
     citation_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
-    answer_version_id: Mapped[str] = mapped_column(
-        ForeignKey("answer_versions.answer_version_id", ondelete="CASCADE"), nullable=False
+    answer_version_id: Mapped[str | None] = mapped_column(
+        ForeignKey("answer_versions.answer_version_id", ondelete="CASCADE")
+    )
+    learning_feedback_id: Mapped[str | None] = mapped_column(
+        ForeignKey("learning_feedbacks.feedback_id", ondelete="CASCADE")
     )
     source_snapshot_id: Mapped[str | None] = mapped_column(
         ForeignKey("source_snapshots.source_snapshot_id", ondelete="SET NULL")
@@ -682,6 +693,274 @@ class Backup(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     error_summary: Mapped[str | None] = mapped_column(String(500))
+
+
+class LearningSession(Base):
+    """One persisted coaching session bound to a single ready knowledge base."""
+
+    __tablename__ = "learning_sessions"
+    __table_args__ = (
+        UniqueConstraint("idempotency_key", name="uq_learning_session_idempotency_key"),
+        UniqueConstraint("client_request_id", name="uq_learning_session_client_request_id"),
+        Index("ix_learning_sessions_status", "status", "updated_at"),
+    )
+
+    learning_session_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    topic: Mapped[str] = mapped_column(String(80), nullable=False)
+    goal_type: Mapped[str] = mapped_column(
+        String(40), default="CUSTOM", server_default=text("'CUSTOM'"), nullable=False
+    )
+    goal_text: Mapped[str] = mapped_column(String(200), nullable=False)
+    knowledge_base_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    target_question_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    initial_difficulty: Mapped[str] = mapped_column(
+        String(20), default="BASIC", server_default=text("'BASIC'"), nullable=False
+    )
+    current_difficulty: Mapped[str] = mapped_column(
+        String(20), default="BASIC", server_default=text("'BASIC'"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(String(30), nullable=False)
+    end_reason: Mapped[str | None] = mapped_column(String(40))
+    failure_code: Mapped[str | None] = mapped_column(String(80))
+    failure_detail: Mapped[str | None] = mapped_column(String(500))
+    completed_question_count: Mapped[int] = mapped_column(
+        Integer, default=0, server_default=text("0"), nullable=False
+    )
+    current_knowledge_point_id: Mapped[str | None] = mapped_column(String(36))
+    current_question_id: Mapped[str | None] = mapped_column(String(36))
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    client_request_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    provider: Mapped[str] = mapped_column(
+        String(50), default="mock", server_default=text("'mock'"), nullable=False
+    )
+    live_model_called: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("0"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    paused_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    purge_after: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    row_version: Mapped[int] = mapped_column(
+        Integer, default=1, server_default=text("1"), nullable=False
+    )
+
+
+class LearningScope(Base):
+    __tablename__ = "learning_scopes"
+    __table_args__ = (
+        UniqueConstraint("learning_session_id", name="uq_learning_scope_session"),
+    )
+
+    learning_scope_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    learning_session_id: Mapped[str] = mapped_column(
+        ForeignKey("learning_sessions.learning_session_id"), nullable=False
+    )
+    knowledge_base_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    index_version_id: Mapped[str | None] = mapped_column(String(36))
+    source_set_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class LearningScopeFile(Base):
+    __tablename__ = "learning_scope_files"
+    __table_args__ = (
+        UniqueConstraint(
+            "learning_scope_id", "file_id", name="uq_learning_scope_file"
+        ),
+    )
+
+    learning_scope_file_id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=new_id
+    )
+    learning_scope_id: Mapped[str] = mapped_column(
+        ForeignKey("learning_scopes.learning_scope_id"), nullable=False
+    )
+    file_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    parse_revision_id: Mapped[str | None] = mapped_column(String(36))
+    index_version_id: Mapped[str | None] = mapped_column(String(36))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class KnowledgePoint(Base):
+    __tablename__ = "knowledge_points"
+
+    knowledge_point_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    canonical_title: Mapped[str] = mapped_column(String(80), nullable=False)
+    normalized_title: Mapped[str] = mapped_column(String(80), nullable=False)
+    description: Mapped[str] = mapped_column(String(200), nullable=False)
+    scope_identity_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_set_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class KnowledgePointEvidence(Base):
+    __tablename__ = "knowledge_point_evidence"
+
+    knowledge_point_evidence_id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=new_id
+    )
+    knowledge_point_id: Mapped[str] = mapped_column(
+        ForeignKey("knowledge_points.knowledge_point_id"), nullable=False
+    )
+    chunk_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    file_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    index_version_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class LearningPlan(Base):
+    __tablename__ = "learning_plans"
+    __table_args__ = (
+        UniqueConstraint(
+            "learning_session_id", "plan_version", name="uq_learning_plan_version"
+        ),
+    )
+
+    learning_plan_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    learning_session_id: Mapped[str] = mapped_column(
+        ForeignKey("learning_sessions.learning_session_id"), nullable=False
+    )
+    plan_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    target_question_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    question_type_mix_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    source_set_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    index_version_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    prompt_template_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class LearningPlanItem(Base):
+    __tablename__ = "learning_plan_items"
+    __table_args__ = (
+        UniqueConstraint(
+            "learning_plan_id", "sequence_number", name="uq_learning_plan_item_sequence"
+        ),
+    )
+
+    learning_plan_item_id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=new_id
+    )
+    learning_plan_id: Mapped[str] = mapped_column(
+        ForeignKey("learning_plans.learning_plan_id"), nullable=False
+    )
+    knowledge_point_id: Mapped[str] = mapped_column(
+        ForeignKey("knowledge_points.knowledge_point_id"), nullable=False
+    )
+    sequence_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    target_question_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False)
+
+
+class LearningQuestion(Base):
+    __tablename__ = "learning_questions"
+    __table_args__ = (
+        UniqueConstraint(
+            "learning_session_id", "sequence_number", name="uq_learning_question_sequence"
+        ),
+    )
+
+    question_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    learning_session_id: Mapped[str] = mapped_column(
+        ForeignKey("learning_sessions.learning_session_id"), nullable=False
+    )
+    knowledge_point_id: Mapped[str] = mapped_column(
+        ForeignKey("knowledge_points.knowledge_point_id"), nullable=False
+    )
+    question_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    prompt_text: Mapped[str] = mapped_column(Text, nullable=False)
+    options_json: Mapped[list[dict[str, str]]] = mapped_column(JSON, nullable=False)
+    difficulty: Mapped[str] = mapped_column(String(20), nullable=False)
+    answer_key_json: Mapped[dict[str, str]] = mapped_column(JSON, nullable=False)
+    acceptable_points_json: Mapped[list[str] | None] = mapped_column(JSON)
+    grading_rule_json: Mapped[dict[str, str]] = mapped_column(JSON, nullable=False)
+    sequence_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False)
+    generated_request_id: Mapped[str | None] = mapped_column(String(128))
+    prompt_template_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    provider: Mapped[str] = mapped_column(String(50), nullable=False)
+    row_version: Mapped[int] = mapped_column(
+        Integer, default=1, server_default=text("1"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class QuestionEvidence(Base):
+    __tablename__ = "question_evidence"
+
+    question_evidence_id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=new_id
+    )
+    question_id: Mapped[str] = mapped_column(
+        ForeignKey("learning_questions.question_id"), nullable=False
+    )
+    source_snapshot_id: Mapped[str | None] = mapped_column(
+        ForeignKey("source_snapshots.source_snapshot_id", ondelete="SET NULL")
+    )
+    chunk_id: Mapped[str | None] = mapped_column(String(36))
+    file_id: Mapped[str | None] = mapped_column(String(36))
+    index_version_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    evidence_role: Mapped[str] = mapped_column(String(30), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class LearningAttempt(Base):
+    __tablename__ = "learning_attempts"
+    __table_args__ = (
+        UniqueConstraint("question_id", "attempt_number", name="uq_learning_attempt_number"),
+        UniqueConstraint(
+            "question_id", "client_request_id", name="uq_learning_attempt_client_request"
+        ),
+        UniqueConstraint(
+            "question_id", "idempotency_key", name="uq_learning_attempt_idempotency"
+        ),
+    )
+
+    attempt_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    question_id: Mapped[str] = mapped_column(
+        ForeignKey("learning_questions.question_id"), nullable=False
+    )
+    learning_session_id: Mapped[str] = mapped_column(
+        ForeignKey("learning_sessions.learning_session_id"), nullable=False
+    )
+    attempt_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    answer_content: Mapped[str | None] = mapped_column(Text)
+    selected_option: Mapped[str] = mapped_column(String(32), nullable=False)
+    hint_level_used: Mapped[int] = mapped_column(
+        Integer, default=0, server_default=text("0"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(String(30), nullable=False)
+    client_request_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class LearningFeedback(Base):
+    __tablename__ = "learning_feedbacks"
+    __table_args__ = (
+        UniqueConstraint("attempt_id", name="uq_learning_feedback_attempt"),
+    )
+
+    feedback_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    attempt_id: Mapped[str] = mapped_column(
+        ForeignKey("learning_attempts.attempt_id"), nullable=False
+    )
+    result: Mapped[str] = mapped_column(String(20), nullable=False)
+    strengths: Mapped[str | None] = mapped_column(String(200))
+    missing_points: Mapped[str | None] = mapped_column(String(200))
+    explanation: Mapped[str] = mapped_column(Text, nullable=False)
+    learning_signal: Mapped[str] = mapped_column(String(20), nullable=False)
+    provider: Mapped[str] = mapped_column(String(50), nullable=False)
+    model: Mapped[str] = mapped_column(String(80), nullable=False)
+    prompt_template_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class BackupEntry(Base):

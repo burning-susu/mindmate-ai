@@ -5,9 +5,9 @@
 - 当前开发分支：`feat/v1-bootstrap`
 - 当前远程提交：以 `git ls-remote --heads origin feat/v1-bootstrap` 为准；本文件随本批次收口提交推送
 - 最后更新时间：`2026-09-26`
-- 当前开发阶段：阶段 6 开发中，状态 `PARTIAL`；阶段 5 继续 `PARTIAL`
+- 当前开发阶段：阶段 7 开发中，状态 `PARTIAL`；阶段 5、阶段 6 继续 `PARTIAL`
 - 交付顺序：Demo 首先完成，完整 V1 以后精进。求职 Demo 优先文件整理/导入、建库、带来源问答、最小学习陪练和重启恢复。Demo 可用性与完整 V1 阶段状态分开报告。
-- 当前批次状态：第三十八批补齐显式 Mock/DeepSeek 模式、外发与保守费用门禁，并修复演示脚本正常停止仍返回 1 的问题。默认 `.\scripts\demo.ps1` 仍是无费用 Mock。真实 DeepSeek：`PENDING`，本批没有真实 Key 请求，也没有付费调用。阶段 5、阶段 6 的完整 V1 仍为 `PARTIAL`。详细证据见 `docs/test-reports/stage-38-deepseek-demo-gate.md`。
+- 当前批次状态：第三十九批完成后端最小学习闭环。已有 `READY` 知识库可创建持久会话、一道单选题和一次作答反馈；提交前不返回答案，提交后保存结果与来源快照。前端学习页仍未接入。默认演示仍是无费用 Mock。真实 DeepSeek：`PENDING`。阶段 5、6、7 的完整 V1 仍为 `PARTIAL`。详细证据见 `docs/test-reports/stage-39-learning-backend.md`。
 
 ## 已完成阶段
 
