@@ -30,6 +30,17 @@ def test_health_readiness_and_openapi(client: TestClient) -> None:
     assert schema.json()["paths"]["/api/v1/system/session"]["post"]
 
 
+def test_app_startup_migrates_outside_backend_working_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    with TestClient(
+        create_app(Settings(data_dir=tmp_path / "app", env="test")),
+        base_url="http://127.0.0.1",
+    ) as client:
+        assert client.get("/api/v1/health").json()["status"] == "ok"
+
+
 def test_startup_runs_migration_and_sets_sqlite_pragmas(client: TestClient) -> None:
     state = cast(Any, client.app).state
     with state.engine.connect() as connection:

@@ -4,9 +4,9 @@
 
 - 当前开发分支：`feat/v1-bootstrap`
 - 当前远程提交：以 `git ls-remote --heads origin feat/v1-bootstrap` 为准；本文件随本批次收口提交推送
-- 最后更新时间：`2026-09-25`
+- 最后更新时间：`2026-09-26`
 - 当前开发阶段：阶段 6 开发中，状态 `PARTIAL`；阶段 5 继续 `PARTIAL`
-- 当前批次状态：第二十二批 Citation 绑定因无真实 Chat/Learning owner 而 `BLOCKED` 并延期到阶段 6/7；第二十三至第三十批均为 `PASS`；第三十一批完成 Windows Credential Manager 凭据生命周期、版本化外发同意、固定 DeepSeek 最小连接探测和设置页配置闭环；第三十二批完成普通 Chat 服务端会话、消息、回答版本、AI Operation、幂等和 Mock 生成闭环；第三十三批完成普通 Chat 流式快照、SSE 重订阅、停止与前端恢复闭环；没有真实 Key 或真实 DeepSeek 外部调用；阶段 5 遗留项保持有效
+- 当前批次状态：第三十七批在 Windows 本机完成固定公开合成资料的求职 Demo 现场稳定性闭环，结论 `PASS`；阶段 5、阶段 6 的完整 V1 仍为 `PARTIAL`。生成端是 Mock，不是真实 DeepSeek。详细证据见 `docs/test-reports/stage-37-windows-demo-stability.md`。
 
 ## 已完成阶段
 
@@ -258,3 +258,13 @@
 - 固定 BAAI revision `7999e1d3359715c523056ef9478215996d62a620`、Xenova ONNX revision `75c43b069aac4d136ba6bc1122f995fedcfd2781`，manifest fingerprint `4d07bfc3eefa75de01924a4350eef08182c163b0060228410c3d882c9f07c6a5`，三个文件共 `95,291,718` 字节。真实公网下载、文件 SHA-256 校验和本机 ONNX 索引见第三十批详细交接。
 - 浏览器证据：用户点击安装后展示真实非零字节进度；安装 READY 后点击重建，真实 `INDEX_PREPROCESS/CHUNK/EMBED/FTS` 均完成，活动索引 `READY`；390px 视口无水平溢出。截图留在隔离临时根，不进 Git。
 - 下一批唯一目标：真实 Chat/Learning owner 可核验后建立服务端 Citation 绑定准入；阶段 5 继续 `PARTIAL`。
+
+## 第三十七批交接
+
+- 本批状态：`PASS`；阶段 5、阶段 6 的完整 V1 仍为 `PARTIAL`。进场分支 `feat/v1-bootstrap`，本地与 `origin/feat/v1-bootstrap` 均为 `9f68fe213df5b58abe7b37474d3bf7e08dde3d1e`，工作区干净。收口 SHA 以本批推送后的本地 HEAD 与远端 tip 为准。
+- Windows 现场：在仓库根目录运行 `.\scripts\demo.ps1`。数据根为 `%TEMP%\mindmate-ai-stage36-job-demo`，只复用带所有权标记的既有目录。API `127.0.0.1:8001`，页面 `127.0.0.1:5174`。Provider 固定 Mock。首次按文档从仓库根目录启动时，Alembic 相对路径 `migrations` 找不到；已改为相对 `alembic.ini` 定位，并补上工作目录不在 `backend/` 时的启动回归。修复后首启与二次启动都核对到同一主库和同一活动索引 `READY`，文件 9、知识库 4，没有重复导入，也没有下载模型。
+- 浏览器：独占运行现有阶段 6 真实 ONNX 用例，退出码 0，`1 passed`。正例可见 Mock 正文，引用定位到公开合成文件 `服务超时策略.txt` 第 1–12 行；刷新后正文与持久消息一致。负例界面可见资料不足，Citation 为 0，Operation 为 `EVIDENCE_INSUFFICIENT`。受控 `MockChatProvider` 计数与浏览器分开执行：正例调用 1 次，负例增量为 0。
+- 停止与恢复：结束本次启动的后端后，脚本清理 8001/5174，8000/5173 保持空闲，已打开的系统浏览器进程仍在。二次启动后重新打开同一会话并刷新，可见正文、引用按钮和持久 Citation 保持一致；该会话三条 Operation 仍为 `COMPLETED`，其中资料不足那条 Citation 为 0。
+- 锁对照：在不占用演示数据根的前提下，定向测试 `4 passed`。空目录锁释放后为 `MISSING_OFFLINE`。固定缓存上非阻塞状态为 `INSTALLING`，释放后为 `READY`；查询编码在持锁期间等待，释放后返回 512 维向量，没有 `MODEL_UNAVAILABLE`。本批浏览器与受控审计也没有出现 `MODEL_UNAVAILABLE`。历史两次现场失败没有被重放成同一次请求，不能改写成已经逐条证实。
+- 未跑：没有重跑后端全量，没有真实 DeepSeek、真实 Key、付费请求、用户界面上传建库、发布性能或 10 万 Chunk。第三十六批的 `225 passed, 2 skipped` 仍是历史基线。
+- 下一批唯一目标：在获得明确授权和单次预算上限之后，用同一套公开合成资料做一次手动真实 DeepSeek 小型冒烟；未授权前默认 `.\scripts\demo.ps1` 继续使用 Mock。

@@ -341,3 +341,17 @@
 - 第三十五批与全量测试并行的那次失败，以及暂停前第二次独占浏览器失败（Operation `01a0db04-bcbd-7687-ad8a-ab3e14be77bf`，request `01a0db04-bcaa-717f-bf8a-508f181ae279`）仍然单独保留。本环境没有那次 Windows 进程，也没有固定模型缓存，不能把本批单测说成已经回放了那两个现场 Operation。意外异常仍记为 `MODEL_UNAVAILABLE`，并写入 `uvicorn.error` 的安全字段。
 - 门禁：后端 `python -m pytest -q --disable-warnings` 退出码 0，227 项里 225 通过、2 跳过（固定模型缓存不存在、Windows Credential Manager）。Ruff 通过。本批改动的 Pyright 为 0 错误；Linux 全量 Pyright 仍有一处既有的 `ctypes.WinDLL` 报错，文件未改。前端 Vitest 27 通过，lint、typecheck、build 通过。`git diff --check` 通过。没有真实 ONNX 浏览器复跑，没有真实 Key 或付费调用。
 - 下一批唯一建议：在你当场确认后，用固定合成资料做一次手动真实 DeepSeek 小范围验收。默认 `.\scripts\demo.ps1` 继续使用 Mock，不要把真实 Key 放进自动化。
+
+### 第三十七批：Windows 求职 Demo 现场稳定性
+
+- 状态：本批 `PASS`；阶段 5、阶段 6 的完整 V1 仍为 `PARTIAL`。进场分支 `feat/v1-bootstrap`，本地与远端 SHA 均为 `9f68fe213df5b58abe7b37474d3bf7e08dde3d1e`，工作区干净。环境为 Windows PowerShell 5.1、Python 3.12 虚拟环境、Node 22。只使用 `docs/test-data/stage5-fixed-ready/` 的公开合成资料、Mock Provider 和 `%TEMP%\mindmate-ai-stage36-job-demo`。
+- 阻断修复：从仓库根目录运行 `.\scripts\demo.ps1` 时，应用启动按当前目录查找 `migrations`，准备失败并退出码 1。`backend/alembic.ini` 改为以配置文件所在目录定位迁移和 `src`。`tests/test_local_runtime.py` 增加工作目录不在 `backend/` 时的启动回归。修复后同一命令完成准备并启动。
+- 首启：准备报告 `second_pass=passed`、`counts_unchanged=true`，文件 9、知识库 4、任务 30；主库与活动索引均为 `READY`，指纹 `4d07bfc3eefa75de01924a4350eef08182c163b0060228410c3d882c9f07c6a5`。运行中模型与索引复核通过。端口为 `127.0.0.1:8001` 和 `127.0.0.1:5174`。没有下载模型。
+- 浏览器：`frontend/` 中设置 `MINDMATE_WEB_PORT=5174` 与固定主库、索引版本后，`npx playwright test e2e/stage6-real-onnx-knowledge-chat.spec.ts --reporter=line` 退出码 0，`1 passed`（10.7 秒）。正例 Operation `COMPLETED`，可见正文与持久消息一致，引用文件为 `服务超时策略.txt`，行 1–12，来源 `AVAILABLE`。负例 `EVIDENCE_INSUFFICIENT`，可见“资料不足”，Citation 0。这次浏览器证据不包含 Provider 调用次数。
+- 受控计数：服务器停止后单独运行 `backend/scripts/verify_stage6_real_onnx_chat.py`，退出码 0。真实检索正例 `supported`，Mock 调用 1；负例 `insufficient`，Mock 调用增量 0，Citation 0。模型状态 `READY`。这与浏览器会话是分开的证据。
+- 停止与二次启动：结束本批启动的后端后，8001/5174 释放，8000/5173 仍空闲，系统浏览器进程未被结束。脚本等待循环因此以退出码 1 离开，清理函数已执行。二次 `.\scripts\demo.ps1` 再次 `counts_unchanged=true`，文件仍为 9、知识库仍为 4，同一索引版本 `READY`；任务变为 35，只增加了问答产生的 `AI_GENERATION`，`FILE_IMPORT` 仍为 9。没有自动下载。
+- 刷新恢复：二次启动后重新打开浏览器里的同一会话并刷新。可见正文在刷新前后一致，并与持久助手消息一致；两条正例回答各保留 1 条 Citation，资料不足 Operation 仍为 `COMPLETED / EVIDENCE_INSUFFICIENT` 且 Citation 0。
+- 隔离锁对照：`pytest tests/test_stage36_query_encoder_lock.py` 为 `4 passed`。空目录在锁释放后是 `MISSING_OFFLINE`。固定模型缓存上，持锁时非阻塞状态为 `INSTALLING`，释放后阻塞查询为 `READY`（约 0.4 秒）；查询编码在持锁期间不返回，释放后得到 512 维向量，没有 `MODEL_UNAVAILABLE`。没有为了让演示 E2E 超时而长时间占锁。
+- 本批浏览器、受控审计和锁对照都没有新的 `MODEL_UNAVAILABLE`。第三十五批并行失败和暂停前 Operation `01a0db04-bcbd-7687-ad8a-ab3e14be77bf` 没有按原请求重放，根因仍不能逐条改写。
+- 门禁：定向 `tests/test_local_runtime.py` 为 `8 passed`；Ruff 与 Pyright 对该文件为 0 错误。没有改前端，没有重跑前端全量或后端全量。`git diff --check` 在提交前执行。没有真实 Key 或付费调用。
+- 下一批唯一目标：在获得明确授权和单次预算上限之后，用同一套公开合成资料做一次手动真实 DeepSeek 小型冒烟；未授权前不要把本批 Mock 证据写成真实模型验收，默认演示命令继续使用 Mock。
