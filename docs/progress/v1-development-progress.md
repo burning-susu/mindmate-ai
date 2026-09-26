@@ -394,3 +394,12 @@
 - 界线：页面和数据都是 `learning-demo-fixture-v1`，`live_model_called=false`。聊天设置里的在线模式不参与出题。界面上传建库未在本批验收。
 - 门禁：`src/test/stage7-learning.test.tsx` 为 `8 passed`。`npm run typecheck`、`npm run lint`、`npm run build`、`git diff --check` 通过。没有改后端契约，没有重跑全量 pytest。第三十九批切块 Worker 领取时序失败没有在本批复现，也没有被单独重跑宣布消失。
 - 下一批唯一目标：做整体求职 Demo 的最后一轮验收和交接。不自动进入多题、提示、掌握度、复习或真实 DeepSeek 学习生成。
+
+### 第四十二批：求职 Demo 全链路验收与交接
+
+- 状态：求职 Demo 全链路 `PASS`。可以从空库经网页完成上传、建库、本地 ONNX 索引、带来源问答、无证据拒答、一题陪练和刷新恢复。真实 DeepSeek 仍为 `PENDING`。阶段 5、6、7 的完整 V1 仍为 `PARTIAL`。进场分支 `feat/v1-bootstrap`，本地与远端 SHA 均为 `72dabbe21aea12334d60599af3b5a85f07e344e1`，工作区干净。
+- 现场：数据根 `%TEMP%\mindmate-ai-stage42-ui-demo`。启动前只复制已校验的 `backend/model-cache/manager-validation`，复制后状态 `READY`，没有下载。服务用 `.\scripts\dev.ps1 -DataDir`，API `127.0.0.1:8001`，页面 `127.0.0.1:5174`，Provider 固定 Mock。没有使用 `.\scripts\demo.ps1` 的预置导入。文件 1 条，知识库 1 个，活动索引 `01a0dd98-9614-7a39-8c99-cbb1f59cfadb`。`INDEX_PREPROCESS`、`INDEX_CHUNK`、`INDEX_EMBED`、`INDEX_FTS` 均为 `COMPLETED`，知识库 `READY`。
+- 浏览器：上传发生在 `12:00:22`，离开页面后文件为 `PARSED`。成员加入后点击“重建当前知识库索引”并立刻打开文件页；嵌入任务在 `12:02:41` 完成。正例问题“API 单次请求超时时间是多少秒？”的回答是 Mock 复述，引用 `[1] 服务超时策略.txt`，打开文件可见“30 秒”，引用行 `1–12`。负例“这套资料里的磁盘配额是多少 GB？”显示资料不足，引用 0，Operation `LOCAL_EVIDENCE_GATE / EVIDENCE_INSUFFICIENT`。学习会话 `01a0dda0-d500-7b56-a671-d69f141de1ad` 选择“30 秒”，结果正确，刷新后同一 URL 仍在。`live_model_called=false`。
+- 未在本批复测：后端进程重启。第四十一批会话 `01a0dd85-4fe7-7d9c-b95b-e84b34e8a5ee` 的重启证据继续有效，但不记为本批重启 `PASS`。
+- 门禁：本批没有改产品代码，没有新增自动化用例，没有重跑 pytest 或前端全量。切块 Worker 领取时序没有在这条单文件索引里失败，不能据此宣称已修复。截图和走查日志在隔离根 `evidence/`，不入库。
+- 下一批：不自动开启新开发阶段。可选精进和操作脚本见 `docs/demo/求职Demo三分钟操作.md` 与 `docs/test-reports/stage-42-job-demo-ui.md`。

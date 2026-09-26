@@ -7,7 +7,7 @@
 - 最后更新时间：`2026-09-26`
 - 当前开发阶段：阶段 7 开发中，状态 `PARTIAL`；阶段 5、阶段 6 继续 `PARTIAL`
 - 交付顺序：Demo 首先完成，完整 V1 以后精进。求职 Demo 优先文件整理/导入、建库、带来源问答、最小学习陪练和重启恢复。Demo 可用性与完整 V1 阶段状态分开报告。
-- 当前批次状态：第四十一批把最小学习回合接到现有 `.\scripts\demo.ps1`。隔离数据根上完成后端进程重启，同一 `/learning/session/:id` 的题目、已选答案、对错、解释和引用保持不变。默认演示仍是无费用 Mock，模型标识 `learning-demo-fixture-v1`。真实 DeepSeek：`PENDING`。阶段 5、6、7 的完整 V1 仍为 `PARTIAL`。详细证据见 `docs/test-reports/stage-41-learning-restart.md`。
+- 当前批次状态：第四十二批在新的隔离数据根上，从空库经网页上传一份公开合成资料，完成建库、真实本地 ONNX 索引 `READY`、知识库问答引用、无证据拒答、一题陪练和浏览器刷新恢复。求职 Demo 全链路可按 `docs/demo/求职Demo三分钟操作.md` 重复演示。聊天正例是 Mock `mock-chat-v1`，资料不足是本地证据门控，学习是 `learning-demo-fixture-v1` 且 `live_model_called=false`。真实 DeepSeek：`PENDING`。阶段 5、6、7 的完整 V1 仍为 `PARTIAL`。本批没有复测后端进程重启，该证据仍是第四十一批。详细证据见 `docs/test-reports/stage-42-job-demo-ui.md`。
 
 ## 已完成阶段
 
@@ -288,3 +288,11 @@
 - 门禁：学习 Vitest `8 passed`；typecheck、lint、build 和 `git diff --check` 通过。没有改后端，没有重跑全量 pytest。切块 Worker 领取时序失败仍是既有风险，本批未改 Worker。
 - 未验收：界面上传建库、多题、提示、掌握度、复习、真实在线学习生成。
 - 下一批唯一目标：做整体求职 Demo 的最后一轮验收和交接，不自动展开阶段 7 的高级学习功能。
+
+## 第四十二批交接
+
+- 本批状态：求职 Demo 从网页上传开始的全链路 `PASS`。完整 V1 阶段 5、6、7 仍为 `PARTIAL`。真实 DeepSeek 仍为 `PENDING`。进场分支 `feat/v1-bootstrap`，本地与远端 SHA 均为 `72dabbe21aea12334d60599af3b5a85f07e344e1`，工作区干净。
+- 路径：隔离根 `%TEMP%\mindmate-ai-stage42-ui-demo` 启动前只有已校验 ONNX 副本，没有业务库。`.\scripts\dev.ps1 -DataDir` 拉起 `127.0.0.1:8001` 与 `127.0.0.1:5174`。浏览器上传 `docs/test-data/stage5-fixed-ready/服务超时策略.txt`，离开文件页后回来仍为已解析；创建“第四十二批服务超时演示库”，加入该文件，点击重建后离开页面，索引任务在请求结束后完成并达到 `READY`。知识库问答正例给出可打开的 `服务超时策略.txt` 第 1–12 行；磁盘配额问题没有引用。学习会话提交“30 秒”为正确，刷新同一 URL 后题目、作答、反馈和引用仍在。
+- 模式：正例聊天 `provider=MOCK`、`resolved_model=mock-chat-v1`。无证据问题 `provider=LOCAL_EVIDENCE_GATE`、`error_code=EVIDENCE_INSUFFICIENT`、引用 0。学习 `provider=mock`、`live_model_called=false`，页面模型标识 `learning-demo-fixture-v1`。Embedding 模型端点 `READY`，指纹 `4d07bfc3eefa75de01924a4350eef08182c163b0060228410c3d882c9f07c6a5`。没有下载模型，没有读取 Key，没有调用 DeepSeek。
+- 界线：`.\scripts\demo.ps1` 仍会先用 API 导入固定样本，不能代替本批网页上传。后端进程重启恢复沿用第四十一批，本批未复测。文件详情“所在知识库”把接口里的 `status` 读成 `index_state`，页面会显示 `undefined`，原文仍可核对。切块 Worker 领取时序风险本批没有复现，也不算已修复。
+- 下一批：不再自动开新的开发阶段。可选精进见验收报告；完整 V1 阶段 5/6/7 仍待后续单独精进。
