@@ -6,9 +6,11 @@ from typing import Any, cast
 
 from fastapi.testclient import TestClient
 
+from mindmate.ai.embeddings.manifest import MODEL_ARTIFACT_FINGERPRINT
 from mindmate.ai.providers.mock import MockChatProvider
 from mindmate.application.evidence_gate import assess_evidence, unavailable_assessment
 from mindmate.application.hybrid_search import HybridAssessmentResult, HybridSearchResult
+from mindmate.application.retrieval_test_queries import RetrievalQueryEncoderError
 from mindmate.application.source_snapshots import purge_source_snapshots_for_files
 from mindmate.config import Settings
 from mindmate.main import create_app
@@ -180,3 +182,120 @@ def test_unavailable_knowledge_chat_is_distinct_and_does_not_call_provider(tmp_p
         assert operation["status"] == "FAILED"
         assert operation["error_code"] == "MODEL_MISSING_OFFLINE"
         assert provider.calls == []
+
+
+def test_query_encoding_failure_logs_safe_diagnostics_only(tmp_path: Path, capsys) -> None:
+    provider = MockChatProvider()
+    settings = Settings(data_dir=tmp_path, env="test", chat_worker_poll_seconds=0.01)
+    app = create_app(settings)
+    app.state.chat_provider = provider
+    question = "私人问题不应出现在日志 UNIQUE-QUESTION-36"
+    leaked_path = r"C:\Users\secret\mindmate\model.onnx"
+
+    class _FailingEncoder:
+        def embed_query(self, text: str) -> list[float]:
+            raise RetrievalQueryEncoderError(
+                "MODEL_UNAVAILABLE",
+                phase="status_precheck",
+                model_state="INSTALLING",
+            ) from RuntimeError(f"{text} {leaked_path}")
+
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        client.post("/api/v1/system/session", headers={"Origin": ORIGIN})
+        factory = cast(Any, client.app).state.session_factory
+        data = _seed_active_index(factory, settings)
+        worker = cast(Any, client.app).state.chat_worker
+        worker._retrieval_query_encoder_getter = lambda: _FailingEncoder()
+        worker._retrieval_query_getter = lambda _settings: _Query(
+            HybridAssessmentResult(
+                retrieval=HybridSearchResult(()),
+                assessment=assess_evidence([], query_text="unused"),
+            )
+        )
+        capsys.readouterr()
+        created = client.post(
+            "/api/v1/conversations",
+            headers=_headers("knowledge-model-unavailable-log-001"),
+            json={
+                "mode": "KNOWLEDGE_CHAT",
+                "source_scope": {
+                    "scope_type": "KNOWLEDGE_BASE",
+                    "knowledge_base_id": data.knowledge_base_id,
+                },
+                "first_message": question,
+                "client_request_id": "knowledge-model-unavailable-client-001",
+            },
+        )
+        assert created.status_code == 202, created.text
+        operation = _wait(client, created.json()["operation_id"])
+        captured = capsys.readouterr()
+    assert operation["status"] == "FAILED"
+    assert operation["error_code"] == "MODEL_UNAVAILABLE"
+    assert provider.calls == []
+    message = captured.err
+    assert "[uvicorn.error]" in message
+    assert "knowledge_chat_query_encoding_failed" in message
+    assert f"operation_id={operation['operation_id']}" in message
+    assert "request_id=" in message
+    assert f"index_version_id={data.index_version_id}" in message
+    assert f"model_fingerprint={MODEL_ARTIFACT_FINGERPRINT}" in message
+    assert "exception_type=RetrievalQueryEncoderError" in message
+    assert "encoder_phase=status_precheck" in message
+    assert "model_state=INSTALLING" in message
+    assert "error_code=MODEL_UNAVAILABLE" in message
+    assert question not in message
+    assert leaked_path not in message
+    assert "secret" not in message
+
+
+def test_unexpected_query_encoder_exception_does_not_log_the_question(
+    tmp_path: Path, capsys
+) -> None:
+    provider = MockChatProvider()
+    settings = Settings(data_dir=tmp_path, env="test", chat_worker_poll_seconds=0.01)
+    app = create_app(settings)
+    app.state.chat_provider = provider
+    question = "另一条私人问题 UNIQUE-QUESTION-36B"
+
+    class _UnexpectedEncoder:
+        def embed_query(self, text: str) -> list[float]:
+            raise RuntimeError(f"{text} at C:\\private\\cache\\model.onnx")
+
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        client.post("/api/v1/system/session", headers={"Origin": ORIGIN})
+        factory = cast(Any, client.app).state.session_factory
+        data = _seed_active_index(factory, settings)
+        worker = cast(Any, client.app).state.chat_worker
+        worker._retrieval_query_encoder_getter = lambda: _UnexpectedEncoder()
+        worker._retrieval_query_getter = lambda _settings: _Query(
+            HybridAssessmentResult(
+                retrieval=HybridSearchResult(()),
+                assessment=assess_evidence([], query_text="unused"),
+            )
+        )
+        capsys.readouterr()
+        created = client.post(
+            "/api/v1/conversations",
+            headers=_headers("knowledge-model-unexpected-log-001"),
+            json={
+                "mode": "KNOWLEDGE_CHAT",
+                "source_scope": {
+                    "scope_type": "KNOWLEDGE_BASE",
+                    "knowledge_base_id": data.knowledge_base_id,
+                },
+                "first_message": question,
+            },
+        )
+        operation = _wait(client, created.json()["operation_id"])
+        captured = capsys.readouterr()
+    assert operation["status"] == "FAILED"
+    assert operation["error_code"] == "MODEL_UNAVAILABLE"
+    assert provider.calls == []
+    message = captured.err
+    assert "[uvicorn.error]" in message
+    assert "exception_type=RuntimeError" in message
+    assert "encoder_phase=embed_query" in message
+    assert "error_code=MODEL_UNAVAILABLE" in message
+    assert question not in message
+    assert "private" not in message
+    assert "model.onnx" not in message
