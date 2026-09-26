@@ -751,7 +751,7 @@ def _evidence_blocks(candidates: tuple[HybridCandidate, ...]) -> tuple[dict[str,
                 page += f"-{candidate.page_end}"
             location.append("页=" + page)
         if candidate.slide_number is not None:
-            location.append("幻灯片" + str(candidate.slide_number))
+            location.append("幻灯片=" + str(candidate.slide_number))
         if candidate.line_start is not None:
             line = str(candidate.line_start)
             if candidate.line_end is not None and candidate.line_end != candidate.line_start:
