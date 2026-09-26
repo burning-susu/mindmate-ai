@@ -1,1 +1,1 @@
-PLACEHOLDER_LOAD_FROM_FILE
+{{LOAD_FROM:/tmp/mm-push/exact_content.md}}
