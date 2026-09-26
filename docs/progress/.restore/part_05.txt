@@ -1,0 +1,33 @@
+tests/test_stage5_source_snapshots.py` 10 项，覆盖真实内部 FTS5 + sqlite-vec→混合检索→证据门控→快照、应用重启读取、伪造文件名/Chunk、跨库、成员移除/重加、回收站、坏映射、活动指针/成员竞态、幂等、定位空值、重建后旧版本引用和永久删除净化。最终 `uv run pytest` 为 `164 passed`；`uv run ruff check src tests` 通过；Pyright `0 errors, 0 warnings, 0 informations`；compileall、Alembic heads（`6b3e91a0c4d7`）和 `git diff --check` 通过。
+- 范围：没有公开检索/Citation API、OpenAPI/前端类型、Chat/Learning owner、对话或生成式回答；未调用 DeepSeek、真实凭据或付费外部服务。本批不构成最终答案事实正确性、AC-KB-003、Recall@10 或质量/性能验收证据。
+- 下一开发批次唯一目标：定义并实现来源快照到真实 Chat/Learning owner 的服务端 Citation 绑定边界，暂不生成模型回答。
+
+### 第二十二批：Citation 绑定依赖延期
+
+- 状态：`BLOCKED`；没有代码、文档、测试或提交变更。进场与离场本地/远端 SHA 均为 `e1766c3d173f4613e368bbb8988a343ca207738e`，工作区保持干净。
+- 阻塞事实：数据模型/迁移/源码没有真实持久化 Chat 或 Learning owner，也没有可核验的对应知识库范围快照；`TaskAttempt` 是后台任务尝试，不能充当学习 owner。为防止伪造 owner，Citation 绑定延期到阶段 6/7。
+- 延期不会阻止第二十三批实现独立的本地检索测试端点；Owner 建立后再恢复服务端 Citation 绑定。
+
+### 第二十三批：知识库本地测试检索 API
+
+- 状态：`PASS`；阶段 5 继续 `PARTIAL`。进场本地/远端 SHA 为 `e1766c3d173f4613e368bbb8988a343ca207738e`。
+- 新增只读 `POST /api/v1/knowledge-bases/{knowledge_base_id}/retrieval-tests`，仅接收 1–2000 字符问题并拒绝额外字段。后端根据路径知识库选择其当前活动 `READY` IndexVersion；调用方不能指定文件、索引版本、模型或路径，API 沿用 Host/Origin/LocalSession/Idempotency-Key 安全校验。
+- 本地 BGE query encoder 首次调用时才校验并加载既有模型，明确禁止下载。活动索引前检查 EmbeddingConfig；本地模型缺失/损坏、FTS/vector 通道故障与资料不足返回不同状态/错误码。混合检索采用既有双路 Top 30、确定性融合/重排 Top 8 与 `evidence-gate-v1`；查询开始前和检索期间复核索引/成员/文件/Chunk/Embedding 范围，变化时无候选返回 `unavailable/RETRIEVAL_SCOPE_CHANGED`。
+- 响应返回 gate 状态、索引/算法/规则版本、候选标识、数据库位置、受控摘录与双路排名/分数；最多 8 个候选、最多 1200 字符摘录、最大 JSON 体 64 KiB。不创建模型回答、对话、SourceSnapshot、Citation、后台任务或数据库写入，也不调用 Provider。
+- 真实 SQLite FTS5 + sqlite-vec API 用例覆盖可支持问题/资料不足、空索引、离线模型缺失、输入与额外字段校验、本地 Origin/Session、跨知识库隔离、当前活动版本与同库待索引成员过滤、回收站排除、索引/成员并发变化、FTS/vector 失败路由和零写入。串行后端最终全量 `176 passed, 143 warnings`；Ruff、Pyright、compileall、Alembic head `6b3e91a0c4d7` 与 `git diff --check` 通过。此前完整运行分别观察到既有 purge 用例一次 row-version `412`、Chunk 显式重试用例一次未恢复；两个用例单独重跑通过，最终完整串行运行通过，未修改它们。前端 API 生成、typecheck、lint、build 通过；未跑 UI E2E（没有页面改动）。
+- 第二十二批真实 owner/Citation 绑定仍待阶段 6/7；前端测试检索页面与验收集质量/性能校准仍未完成。下一批唯一目标：实现本地检索测试页面并调用该只读 API，不生成模型回答或 Citation。
+
+### 第二十四批：知识库详情本地测试检索页面
+
+- 状态：`PASS`；阶段 5 继续 `PARTIAL`。起始本地/远端 SHA 均为 `2ffe354b3efaa72e10c4d71a9978001750c35019`。
+- 页面：在 `/knowledge-bases/:id` 详情页增加辅助“测试检索”区域，保持知识库标题、文件数和索引状态；输入遵守 1–2000 字符契约，空/纯空白不提交，提交中显示加载状态并防重复点击。
+- API：复用现有生成类型和 `runKnowledgeBaseRetrievalTest`，只发送路径知识库 ID 与 `{ question }`；不写浏览器持久存储，不触发模型下载、Provider、索引任务、回答、SourceSnapshot 或 Citation。
+- 展示：分别呈现 `supported`（找到可能支持的资料）、`insufficient`（资料不足）和 `unavailable`（检索暂不可用）；区分空结果、无活动索引、模型不可用、通道故障和范围变化。候选最多 8 条，显示纯文本文件名、受控摘录、真实标题/页/幻灯片/行定位、原始 rank/分数、RRF/排序说明和缺失信号“无”，不渲染回答或引用编号。
+- 稳定性与安全：请求支持 AbortController、序列号和按知识库 ID 卸载，旧响应不会覆盖当前问题或知识库；错误保留输入并提供重试；摘录、文件名和定位均由 React 文本节点安全渲染，未使用 `dangerouslySetInnerHTML`。
+- 验收：新增 `frontend/src/test/stage5-retrieval-test.test.tsx`，覆盖 Top 8/空结果、三种状态、无活动索引/模型、错误重试、防重复、问题/知识库切换竞态、无持久历史和 HTML 片段安全。前端 Vitest `21 passed`；typecheck、lint、build、`git diff --check` 通过。真实本地 FastAPI + Vite 浏览器验证空知识库键盘提交，返回 `unavailable / INDEX_VERSION_NOT_AVAILABLE`；没有固定 READY 资料，不把 Mock 候选显示写成真实检索证据。
+- 本批无后端、迁移或 OpenAPI schema 变更；Citation owner 继续延期到阶段 6/7。下一开发批次唯一目标：准备固定本地验收资料并建立可复现 READY 索引，为该页面补充真实浏览器候选显示证据。
+
+### 第二十五批：固定资料 READY 索引与真实浏览器候选验证
+
+- 状态：本批 `PASS`；阶段 5 继续 `PARTIAL`。起始本地/远端 SHA 均为 `63bca0d73d66ac0810ae394d8545cb19ce1110cb`。
+- 固定资料：`docs/test-data/stage5-fixed-ready/` 提供主库超时策略、相似干扰库策略和索引 READY 后移入回收站的范围验证资料；另有无成员诊断库验证未就绪错误。运行命令：`uv run python scripts/prepare_stage5_fixed_ready.py --data-dir "$env:TEM
