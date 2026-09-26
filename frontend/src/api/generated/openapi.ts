@@ -134,6 +134,22 @@ export interface components {
     "version"?: string | null;
     "accepted_at"?: string | null
   };
+  "ConversationHistoryItem": {
+    "conversation_id": string;
+    "title": string;
+    "summary": string;
+    "current_mode": string;
+    "scope_name": string | null;
+    "status": string;
+    "source_status": string;
+    "message_count": number;
+    "created_at": string;
+    "updated_at": string
+  };
+  "ConversationHistoryListResponse": {
+    "items": Array<components["ConversationHistoryItem"]>;
+    "next_cursor"?: string | null
+  };
   "ConversationListResponse": {
     "items": Array<components["ConversationResponse"]>;
     "next_cursor"?: string | null
@@ -789,6 +805,9 @@ export interface operations {
   };
   "GET /api/v1/ai-operations/{operation_id}/events": {
     operationId: "stream_ai_operation_api_v1_ai_operations__operation_id__events_get"
+  };
+  "GET /api/v1/history/conversations": {
+    operationId: "list_history_conversations_api_v1_history_conversations_get"
   };
   "POST /api/v1/learning-sessions": {
     operationId: "create_session_api_v1_learning_sessions_post"

@@ -398,6 +398,12 @@ class Conversation(Base):
     __tablename__ = "conversations"
     __table_args__ = (
         Index("ix_conversations_status_updated", "status", "updated_at"),
+        Index(
+            "ix_conversations_active_last_active",
+            "last_active_at",
+            "conversation_id",
+            sqlite_where=text("deleted_at IS NULL"),
+        ),
     )
 
     conversation_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)

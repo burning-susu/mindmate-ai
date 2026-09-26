@@ -29,6 +29,10 @@ export async function listConversations(): Promise<{ items: Conversation[] }> {
   return apiRequest('/api/v1/conversations')
 }
 
+export async function getConversation(conversationId: string): Promise<Conversation> {
+  return apiRequest(`/api/v1/conversations/${conversationId}`)
+}
+
 export async function listMessages(conversationId: string): Promise<{ items: Message[] }> {
   return apiRequest(`/api/v1/conversations/${conversationId}/messages`)
 }

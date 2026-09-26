@@ -5,9 +5,9 @@
 - 当前开发分支：`feat/v1-bootstrap`
 - 当前远程提交：以 `git ls-remote --heads origin feat/v1-bootstrap` 为准；本文件随本批次收口提交推送
 - 最后更新时间：`2026-09-26`
-- 当前开发阶段：阶段 7 开发中，状态 `PARTIAL`；阶段 5、阶段 6 继续 `PARTIAL`
+- 当前开发阶段：阶段 8 开发中，状态 `PARTIAL`；阶段 5、阶段 6、阶段 7 继续 `PARTIAL`
 - 交付顺序：Demo 首先完成，完整 V1 以后精进。求职 Demo 优先文件整理/导入、建库、带来源问答、最小学习陪练和重启恢复。Demo 可用性与完整 V1 阶段状态分开报告。
-- 当前批次状态：第四十二批在新的隔离数据根上，从空库经网页上传一份公开合成资料，完成建库、真实本地 ONNX 索引 `READY`、知识库问答引用、无证据拒答、一题陪练和浏览器刷新恢复。求职 Demo 全链路可按 `docs/demo/求职Demo三分钟操作.md` 重复演示。聊天正例是 Mock `mock-chat-v1`，资料不足是本地证据门控，学习是 `learning-demo-fixture-v1` 且 `live_model_called=false`。真实 DeepSeek：`PENDING`。阶段 5、6、7 的完整 V1 仍为 `PARTIAL`。本批没有复测后端进程重启，该证据仍是第四十一批。详细证据见 `docs/test-reports/stage-42-job-demo-ui.md`。
+- 当前批次状态：第四十三批完成对话历史的只读找回。侧栏和聊天页进入 `/history`，按最近活动时间分页读取未回收会话；打开原会话 ID 后可读已保存问题和回答、可点来源。本批历史切片 `PASS`，整个阶段 8 仍为 `PARTIAL`。求职 Demo 维持第四十二批 `PASS`，本批没有重跑空库上传全链路。真实 DeepSeek 仍为 `PENDING`。阶段 5、6、7 的完整 V1 仍为 `PARTIAL`。详细证据见 `docs/test-reports/stage-43-conversation-history.md`。
 
 ## 已完成阶段
 
@@ -296,3 +296,11 @@
 - 模式：正例聊天 `provider=MOCK`、`resolved_model=mock-chat-v1`。无证据问题 `provider=LOCAL_EVIDENCE_GATE`、`error_code=EVIDENCE_INSUFFICIENT`、引用 0。学习 `provider=mock`、`live_model_called=false`，页面模型标识 `learning-demo-fixture-v1`。Embedding 模型端点 `READY`，指纹 `4d07bfc3eefa75de01924a4350eef08182c163b0060228410c3d882c9f07c6a5`。没有下载模型，没有读取 Key，没有调用 DeepSeek。
 - 界线：`.\scripts\demo.ps1` 仍会先用 API 导入固定样本，不能代替本批网页上传。后端进程重启恢复沿用第四十一批，本批未复测。文件详情“所在知识库”把接口里的 `status` 读成 `index_state`，页面会显示 `undefined`，原文仍可核对。切块 Worker 领取时序风险本批没有复现，也不算已修复。
 - 下一批：不再自动开新的开发阶段。可选精进见验收报告；完整 V1 阶段 5/6/7 仍待后续单独精进。
+
+## 第四十三批交接
+
+- 本批状态：对话历史只读切片 `PASS`。整个阶段 8 仍为 `PARTIAL`。求职 Demo 维持第四十二批 `PASS`。真实 DeepSeek 仍为 `PENDING`。阶段 5、6、7 的完整 V1 仍为 `PARTIAL`。进场分支 `feat/v1-bootstrap`，本地与远端 SHA 均为 `32f4f7ecec0551497c4b7739ce81e8a4d6f0d454`，工作区干净。
+- 入口：侧栏辅助项和聊天页“对话历史”进入 `/history`。列表调用 `GET /api/v1/history/conversations`，只返回标题、80 字摘要、模式、范围名、状态、来源状态、消息数和时间；详情仍用原会话消息接口。已回收会话不出现。排序为 `last_active_at` 降序，并用会话 ID 打破并列。Alembic `b4e1c8a09d27` 只增加未回收会话的部分索引。
+- 浏览器：隔离根 `%TEMP%\mindmate-ai-stage43-history`，公开合成资料和已校验 ONNX，主库 `01a0ddd1-f454-70e9-937d-104b8d73009f`。API `127.0.0.1:8002`，页面 `127.0.0.1:5175`，Provider 固定 Mock。建会话前历史页文字为“还没有可阅读的对话”。随后一条普通聊天和一条知识库问答；历史最新项是知识库会话 `01a0dde1-fe15-7a81-9966-e03920ce27d7`，打开时没有新的会话 POST。引用面板含“30 秒”和“打开文件详情”。刷新后同一 URL 的两条消息 ID 不变。文件进入回收站后，列表为 `SOURCE_INVALID / SOURCE_IN_TRASH`，面板写明“文件已在回收站”，历史摘录不再被说成当前资料可用。
+- 重启：旧监听 PID `39524` 停止后，新监听 PID `39068`。同一历史项再次打开，消息 ID 仍是 `01a0dde1-fe17-78f5-aa88-20472f1ae986` 与 `01a0dde1-fe18-7601-9deb-8853022ef445`，没有新的会话 POST。页面仍显示 Mock，不外发。
+- 下一批唯一目标：为已保存的学习会话增加历史列表和继续入口。不展开首页、设置、搜索、删除恢复或真实 DeepSeek。

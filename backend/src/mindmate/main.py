@@ -27,6 +27,8 @@ from mindmate.api.chat import router as chat_router
 from mindmate.api.embedding_models import router as embedding_models_router
 from mindmate.api.files import FileApiError
 from mindmate.api.files import router as files_router
+from mindmate.api.history import HistoryApiError
+from mindmate.api.history import router as history_router
 from mindmate.api.knowledge_bases import router as knowledge_bases_router
 from mindmate.api.learning import LearningApiError
 from mindmate.api.learning import router as learning_router
@@ -347,6 +349,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             current_row_version=exc.current_row_version,
         )
 
+    @app.exception_handler(HistoryApiError)
+    async def history_api_error(request: Request, exc: HistoryApiError) -> JSONResponse:
+        return problem(
+            request,
+            exc.status,
+            exc.code,
+            "对话历史读取失败",
+            exc.detail,
+        )
+
     @app.exception_handler(ChatApiError)
     async def chat_api_error(request: Request, exc: ChatApiError) -> JSONResponse:
         return problem(
@@ -445,6 +457,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(embedding_models_router)
     app.include_router(ai_provider_router)
     app.include_router(chat_router)
+    app.include_router(history_router)
     app.include_router(learning_router)
     app.include_router(files_router)
 

@@ -1,5 +1,5 @@
 import { QueryClientProvider, useQuery } from '@tanstack/react-query'
-import { Activity, BookOpen, Boxes, FileText, Home, Menu, MessageSquare, Settings2, Trash2 } from 'lucide-react'
+import { Activity, BookOpen, Boxes, FileText, History, Home, Menu, MessageSquare, Settings2, Trash2 } from 'lucide-react'
 import { NavLink, Route, Routes } from 'react-router-dom'
 import { create } from 'zustand'
 
@@ -12,6 +12,7 @@ import KnowledgeBasesPage from './pages/KnowledgeBasesPage'
 import SettingsPage from './pages/SettingsPage'
 import TrashPage from './pages/TrashPage'
 import ChatPage from './pages/ChatPage'
+import HistoryPage from './pages/HistoryPage'
 import LearningNewPage from './pages/LearningNewPage'
 import LearningSessionPage from './pages/LearningSessionPage'
 import { queryClient } from './queryClient'
@@ -80,6 +81,10 @@ function AppShell() {
           ))}
         </nav>
         <div className="sidebar-footer">
+          <NavLink to="/history" className="nav-item">
+            <History size={18} aria-hidden="true" />
+            {sidebarOpen && <span>对话历史</span>}
+          </NavLink>
           <NavLink to="/trash" className="nav-item">
             <Trash2 size={18} aria-hidden="true" />
             {sidebarOpen && <span>回收站</span>}
@@ -109,6 +114,7 @@ function AppShell() {
             <Route path="/learning/session/:sessionId" element={<LearningSessionPage />} />
             <Route path="/chat" element={<ChatPage />} />
             <Route path="/chat/:conversationId" element={<ChatPage />} />
+            <Route path="/history" element={<HistoryPage />} />
             <Route path="/knowledge-bases" element={<KnowledgeBasesPage />} />
             <Route path="/knowledge-bases/new" element={<KnowledgeBaseNewPage />} />
             <Route path="/knowledge-bases/:knowledgeBaseId" element={<KnowledgeBaseDetailPage />} />

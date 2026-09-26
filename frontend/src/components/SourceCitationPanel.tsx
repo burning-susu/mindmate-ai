@@ -1,5 +1,7 @@
 import { ExternalLink, FileText, X } from 'lucide-react'
 
+import { sourceStatusLabel } from './sourceStatus'
+
 export type SourceCitationView = {
   display_number: number
   file_name: string
@@ -62,9 +64,12 @@ export function SourceCitationPanel({ citation, onClose }: { citation: SourceCit
       </div>
       <div className="citation-panel__location"><FileText size={14} aria-hidden="true" />{citationLocation(citation)}</div>
       {unavailable ? (
-        <p className="citation-panel__unavailable">来源状态：{citation.source_status === 'SOURCE_IN_TRASH' ? '文件已在回收站' : citation.source_status === 'SOURCE_DELETED' ? '来源已永久删除' : '来源版本已变化'}。当前不能打开原文。</p>
-      ) : (
-        <p className="citation-panel__excerpt">{citation.excerpt || '当前来源没有可展示摘录。'}</p>
+        <p className="citation-panel__unavailable">来源状态：{sourceStatusLabel(citation.source_status)}。历史摘录不能当作当前资料仍可用。</p>
+      ) : null}
+      {citation.excerpt ? (
+        <p className="citation-panel__excerpt">{unavailable ? `历史摘录：${citation.excerpt}` : citation.excerpt}</p>
+      ) : unavailable ? null : (
+        <p className="citation-panel__excerpt">当前来源没有可展示摘录。</p>
       )}
       {citation.can_open_source && citation.file_id ? (
         <a className="quiet-button citation-panel__open" href={`/files/${citation.file_id}`}><ExternalLink size={14} />打开文件详情</a>

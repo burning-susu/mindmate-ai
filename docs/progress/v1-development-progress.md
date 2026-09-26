@@ -403,3 +403,15 @@
 - 未在本批复测：后端进程重启。第四十一批会话 `01a0dd85-4fe7-7d9c-b95b-e84b34e8a5ee` 的重启证据继续有效，但不记为本批重启 `PASS`。
 - 门禁：本批没有改产品代码，没有新增自动化用例，没有重跑 pytest 或前端全量。切块 Worker 领取时序没有在这条单文件索引里失败，不能据此宣称已修复。截图和走查日志在隔离根 `evidence/`，不入库。
 - 下一批：不自动开启新开发阶段。可选精进和操作脚本见 `docs/demo/求职Demo三分钟操作.md` 与 `docs/test-reports/stage-42-job-demo-ui.md`。
+
+## 阶段 8
+
+- 状态：`PARTIAL`
+- 第四十三批只完成对话历史的只读找回，不代表首页、学习历史、设置、备份或完整恢复已验收。
+
+### 第四十三批：对话历史找回与只读恢复
+
+- 状态：本批历史切片 `PASS`；阶段 8 整体 `PARTIAL`。求职 Demo 维持第四十二批 `PASS`。真实 DeepSeek 仍为 `PENDING`。阶段 5、6、7 仍为 `PARTIAL`。进场 SHA `32f4f7ecec0551497c4b7739ce81e8a4d6f0d454`。
+- 契约：新增查询投影 `GET /api/v1/history/conversations`。不新建会话表，不复制消息，不改聊天 SSE 和幂等提交。OpenAPI 3.1 现为 `75 schemas / 78 operations`。Alembic head `b4e1c8a09d27`。
+- 证据：后端定向 `3 passed`；前端历史 Vitest `3 passed`；真实 Chrome 在隔离根完成空列表、两条会话、来源点击、刷新、回收站来源提示和后端重启。报告见 `docs/test-reports/stage-43-conversation-history.md`。
+- 下一批唯一目标：为已保存的学习会话增加历史列表和继续入口。

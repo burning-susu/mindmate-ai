@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { BookOpen, LoaderCircle, MessageSquare, Plus, RefreshCw, Send, Square, WifiOff } from 'lucide-react'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { BookOpen, History, LoaderCircle, MessageSquare, Plus, RefreshCw, Send, Square, WifiOff } from 'lucide-react'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 
 import {
@@ -12,6 +12,7 @@ import {
   type Operation,
   createConversation,
   createMessage,
+  getConversation,
   getOperation,
   listConversations,
   listMessages,
@@ -21,6 +22,7 @@ import {
 import { getAiProviderStatus } from '../api/aiProvider'
 import { ApiError, apiRequest } from '../api/client'
 import { SourceCitationPanel } from '../components/SourceCitationPanel'
+import { sourceStatusLabel } from '../components/sourceStatus'
 
 const ACTIVE_STATES = new Set(['QUEUED', 'RUNNING', 'STOPPING'])
 const TERMINAL_STATES = new Set(['COMPLETED', 'FAILED', 'STOPPED', 'INTERRUPTED'])
@@ -107,9 +109,15 @@ export default function ChatPage() {
   })
   const conversationItems = conversationsQuery.data?.items
   const conversations = useMemo(() => conversationItems ?? [], [conversationItems])
+  const conversationQuery = useQuery({
+    queryKey: ['chat-conversation', selectedConversationId],
+    queryFn: () => getConversation(selectedConversationId),
+    enabled: Boolean(selectedConversationId),
+    staleTime: 5_000,
+  })
   const selectedConversation = useMemo<Conversation | undefined>(
-    () => conversations.find((item) => item.conversation_id === selectedConversationId),
-    [conversations, selectedConversationId],
+    () => conversationQuery.data ?? conversations.find((item) => item.conversation_id === selectedConversationId),
+    [conversationQuery.data, conversations, selectedConversationId],
   )
   const pendingKnowledgeBaseId = selectedConversationId ? '' : (searchParams.get('knowledge_base_id') ?? '')
   const pendingKnowledgeBaseQuery = useQuery({
@@ -226,6 +234,7 @@ export default function ChatPage() {
     event.preventDefault()
     const content = draft.trim()
     if (!content || hasActiveOperation || knowledgeScopeUnavailable || onlineBlocked) return
+    if (selectedConversationId && !selectedConversation) return
     setSendError('')
     setDraft('')
     try {
@@ -284,9 +293,12 @@ export default function ChatPage() {
           <h1>{chatMode === 'KNOWLEDGE_CHAT' ? '知识库问答' : '普通聊天'}</h1>
           <p>{chatMode === 'KNOWLEDGE_CHAT' ? `当前范围：${scopeName}。每一轮都会重新检索并保留真实来源。` : '当前为 GENERAL_CHAT，回答不使用知识库资料。'}</p>
         </div>
-        <button className="primary-button" type="button" onClick={() => { setOperation(null); setMessages([]); setSelectedCitation(null); navigate('/chat') }}>
-          <Plus size={16} aria-hidden="true" /> 新建对话
-        </button>
+        <div className="detail-heading__actions">
+          <Link className="quiet-button" to="/history"><History size={15} aria-hidden="true" /> 对话历史</Link>
+          <button className="primary-button" type="button" onClick={() => { setOperation(null); setMessages([]); setSelectedCitation(null); navigate('/chat') }}>
+            <Plus size={16} aria-hidden="true" /> 新建对话
+          </button>
+        </div>
       </header>
 
       <div className="chat-layout">
@@ -319,6 +331,8 @@ export default function ChatPage() {
           <div className="chat-messages" aria-live="polite">
             {!selectedConversationId ? (
               <div className="chat-empty">{chatMode === 'KNOWLEDGE_CHAT' ? <BookOpen size={28} /> : <MessageSquare size={28} />}<strong>{chatMode === 'KNOWLEDGE_CHAT' ? '开始知识库问答' : '开始一段普通聊天'}</strong><span>{chatMode === 'KNOWLEDGE_CHAT' ? '问题会限定在当前知识库，并显示真实来源。' : '输入问题后，回答会在此处逐步显示。'}</span></div>
+            ) : conversationQuery.isError ? (
+              <div className="chat-empty"><span>这个会话不存在，或已经进入回收站。</span></div>
             ) : messages.length === 0 && messagesQuery.isLoading ? (
               <div className="chat-empty"><LoaderCircle className="spin" size={24} /><span>正在加载消息</span></div>
             ) : messages.length === 0 ? (
@@ -337,6 +351,9 @@ export default function ChatPage() {
 
           <div className="chat-compose-area">
             {connectionState === 'disconnected' ? <div className="chat-alert chat-alert--warning"><WifiOff size={15} /><span>连接暂时断开，后台任务仍会继续。</span><button className="quiet-button" type="button" onClick={retryStream}><RefreshCw size={14} /> 重连{retryCount ? `（${retryCount}/3）` : ''}</button></div> : null}
+            {messages.some((message) => message.citations?.some((citation) => citation.source_status !== 'AVAILABLE')) ? (
+              <div className="chat-alert chat-alert--warning">部分来源已失效，已保存的回答仍可阅读。点击来源可查看：{sourceStatusLabel(messages.flatMap((message) => message.citations ?? []).find((citation) => citation.source_status !== 'AVAILABLE')?.source_status ?? '')}。</div>
+            ) : null}
             {knowledgeScopeUnavailable ? <div className="chat-alert chat-alert--warning">{pendingKnowledgeBaseQuery.isLoading ? '正在检查知识库索引…' : '当前知识库不可用，请返回知识库详情完成索引后再试。'}</div> : null}
             {operation?.error_code && operation.error_code !== 'EVIDENCE_INSUFFICIENT' ? <div className="chat-alert chat-alert--error">{operation.error_detail || '知识库请求未完成，请刷新范围后重试。'}</div> : null}
             {sendError ? <div className="chat-alert chat-alert--error">{sendError}</div> : null}
@@ -351,9 +368,9 @@ export default function ChatPage() {
                   </label>
                 </div>
               ) : null}
-              <textarea value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={chatMode === 'KNOWLEDGE_CHAT' ? '询问所选知识库中的内容' : '输入你的问题'} aria-label="消息内容" rows={3} disabled={hasActiveOperation || knowledgeScopeUnavailable || onlineBlocked} />
+              <textarea value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={chatMode === 'KNOWLEDGE_CHAT' ? '询问所选知识库中的内容' : '输入你的问题'} aria-label="消息内容" rows={3} disabled={hasActiveOperation || knowledgeScopeUnavailable || onlineBlocked || conversationQuery.isError || (Boolean(selectedConversationId) && !selectedConversation)} />
               <div className="chat-composer__footer">
-                {hasActiveOperation ? <button className="stop-button" type="button" onClick={stop}><Square size={15} fill="currentColor" /> {operation?.status === 'STOPPING' ? '正在停止' : '停止生成'}</button> : <button className="primary-button" type="submit" disabled={!draft.trim() || knowledgeScopeUnavailable || onlineBlocked}><Send size={15} /> 发送</button>}
+                {hasActiveOperation ? <button className="stop-button" type="button" onClick={stop}><Square size={15} fill="currentColor" /> {operation?.status === 'STOPPING' ? '正在停止' : '停止生成'}</button> : <button className="primary-button" type="submit" disabled={!draft.trim() || knowledgeScopeUnavailable || onlineBlocked || conversationQuery.isError || (Boolean(selectedConversationId) && !selectedConversation)}><Send size={15} /> 发送</button>}
               </div>
             </form>
           </div>
