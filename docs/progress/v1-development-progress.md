@@ -80,7 +80,7 @@
 - 复用与持久性：EmbeddingRecord 以 `chunk_id + embedding_config_id` 唯一并跨知识库复用推理；sqlite-vec 文件按配置与 IndexVersion 隔离。先持久化向量 hash，再幂等 upsert 512 维实际向量，最后事务发布 READY 元数据和文件检查点。重启可按向量记录 ID、Chunk ID 与 hash 对账并补完写后中断，不重复推理或产生重复向量。
 - 生命周期：成员、知识库/文件回收站、成员加入时间、内容 hash、解析修订、切片配置、Embedding 配置在推理前和发布前复核；失效结果不标成功。永久删除知识库清理仅属于该 IndexVersion 的向量空间并保留可复用 Chunk/EmbeddingRecord；文件永久删除清理对应向量映射、EmbeddingRecord 和 Chunk。
 - 状态与边界：完成只表示“Embedding 已生成并持久化”。`IndexVersion.status=BUILDING`、`active_index_version_id` 不变，知识库成员仍 `available_for_retrieval=false`；本批未做 FTS5、向量 Top-K、激活、混合检索、引用或 RAG。无 API schema / 前端变化。
-- 验收：后端 `97 passed`、Ruff、Pyright `0 errors`、compileall、离线锁文件校验、Alembic 往返与 `quick_check=ok`；真实 Windows sqlite-vec 文件写入/读取及现有固定本地 ONNX cache 的离线 Worker 集成通过；阶段 4/5 Playwright `2 passed`。详细证据见 `docs/test-reports/stage-5-knowledge-base-foundation.md` 和 `docs/project/index-preprocessing-contract.md`。
+- 验收：后端 `97 passed`、Ruff、Pyright `0 errors`、compileall、离线锁文件校验、Alembic 往返与 `quick_check=ok` 通过；真实 Windows sqlite-vec 文件写入/读取及现有固定本地 ONNX cache 的离线 Worker 集成通过；阶段 4/5 Playwright `2 passed`。详细证据见 `docs/test-reports/stage-5-knowledge-base-foundation.md` 和 `docs/project/index-preprocessing-contract.md`。
 - 下一批唯一目标：为同一 `IndexVersion` 增加持久 FTS5 索引生成与逐输入检查点；不做 Top-K 查询、混合检索、索引激活、引用或 RAG。
 
 ### 第十四批：持久 FTS5 Chunk 投影
@@ -199,10 +199,10 @@
 ### 第二十五批：固定资料 READY 索引与真实浏览器候选验证
 
 - 状态：本批 `PASS`；阶段 5 继续 `PARTIAL`。起始本地/远端 SHA 均为 `63bca0d73d66ac0810ae394d8545cb19ce1110cb`。
-- 固定资料：`docs/test-data/stage5-fixed-ready/` 提供主库超时策略、相似干扰库策略和索引 READY 后移入回收站的范围验证资料；另有无成员诊断库验证未就绪错误。运行命令：`uv run python scripts/prepare_stage5_fixed_ready.py --data-dir "$env:TEMP\mindmate-ai-stage5-fixed-ready"`。数据根通过专用所有权标记保护；脚本两轮运行后仍是 3 文件、3 知识库、13 持久任务，没有新增重复记录。最终验证摘要在隔离根的 `stage5-fixed-ready-report.json`。
+- 固定资料：`docs/test-data/stage5-fixed-ready/` 提供主库超时策略、相似干扰库策略和索引 READY 后移入回收站的范围验证资料；另有无成员诊断库验证未就绪错误。运行命令：`uv run python scripts/prepare_stage5_fixed_ready.py --data-dir "$env:TEMP\\mindmate-ai-stage5-fixed-ready"`。数据根通过专用所有权标记保护；脚本两轮运行后仍是 3 文件、3 知识库、13 持久任务，没有新增重复记录。最终验证摘要在隔离根的 `stage5-fixed-ready-report.json`。
 - 模型：离线复验并复制 Git 忽略缓存 `backend/model-cache/manager-validation` 的真实 `BAAI/bge-small-zh-v1.5`（base revision `7999e1d3359715c523056ef9478215996d62a620`）与 `Xenova/bge-small-zh-v1.5` ONNX revision `75c43b069aac4d136ba6bc1122f995fedcfd2781`；manifest fingerprint `4d07bfc3eefa75de01924a4350eef08182c163b0060228410c3d882c9f07c6a5`。源与隔离副本的 manifest 大小/SHA-256 校验均为 `READY`；无联网、无下载、无 Mock 向量。
 - 构建闭环：真实文件导入/解析、知识库成员任务和预处理服务后，准备脚本分别入队现有 `INDEX_CHUNK`、`INDEX_EMBED`、`INDEX_FTS` 持久 Worker，由激活 Worker 原子切换。主库与干扰库活动 IndexVersion 均为 `READY`。主库 2 输入产生 2 Chunk/2 Embedding/2 vector/2 FTS 映射；干扰库 1 输入各产物均为 1。任务检查点四阶段均 `COMPLETED`；FTS integrity/consistency 和向量 ID、哈希、512 维、有限值、单位范数核验通过。
-- 检索与浏览器：真实 `POST /api/v1/knowledge-bases/{id}/retrieval-tests` 在主库返回 `服务超时策略.txt`、含 `30 秒` 的摘录与 `line_start=1`；相似库只返回 `相似服务超时策略.txt` 及 `47 秒`。两个目标查询的门控结果都是 `insufficient / VECTOR_SIMILARITY_BELOW_THRESHOLD`，余弦相似度 `0.5867/0.6568`，未调整既有 `0.82` 门槛。回收站内容没有泄漏；资料外问题返回 `insufficient / NUMERIC_ANSWER_VALUE_NOT_FOUND`，没有答案或正式 Citation 字段。Chromium `1440x1000` 与 `390x844` 真实浏览器均通过键盘 Tab/Enter 提交和候选显示；E2E `2 passed`。截图位于 `%TEMP%\mindmate-ai-stage5-fixed-ready\evidence\`。
+- 检索与浏览器：真实 `POST /api/v1/knowledge-bases/{id}/retrieval-tests` 在主库返回 `服务超时策略.txt`、含 `30 秒` 的摘录与 `line_start=1`；相似库只返回 `相似服务超时策略.txt` 及 `47 秒`。两个目标查询的门控结果都是 `insufficient / VECTOR_SIMILARITY_BELOW_THRESHOLD`，余弦相似度 `0.5867/0.6568`，未调整既有 `0.82` 门槛。回收站内容没有泄漏；资料外问题返回 `insufficient / NUMERIC_ANSWER_VALUE_NOT_FOUND`，没有答案或正式 Citation 字段。Chromium `1440x1000` 与 `390x844` 真实浏览器均通过键盘 Tab/Enter 提交和候选显示；E2E `2 passed`。截图位于 `%TEMP%\\mindmate-ai-stage5-fixed-ready\\evidence\\`。
 - 验收：`uv run pytest` 为 `176 passed, 143 warnings`；`uv run ruff check src tests scripts`、`uv run pyright src tests scripts/prepare_stage5_fixed_ready.py`（0 errors）、`uv run python -m compileall -q src tests migrations scripts`、`uv run alembic heads`（`6b3e91a0c4d7`）通过。前端 `npm run typecheck`、`npm run lint`、`npm test -- --run`（21 passed）、`npm run build`、真实 Playwright E2E（2 passed）与 `git diff --check` 通过。
 - 未验证：几份固定资料不替代 Recall@10、10 万 Chunk 性能、门控阈值校准或 AC-KB-* 全量验收。无 DeepSeek、真实凭据、付费服务或个人资料；Citation owner 仍延期到阶段 6/7。
 
@@ -210,12 +210,12 @@
 
 - 状态：本批 `PASS`；阶段 5 继续 `PARTIAL`。进场本地与 `origin/feat/v1-bootstrap` SHA 均为 `3ef9a33adcdae5adb06e6a6835d44fdbbf84ed3d`，工作区干净。
 - 语料与标注：`docs/test-data/stage5-fixed-ready/evidence-gate-v1-queries.json` 保存独立人工真值，31 条核心样本及 2 条 `needs_review`。新增 6 份合成资料进入独立评测库；原第二十五批主库、相似库和浏览器数据保持独立。每项包含知识库范围、证据充分性、允许支持文件或拒答理由；复核项不进核心分母。
-- 构建与模型：离线复制并验证 BAAI `7999e1d3359715c523056ef9478215996d62a620` 与 Xenova ONNX `75c43b069aac4d136ba6bc1122f995fedcfd2781`，fingerprint `4d07bfc3eefa75de01924a4350eef08182c163b0060228410c3d882c9f07c6a5`。通过现有导入、持久预处理/Chunk/Embedding/FTS Worker 和激活器建立 READY；无 Mock 向量、下载或 DeepSeek 调用。原固定 READY 根被运行中的本地验收服务使用，因此本批使用同样有所有权标记的新隔离根 `%TEMP%\mindmate-ai-stage5-evidence-gate-v1`。
+- 构建与模型：离线复制并验证 BAAI `7999e1d3359715c523056ef9478215996d62a620` 与 Xenova ONNX `75c43b069aac4d136ba6bc1122f995fedcfd2781`，fingerprint `4d07bfc3eefa75de01924a4350eef08182c163b0060228410c3d882c9f07c6a5`。通过现有导入、持久预处理/Chunk/Embedding/FTS Worker 和激活器建立 READY；无 Mock 向量、下载或 DeepSeek 调用。原固定 READY 根被运行中的本地验收服务使用，因此本批使用同样有所有权标记的新隔离根 `%TEMP%\\mindmate-ai-stage5-evidence-gate-v1`。
 - 真实门控混淆表：TP `0`、FN `16`、FP `0`、TN `15`，核心样本共 `31`。16 个假阴性全部在 Top 8 找到允许支持文件，召回缺失型 FN `0`；顶层拒绝原因 `VECTOR_SIMILARITY_BELOW_THRESHOLD` 11 条、`NUMERIC_ANSWER_VALUE_NOT_FOUND` 3 条、复合问题拒绝 2 条。无资料不足放行或跨知识库候选；显式冲突 2 条、无答案 3 条、错误编号 1 条、回收站 2 条均正确拒答。2 条歧义项实际查询但从分母剔除。
 - 候选信号：首轮 Top 8 候选 101 条，Vector 命中 101，FTS 命中 2（均双路），Vector-only 99，FTS-only 0；两条 FTS 命中来自 `API?` / `ID?` 短词拒答项。所有排名、BM25 与余弦距离/相似度一致性校验通过。Top 8 相似度 min/median/max `0.3356/0.4835/0.7127`，可回答问题标注证据覆盖 `16/16`。
 - 离线敏感性：仅在已观察候选上模拟向量下限 `0.65`、`0.70`、`0.75`、`0.82`、`0.85`，混淆表均不变；不修改运行时 `0.82` 或其他规则。当前误拒没有证据支持仅靠调整余弦下限修复。
 - 重复性与写入：最终代码连续独立执行两次，每次双轮结果签名内部相同，两次签名均为 `c5d216439163910865464f3130edc1eafd18a445978c2d3ca42cafb0aabd4931`。评测查询前后数据计数保持 9 files / 4 knowledge bases / 24 tasks。报告只写入隔离根，不纳入 Git。
-- 命令：`uv run python scripts/evaluate_stage5_evidence_gate.py --data-dir "$env:TEMP\\mindmate-ai-stage5-evidence-gate-v1" --repeat 2`。脚本先运行 READY 准备流程，随后只通过本地只读检索 API 评测；任何 `unavailable`、模型离线校验失败、标注范围不符、资源计数变化或复跑不稳定均以失败退出。
+- 命令：`uv run python scripts/evaluate_stage5_evidence_gate.py --data-dir "$env:TEMP\\\\mindmate-ai-stage5-evidence-gate-v1" --repeat 2`。脚本先运行 READY 准备流程，随后只通过本地只读检索 API 评测；任何 `unavailable`、模型离线校验失败、标注范围不符、资源计数变化或复跑不稳定均以失败退出。
 - 验收：串行 `uv run pytest` `179 passed, 143 warnings`（2:22）；`uv run ruff check src tests scripts` 通过；`uv run pyright src tests scripts/prepare_stage5_fixed_ready.py scripts/evaluate_stage5_evidence_gate.py` 为 0 errors；compileall、Alembic head `6b3e91a0c4d7`、`git diff --check` 通过。没有前端改动，未运行前端门禁。
 - 下一开发批次唯一目标：以固定人工查询集测量中文自然问句的 FTS5 命中与 hard-negative 分布，先定位 FTS 候选召回问题，不调整证据门槛。
 
@@ -232,7 +232,7 @@
 - 真实 FTS 对比：旧基线固定集 Top 8 共 101 条，FTS 命中 2、Vector-only 99；修复后 Top 8 仍 101 条，FTS 命中 20、双路命中 20、Vector-only 81、FTS-only 0。主库直问、中文自然改写、演练系统标题/编号和 `CACHE-PROXY-K3` 均有实际 FTS 候选；错误数字/编号没有被 FTS 命中。
 - 核心集对照：31 条旧核心标注的 TP `0` / FN `16` / FP `0` / TN `15` 与第二十六批一致；16 条 FN 的人工支持文件均在 Top 8，仍被现有 `evidence-gate-v1` 严格拒答。两次独立真实 ONNX 运行各含两轮内部复跑，核心结果签名稳定。
 - Hard negatives：新增 `docs/test-data/stage5-fixed-ready/evidence-gate-v1-hard-negatives.json`，独立人工标注 7 条，覆盖同名跨库 30/47 秒、错误数字、相同术语无事实、相反表述和回收站。新增集 TN `7` / FP `0`，跨范围候选 `0`；空诊断库的失效索引检查两轮均为 `unavailable / INDEX_VERSION_NOT_AVAILABLE`、0 候选，不计入混淆表。
-- 复跑命令与隔离：`uv run python scripts/evaluate_stage5_evidence_gate.py --data-dir "$env:TEMP\\mindmate-ai-stage5-evidence-gate-v1-r27" --repeat 2`。旧评测目录因所有权标记缺失被拒绝接管，未删除或覆盖；新隔离根准备了真实 ONNX READY 数据并写出 `stage5-evidence-gate-v1-report.json`。报告不进入 Git，模型和临时数据库不提交。
+- 复跑命令与隔离：`uv run python scripts/evaluate_stage5_evidence_gate.py --data-dir "$env:TEMP\\\\mindmate-ai-stage5-evidence-gate-v1-r27" --repeat 2`。旧评测目录因所有权标记缺失被拒绝接管，未删除或覆盖；新隔离根准备了真实 ONNX READY 数据并写出 `stage5-evidence-gate-v1-report.json`。报告不进入 Git，模型和临时数据库不提交。
 - 质量门禁：串行 `uv run pytest` 为 `181 passed, 143 warnings`（约 2:26）；`uv run ruff check src tests scripts`、`uv run pyright src tests scripts/prepare_stage5_fixed_ready.py scripts/evaluate_stage5_evidence_gate.py`（0 errors）、compileall、Alembic head `6b3e91a0c4d7`、`git diff --check` 全部通过。未改前端，未运行前端门禁；没有 DeepSeek、真实凭据、付费服务或私人资料。
 - 下一开发批次唯一目标：针对仍保留的 16 条 FN 建立人工可解释的证据门控/答案质量校准方案，继续保持阶段 5 `PARTIAL`，不以调低拒答阈值或扩大 FTS 匹配范围换取表面通过。
 
@@ -244,7 +244,7 @@
 - 代码校准：默认 `min_vector_similarity=0.82` 保持不变。FTS 例外必须同时具备 FTS/向量 rank 不晚于 5、最终 rank 不晚于 3、双路信号、至少两个正文锚点或完整短语、数值/单位/编号语境通过及 `similarity >= 0.50`，记录 `FTS_EVIDENCE_VERIFIED_BELOW_VECTOR_THRESHOLD`。无 FTS 时只能走 `similarity >= 0.60`、至少两个语义锚点且覆盖率 `>=0.50` 的 vector-only 路径，记录 `SEMANTIC_EVIDENCE_VERIFIED_BELOW_VECTOR_THRESHOLD`。正文只命中标题、同文件在 Top 8、任意短词、纯余弦下降和无语境数字均不能放行。
 - 数值/语义与复合边界：显式数值必须以相同单位在锚点附近出现，错误值/单位使用 `QUERY_NUMERIC_VALUE_NOT_FOUND`；完整编号缺失使用 `QUERY_IDENTIFIER_NOT_IN_BODY`；否定断言与正文肯定事实冲突使用 `QUERY_CLAIM_CONTRADICTED`；仅有“不定义”不能回答“定义事实”的问题使用 `QUERY_NEGATIVE_FACT_ONLY`；复合问题按 `以及/并且/同时` 分解，任一子句无法在候选正文定位即 `COMPOSITE_OR_OPEN_LIST_QUESTION`；多文件数字/极性矛盾仍为 `CONFLICTING_EVIDENCE`。
 - 校准后真实结果：最终独立数据根 `%TEMP%\mindmate-ai-stage5-evidence-gate-v1-r28-final` 两轮内部复跑均为核心 `TP 16 / FN 0 / FP 0 / TN 15`，hard negatives 两轮均为 `TN 7 / FP 0`；`needs_review=2` 单列不进分母。两轮签名稳定，查询前后均为 `9 files / 4 knowledge bases / 24 tasks`；失效索引安全检查两轮均 `unavailable / INDEX_VERSION_NOT_AVAILABLE`、0 候选。正例最低实际余弦约 `0.5437`（编号问句，FTS 正文通过），唯一 vector-only 放行样本余弦约 `0.6013`；这些只是固定合成样本证据，不代表发布级 Recall@10 或问答质量。
-- 报告：`uv run python scripts/evaluate_stage5_evidence_gate.py --data-dir "$env:TEMP\\mindmate-ai-stage5-evidence-gate-v1-r28-final" --repeat 2`；JSON 报告在 `%TEMP%\\mindmate-ai-stage5-evidence-gate-v1-r28-final\\stage5-evidence-gate-v1-report.json`，不进入 Git。
+- 报告：`uv run python scripts/evaluate_stage5_evidence_gate.py --data-dir "$env:TEMP\\\\mindmate-ai-stage5-evidence-gate-v1-r28-final" --repeat 2`；JSON 报告在 `%TEMP%\\\\mindmate-ai-stage5-evidence-gate-v1-r28-final\\\\stage5-evidence-gate-v1-report.json`，不进入 Git。
 - 验收：定向门控/评测测试 `18 passed`；全量 `uv run pytest` `186 passed, 143 warnings`（142.37 秒）；Ruff 全目录通过；Pyright `0 errors, 0 warnings, 0 informations`；compileall、Alembic head `6b3e91a0c4d7`、`git diff --check` 通过。未改前端，因此未运行前端门禁；未调用 DeepSeek、真实凭据、付费服务或私人资料。
 - 下一开发批次唯一目标：等待真实 Chat/Learning owner 后建立服务端 Citation 绑定准入，继续不生成模型回答、不伪造 Citation owner；阶段 5 保持 `PARTIAL`。
 
@@ -331,3 +331,13 @@
 - 首次准备遇到脚本与运行时自动索引接力争抢同一幂等键；已局部修复并补定向回归，全新隔离目录首次准备 `PASS`。另一次与全量测试并行的浏览器复核返回 `MODEL_UNAVAILABLE`，独占复跑 `1 passed`，根因未证实，已如实保留在报告。
 - 门禁：后端定向 `4 passed`、全量 pytest 退出码 0、Ruff 全通过、Pyright 0 错误、Alembic `c3d4e5f6a7b8 (head)`；前端 `27 passed`、lint/typecheck/build 通过；浏览器 E2E 独占复核 `1 passed`，`git diff --check` 通过。详见 `docs/test-reports/stage-6-real-onnx-knowledge-chat-browser.md`。
 - 下一批唯一建议：封装可重复的本地求职 Demo 演示入口，并针对并发下偶发的 `MODEL_UNAVAILABLE` 建立可复现诊断；不默认启用真实 DeepSeek 或私人资料。
+
+### 第三十六批：求职 Demo 稳定启动与模型不可用诊断
+
+- 状态：本批代码与定向回归 `PASS`；Windows 现场演示闭环未在本环境重跑。阶段 5、阶段 6 的完整 V1 仍为 `PARTIAL`。进场分支 `feat/v1-bootstrap`，起点 `af8e9c7`，与 `origin/feat/v1-bootstrap` 一致。用户本机暂停前的未提交改动不在远端，本批按续接记录重新落地，没有覆盖默认用户数据。
+- 演示入口：新增 `scripts/demo.ps1`，复用 `prepare_stage5_fixed_ready.py` 和扩展后的 `scripts/dev.ps1`。默认数据根 `%TEMP%\mindmate-ai-stage36-job-demo`，API `127.0.0.1:8001`，页面 `127.0.0.1:5174`。Provider 固定 Mock。端口占用、固定模型缓存缺失或准备失败时停止，不换端口、不下载模型、不调用真实 DeepSeek。`%TEMP%` 可能被系统清理；所有权标记仍由准备脚本保护。
+- 正例正文：浏览器 E2E 现在按段落渲染规范化空白后，把助手消息区域的可见正文与 Operation / 持久消息逐字比较，刷新和重开后再比一次。负例断言可见拒答正文且该条回答没有引用按钮。SSE 只检查 HTTP 200 和 Operation 终态，不再读取可能失效的响应体。
+- `MODEL_UNAVAILABLE`：查询编码原先调用非阻塞 `ModelManager.status()`。锁被占用时状态是 `INSTALLING`，即使磁盘模型仍是 `READY`，编码器也会把它映射成 `MODEL_UNAVAILABLE`。知识库页会查询模型状态，而状态检查会在锁内校验约 95MB 模型，因此第一次提问可能撞上这把锁。定向测试让编码器在锁释放前保持等待，随后得到真实的 `MODEL_MISSING_OFFLINE`，不再得到 `MODEL_UNAVAILABLE`。修复是等待这把已有的锁，不是重试，也没有把不可用改成资料不足。
+- 第三十五批与全量测试并行的那次失败，以及暂停前第二次独占浏览器失败（Operation `01a0db04-bcbd-7687-ad8a-ab3e14be77bf`，request `01a0db04-bcaa-717f-bf8a-508f181ae279`）仍然单独保留。本环境没有那次 Windows 进程，也没有固定模型缓存，不能把本批单测说成已经回放了那两个现场 Operation。意外异常仍记为 `MODEL_UNAVAILABLE`，并写入 `uvicorn.error` 的安全字段。
+- 门禁：后端 `python -m pytest -q --disable-warnings` 退出码 0，227 项里 225 通过、2 跳过（固定模型缓存不存在、Windows Credential Manager）。Ruff 通过。本批改动的 Pyright 为 0 错误；Linux 全量 Pyright 仍有一处既有的 `ctypes.WinDLL` 报错，文件未改。前端 Vitest 27 通过，lint、typecheck、build 通过。`git diff --check` 通过。没有真实 ONNX 浏览器复跑，没有真实 Key 或付费调用。
+- 下一批唯一建议：在你当场确认后，用固定合成资料做一次手动真实 DeepSeek 小范围验收。默认 `.\scripts\demo.ps1` 继续使用 Mock，不要把真实 Key 放进自动化。
