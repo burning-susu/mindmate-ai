@@ -13,9 +13,11 @@ if TYPE_CHECKING:
 
 
 class RetrievalQueryEncoderError(RuntimeError):
-    def __init__(self, code: str) -> None:
+    def __init__(self, code: str, *, phase: str = "unknown", model_state: str = "unknown") -> None:
         super().__init__(code)
         self.code = code
+        self.phase = phase
+        self.model_state = model_state
 
 
 class LocalRetrievalQueryEncoder:
@@ -36,11 +38,13 @@ class LocalRetrievalQueryEncoder:
                         if status.state is ModelState.MISSING_OFFLINE
                         else "MODEL_UNAVAILABLE"
                     )
-                    raise RetrievalQueryEncoderError(code)
+                    raise RetrievalQueryEncoderError(
+                        code, phase="preflight", model_state=status.state.value
+                    )
                 try:
                     paths = self._manager.ensure_installed(allow_download=False)
                 except ModelManagerError as error:
-                    raise RetrievalQueryEncoderError(error.code) from None
+                    raise RetrievalQueryEncoderError(error.code, phase="verification") from None
 
                 from mindmate.ai.embeddings.adapter import (
                     EmbeddingAdapterError,
@@ -50,11 +54,11 @@ class LocalRetrievalQueryEncoder:
                 try:
                     self._adapter = OnnxEmbeddingAdapter(paths)
                 except EmbeddingAdapterError as error:
-                    raise RetrievalQueryEncoderError(error.code) from None
+                    raise RetrievalQueryEncoderError(error.code, phase="load") from None
 
             from mindmate.ai.embeddings.adapter import EmbeddingAdapterError
 
             try:
                 return self._adapter.embed_query(text)
             except EmbeddingAdapterError as error:
-                raise RetrievalQueryEncoderError(error.code) from None
+                raise RetrievalQueryEncoderError(error.code, phase="inference") from None

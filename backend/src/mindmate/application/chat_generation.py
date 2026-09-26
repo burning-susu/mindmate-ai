@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import logging
 import re
 import threading
 from collections.abc import Callable
@@ -15,6 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from uuid6 import uuid7
 
+from mindmate.ai.embeddings.manifest import MODEL_ARTIFACT_FINGERPRINT
 from mindmate.ai.providers.base import (
     ChatProviderPort,
     ChatRequest,
@@ -67,6 +69,7 @@ MAX_OUTPUT_CHARS = 64_000
 ACTIVE_OPERATION_STATES = {"QUEUED", "RUNNING", "STOPPING"}
 TERMINAL_OPERATION_STATES = {"COMPLETED", "FAILED", "STOPPED", "INTERRUPTED"}
 _SUBMISSION_LOCK = threading.RLock()
+_logger = logging.getLogger("uvicorn.error")
 
 
 @dataclass(frozen=True, slots=True)
@@ -996,11 +999,35 @@ class ChatGenerationWorker:
             try:
                 vector = self._retrieval_query_encoder_getter().embed_query(question)
             except RetrievalQueryEncoderError as error:
+                _logger.warning(
+                    "query encoding failed operation_id=%s request_id=%s index_version_id=%s "
+                    "model_fingerprint=%s exception_type=%s encoder_phase=%s model_state=%s error_code=%s",
+                    operation.operation_id,
+                    operation.request_id,
+                    scope.index_version_id,
+                    MODEL_ARTIFACT_FINGERPRINT,
+                    type(error).__name__,
+                    error.phase,
+                    error.model_state,
+                    error.code,
+                )
                 return GroundingOutcome(
                     error_code=error.code,
                     error_detail=self._retrieval_error_detail(error.code),
                 )
-            except Exception:
+            except Exception as error:
+                _logger.warning(
+                    "query encoding failed operation_id=%s request_id=%s index_version_id=%s "
+                    "model_fingerprint=%s exception_type=%s encoder_phase=%s model_state=%s error_code=%s",
+                    operation.operation_id,
+                    operation.request_id,
+                    scope.index_version_id,
+                    MODEL_ARTIFACT_FINGERPRINT,
+                    type(error).__name__,
+                    "unknown",
+                    "unknown",
+                    "MODEL_UNAVAILABLE",
+                )
                 return GroundingOutcome(
                     error_code="MODEL_UNAVAILABLE",
                     error_detail=self._retrieval_error_detail("MODEL_UNAVAILABLE"),

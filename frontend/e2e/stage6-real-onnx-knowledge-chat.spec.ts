@@ -1,5 +1,5 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
-import { expect, test } from '@playwright/test'
+import { expect, test, type Locator } from '@playwright/test'
 import process from 'node:process'
 
 const knowledgeBaseId = process.env.STAGE6_REAL_KB_ID
@@ -7,6 +7,12 @@ const expectedIndexVersionId = process.env.STAGE6_REAL_INDEX_VERSION_ID
 const evidenceDir = process.env.STAGE6_REAL_EVIDENCE_DIR
 const positiveQuestion = 'API 单次请求超时时间是多少秒？'
 const negativeQuestion = '南极冰芯中氮同位素的具体丰度百分比是多少？'
+
+async function assertVisibleAnswer(body: Locator, expected: string) {
+  expect(expected.trim()).not.toBe('')
+  await expect(body).toBeVisible()
+  expect((await body.innerText()).replace(/\s+/g, '')).toBe(expected.replace(/\s+/g, ''))
+}
 
 test.beforeEach(() => {
   test.skip(!knowledgeBaseId || !expectedIndexVersionId, '请先准备固定真实 READY 知识库。')
@@ -39,11 +45,13 @@ test('真实 READY 知识库问答、引用定位、刷新恢复与资料不足'
   const eventsResponse = await eventsResponsePromise
   expect(eventsResponse.status()).toBe(200)
   await expect(page.getByRole('button', { name: '打开引用 1' })).toBeVisible({ timeout: 30_000 })
-  expect(await eventsResponse.text()).toContain('COMPLETED')
   const firstOperation = await page.request.get(`/api/v1/ai-operations/${first.operation_id}`)
   expect(firstOperation.ok()).toBe(true)
   const firstResult = await firstOperation.json()
   expect(firstResult.status).toBe('COMPLETED')
+  expect(firstResult.assistant_message.content).toMatch(/^Mock response: .+/)
+  const firstAnswer = page.locator('.chat-message--assistant .chat-markdown').first()
+  await assertVisibleAnswer(firstAnswer, firstResult.assistant_message.content)
   expect(firstResult.answer_version.citations[0].index_version_id).toBe(expectedIndexVersionId)
   expect(firstResult.answer_version.citations[0].file_name).toBe('服务超时策略.txt')
   expect(firstResult.answer_version.citations[0].source_status).toBe('AVAILABLE')
@@ -63,11 +71,13 @@ test('真实 READY 知识库问答、引用定位、刷新恢复与资料不足'
   expect(persistedMessagesResponse.ok()).toBe(true)
   const persistedMessages = await persistedMessagesResponse.json()
   expect(persistedMessages.items[1].content).toBe(firstResult.assistant_message.content)
+  await assertVisibleAnswer(page.locator('.chat-message--assistant .chat-markdown').first(), persistedMessages.items[1].content)
   expect(persistedMessages.items[1].citations[0].citation_id).toBe(firstResult.answer_version.citations[0].citation_id)
   await page.getByRole('button', { name: '打开引用 1' }).click()
   await expect(page.getByRole('complementary', { name: '引用 1' })).toContainText('服务超时策略.txt')
   await page.goto(`/chat/${first.conversation_id}`)
   await expect(page.getByRole('button', { name: '打开引用 1' })).toBeVisible()
+  await assertVisibleAnswer(page.locator('.chat-message--assistant .chat-markdown').first(), persistedMessages.items[1].content)
 
   const second = await send(positiveQuestion)
   await expect(page.getByRole('button', { name: '打开引用 1' })).toHaveCount(2, { timeout: 30_000 })
@@ -84,6 +94,8 @@ test('真实 READY 知识库问答、引用定位、刷新恢复与资料不足'
   expect(negativeResult.error_code).toBe('EVIDENCE_INSUFFICIENT')
   expect(negativeResult.answer_version.citations).toHaveLength(0)
   expect(negativeResult.assistant_message.citations).toHaveLength(0)
+  await assertVisibleAnswer(page.locator('.chat-message--assistant .chat-markdown').last(), negativeResult.assistant_message.content)
+  await expect(page.locator('.chat-message--assistant').last().getByRole('button', { name: /打开引用/ })).toHaveCount(0)
   if (evidenceDir) await page.screenshot({ path: `${evidenceDir}/negative-insufficient.png`, fullPage: true })
   if (evidenceDir) writeFileSync(`${evidenceDir}/browser-operations.json`, JSON.stringify({
     knowledge_base_id: knowledgeBaseId,
