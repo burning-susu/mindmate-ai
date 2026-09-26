@@ -13,6 +13,7 @@ import SettingsPage from './pages/SettingsPage'
 import TrashPage from './pages/TrashPage'
 import ChatPage from './pages/ChatPage'
 import HistoryPage from './pages/HistoryPage'
+import HomePage from './pages/HomePage'
 import LearningNewPage from './pages/LearningNewPage'
 import LearningSessionPage from './pages/LearningSessionPage'
 import { queryClient } from './queryClient'
@@ -109,7 +110,7 @@ function AppShell() {
         </header>
         <div className="content-area">
           <Routes>
-            <Route path="/" element={<Placeholder title="欢迎回到 MindMate" description="阶段 0 工程基线已建立，下一步进入本地应用壳和安全运行验证。" />} />
+            <Route path="/" element={<HomePage />} />
             <Route path="/learning" element={<Placeholder title="学习" description="最小演示从已索引就绪的知识库进入，一次只做一题。打开本页不会创建学习会话。本地规则模拟演示，未调用真实 DeepSeek。" action={{ to: '/history?tab=learning', label: '学习历史' }} />} />
             <Route path="/learning/new" element={<LearningNewPage />} />
             <Route path="/learning/session/:sessionId" element={<LearningSessionPage />} />

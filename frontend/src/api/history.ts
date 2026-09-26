@@ -13,11 +13,11 @@ export async function listConversationHistory(cursor?: string): Promise<{
   return apiRequest(`/api/v1/history/conversations?${params}`)
 }
 
-export async function listLearningHistory(cursor?: string): Promise<{
+export async function listLearningHistory(cursor?: string, limit = 30): Promise<{
   items: LearningHistoryItem[]
   next_cursor?: string | null
 }> {
-  const params = new URLSearchParams({ limit: '30' })
+  const params = new URLSearchParams({ limit: String(limit) })
   if (cursor) params.set('cursor', cursor)
   return apiRequest(`/api/v1/history/learning-sessions?${params}`)
 }
