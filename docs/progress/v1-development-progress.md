@@ -101,4 +101,50 @@
 - 生命周期证据：固定 512 维测试覆盖范围外更近向量、同分、`k` 大于候选数、版本/配置隔离、共享文件、成员移出重加、知识库/文件回收站、永久清理后的空库、失效 Chunk/EmbeddingRecord、坏维度/未归一化向量和向量库异常；查询后状态仍为 `BUILDING`，活动版本为空。
 - 边界：现有向量表没有动态成员分区，查询采用全量 KNN + 先过滤后排序的精确 O(N) 策略；本批不宣称大规模性能，不新增迁移、API/OpenAPI、前端、公开检索、混合排序、索引激活、引用或 RAG。
 - 验收：本批后端全量 `112 passed`；Ruff、Pyright `0 errors`、compileall、`git diff --check` 通过；阶段 5 结论仍为 `PARTIAL`。本批结论：`PASS`。
-- 下一批唯一目标：实现同一 
+- 下一批唯一目标：实现同一 `IndexVersion` 内部 FTS5 与向量候选的合并去重，为后续 RRF 输入准备；不开放检索、不激活索引、不做引用或 RAG。
+
+### 第十六批：内部双路召回合并去重
+
+- FTS5：`Fts5Projection.match_version` 规范化 Unicode 查询，安全构造字段短语并丢弃未授权 FTS 运算符；真实 `bm25()` 按分数和 Chunk ID 稳定排序，过滤后限制为 Top 30，返回 `bm25` 与 `fts_rank`。中文单字/双字、英文、编号、空输入和特殊符号均有界且可解释。
+- 双路范围：新增 `HybridCandidateQuery`，在同一 `IndexVersion` 内调用 FTS5 Top 30 与 `VectorTopKQuery` Top 30；两路均复核 ACTIVE 成员、成员加入时间、文件解析/回收站、内容哈希、Chunk 有效性，向量路额外复核 EmbeddingConfig、EmbeddingRecord 和向量 hash。
+- 合并：新增 `merge_candidates`/`query_hybrid_candidates`，按 `chunk_id` 去重并保留 `fts_rank`/`bm25`、`vector_rank`/余弦距离/相似度、文件 ID、IndexVersion ID 和来源通道；单路字段保持 `NULL`，输出采用确定性排序，不执行 RRF、最终 Top 8、多样性或拒答。
+- 竞态与故障：双路前后比较版本、成员、文件、Chunk、EmbeddingRecord 的范围指纹；中途变化返回 `RETRIEVAL_SCOPE_CHANGED`。单路故障默认显式失败，明确允许降级时返回单路候选和稳定错误码，不伪造双路成功。
+- 边界：没有新增数据库迁移、公开 API、OpenAPI、前端或索引激活；向量路继续使用第十五批记录的精确 O(N) 过滤策略，未声明 10 万 Chunk 性能。
+- 验收：后端全量 `117 passed`；Ruff、Pyright `0 errors`、compileall、`git diff --check` 通过；真实 SQLite FTS5/sqlite-vec 集成测试覆盖双路同 Chunk、单路命中、成员中途变化、路由故障、中文/英文/编号/特殊符号/空查询和稳定去重。第十六批结论 `PASS`，阶段 5 继续 `PARTIAL`。
+- 下一批唯一目标：实现候选集 RRF 融合、精确命中奖励和确定性多样性排序；不激活索引、不开放用户检索、不做引用或 RAG。
+
+### 第十七批：内部 RRF 与多样性排序
+
+- 状态：本批 `PASS`；阶段 5 仍为 `PARTIAL`。
+- 新增 `rank_candidates` 纯函数和 `HybridRankingConfig`。算法版本为 `rrf-exact-diversity-v1`，默认 RRF 常量 `60`；仅计算有效 FTS/vector rank 的 `1/(60 + rank)` 贡献，单路缺失仍保留原 `NULL` rank/分数。
+- 精确匹配以 NFKC、casefold 和标点/空白/符号分隔规范化完整查询及文件显示名/heading/content；完整短语奖励 `0.002`，完整词项每项 `0.0004`，总奖励最多 `0.004`。拉丁/数字词项检查 ASCII 词边界；二字中文词项只给四分之一奖励。命中词、文件标题/Chunk 标题/正文位置和原因码均输出用于审计。
+- 多样性采用确定性贪心排序：同文件候选按此前选中数量施加每项 `0.001` 的软惩罚（最多 2 项）；同文件相邻序号的三元字符集合重叠系数达到 `0.6` 时额外惩罚 `0.0025`；总惩罚封顶 `0.0035`。不按文件或重叠关系硬删除候选。
+- 并列顺序依次按 RRF 分数、精确奖励、最佳原始 rank、双路命中优先、FTS rank、vector rank、`file_id`、Chunk 序号、`chunk_id` 决定；多样性每轮重新计算惩罚。最多输出 Top 8，并保留原始两路分数/rank、融合分、奖励、惩罚、原因和显式降级状态。
+- 检索用例仅在复用既有范围校验后加载有效文件显示名、Chunk 正文、标题路径和序号，再核对版本/成员/文件/Chunk/EmbeddingRecord 指纹（含文件显示名）。发生范围变化仍直接返回 `RETRIEVAL_SCOPE_CHANGED`。不新增迁移、公开 API/OpenAPI、前端、索引激活、证据阈值、引用或 RAG。
+- 固定离线样本覆盖 FTS-only、Vector-only、双路同 Chunk、跨文件覆盖、相邻高重叠 Chunk、完整编号和模糊短词、大小写/全半角/标点、同分与反转输入顺序、空输入、Top 8、显式单路故障降级及范围变化。真实 SQLite FTS5 + sqlite-vec 集成测试断言排序元数据及 BUILDING 状态不变；不将样本视作最终 Recall@10 验收。
+- 验收：后端全量串行 `122 passed`；Ruff `All checks passed`；Pyright `0 errors, 0 warnings, 0 informations`；`python -m compileall -q src tests migrations` 通过；`git diff --check` 通过。未运行阶段 4/5 UI E2E（无前端/API 改动）；未调用 DeepSeek、真实凭据、付费外部调用或用户资料。
+- 下一开发批次唯一目标：对内部 Top 8 实现配置化的证据充分性阈值判定和严格拒答结果；继续不公开检索、不激活索引、不生成回答或引用。
+
+### 第十八批：内部证据充分性判定与严格拒答
+
+- 状态：本批 `PASS`；阶段 5 仍为 `PARTIAL`。
+- 实现：新增 `evidence-gate-v1` 配置化纯判定规则，并接入 `HybridCandidateQuery.search_and_assess_with_status`，在范围复核和内部 Top 8 排序后评估候选。结构化结果区分 `supported`、`insufficient`、`unavailable`，包含规则版本、问题类型、触发原因、Chunk/File/IndexVersion 身份和逐候选可审计信号。
+- 放行条件：默认余弦相似度至少 `0.82` 且 `vector_score == 1 - vector_distance`（绝对误差不超过 `1e-5`）；融合排名不晚于 3、原始 FTS/vector rank 均不晚于 5；正文至少命中两个问题锚点且覆盖率至少 `0.60`，或正文含至少 5 个规范化字符的完整查询短语；包含编号时正文必须命中完整编号；数值问题还必须在正文锚点附近找到数值。标题、RRF 分、精确奖励和多样性调整不能绕过这些门槛。
+- 来源与拒答：默认最少一个独立支持文件，重复 Chunk 按 `file_id` 去重，因此单文件有效证据可通过。同一问题存在多个子问题/开放列举或强候选出现数值/肯定否定冲突时整体 `insufficient`，不做部分回答。`insufficient` 仅产生固定本地提示和资料建议；路由错误/显式降级、未请求向量通道、索引未就绪、版本或范围变化为 `unavailable`，保留错误码，不返回资料不足文案。
+- 语义边界：`supported` 只代表候选可进入后续来源快照、引用绑定和生成流程，不证明正文在语义上蕴含答案。规则阈值为保守开发初值；固定样本通过不代表阈值已由验收集校准，也不等同 Recall@10 或问答质量验收。
+- 固定离线矩阵：精确定义问题与核心实体保留的合理改写预期并实测 `supported`；空结果、语义相近但缺少数值答案、弱/未知余弦值、标题命中、错误编号、高精确奖励、重复同文件切片、只覆盖部分子问题及多来源冲突预期并实测 `insufficient`；单文件有效证据预期并实测 `supported`；未请求向量通道、通道失败、跨库版本和检索中途范围变化预期并实测 `unavailable`。8 个纯离线用例均通过，不含私人资料。
+- SQLite 集成：真实 SQLite FTS5 + sqlite-vec 路径从 Top 30 双路召回、范围校验、RRF/Top 8 到证据判定；实测支持结果只保留候选身份，不生成引用编号；所有候选文件属于当前范围；`IndexVersion` 仍为 `BUILDING` 且 `active_index_version_id` 为空。
+- 边界：没有数据库迁移、公开检索/API、OpenAPI、前端、DeepSeek/真实模型调用或索引激活。阶段 5 仍需索引产物完整性复核与原子激活、服务端来源快照/引用绑定、公开检索/对话前端及基于验收集的阈值/质量评估。
+- 验收：串行后端 `133 passed`；`uv run ruff check src tests` 通过；Pyright `0 errors, 0 warnings, 0 informations`；`uv run python -m compileall -q src tests migrations` 与 `git diff --check` 通过。额外 `uv run ruff check .` 检出 14 条未修改的 Alembic migration lint 项。全量测试曾有一次既有 Embedding Worker 互斥用例失败；单项重跑及随后全量串行重跑均通过，最终 `133 passed`。无前端/API 改动，未跑 UI E2E；未调用 DeepSeek、真实凭据、付费接口或真实用户资料。
+- 下一开发批次唯一目标：为已完成索引版本实现产物完整性复核与原子激活，继续不开放用户检索。
+
+### 第十九批：索引产物完整性复核与原子激活
+
+- 状态：本批 `PASS`；阶段 5 继续 `PARTIAL`。Alembic 新增 `e4a7810c9b62`，只为 `IndexVersion` 增加内部 `activation_error_code`；没有公开 API/OpenAPI 或前端改动。
+- 候选准入：`IndexActivationWorker` 扫描终态任务链候选；逐项核对知识库当前成员集合与冻结的 `IndexVersionInput`/解析快照、准备文件的解析状态/回收站/内容哈希/解析修订、Chunking/Embedding 配置重算指纹、阶段任务检查点和候选版本新旧顺序。存在新任务或尚未终结的阶段时等待；新版本已出现时旧候选不能激活，待其任务链终结后标为 `SUPERSEDED`。临时回收站/解析处理中输入等待既有恢复或永久清理流程。
+- 产物规则：对每个已切片输入校验有效 Chunk 集和逐文件计数、Chunk 正文 SHA-256；对账 EmbeddingRecord 的 Chunk/配置/向量 hash、向量库 identity、SQLite `quick_check`、元数据/向量 rowid 一致、维度 512、有限单位向量及完整输入所需记录；执行 FTS5 `integrity-check` 与映射/倒排行对账，并将版本映射精确匹配到预期 Chunk/文件/解析修订/配置/hash。全部高成本检查在激活事务外完成，不重新运行 Embedding。
+- 空库与部分失败：零成员、零计数且无派生产物的版本终结为 `EMPTY`，清除旧活动指针并保留旧版本物理数据；输入中的 `FAILED/SKIPPED` 被排除检索，至少一个输入的 Chunk/Embedding/FTS 均完整才可激活，知识库标记 `PARTIAL`；没有完整可用输入则候选 `FAILED`。失败原因写入逐输入阶段状态或 `activation_error_code`，首次构建失败时知识库为 `FAILED`。
+- 原子切换：事务外对账后开始短事务，先按 `KnowledgeBase.row_version + active_index_version_id` CAS 占位并取得 SQLite 写锁，再复核活动/候选状态、最新版本、当前成员与输入指纹、任务检查点和配置指纹。成功时同一事务把新版本设为 `READY`/写入 `activated_at`，旧活动版本设为 `RETIRED`/写入 `retired_at`，切换活动指针、知识库/成员可用状态；失败或 CAS 变化回滚，不暴露半激活，不删除旧版向量或 FTS 产物。
+- 恢复与可见性：应用启动后周期扫描 `BUILDING` 候选；在提交前崩溃会从持久状态重新复核，事务提交后的重复执行幂等返回。内部向量与混合查询只读取当前 `active_index_version_id` 指向的 `READY` 版本，FTS/向量均限制到完全可用成员；候选 `BUILDING`、非活动的 `RETIRED` 和 `FAILED/SUPERSEDED` 均不可通过应用查询层读取。没有公开检索 API。
+- 固定离线验证覆盖首次成功、活动旧版与新候选隔离、切换后仅一个 `READY`、旧版物理产物保留、缺 Chunk/向量/FTS/错误维度拒绝、未终结任务等待、成员变化与新候选抢占、部分失败过滤、空知识库/空文本、重复恢复、并发重复激活、进程中断和提交故障回滚。所有用例使用 SQLite、固定 512 维向量和离线任务，不含用户文件。
+- 验收：串行 `uv run pytest` 为 `147 passed`；`uv run ruff check src tests` 全过；Pyright `0 errors, 0 warnings, 0 informations`；`uv run python -m compileall -q src tests migrations`、`uv run alembic heads`（`e4a7810c9b62`）和 `git diff --check` 通过。`uv run ruff check .` 仍报 14 条既有 Alembic m
