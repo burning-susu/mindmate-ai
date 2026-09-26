@@ -53,3 +53,7 @@ $env:MINDMATE_DATA_DIR=Join-Path $env:TEMP 'mindmate-ai-stage35-knowledge-chat-d
 ## 下一批唯一建议
 
 对求职 Demo 最有价值的是把已验证的固定 READY 数据准备、启动和浏览器演示封装成一条可重复的本地演示入口，并对并发负载下出现的 `MODEL_UNAVAILABLE` 做可复现诊断；保持真实 DeepSeek 与私人资料排除在默认演示外。
+
+## 第三十六批续记
+
+第三十六批没有改写上面的第三十五批结论。演示入口、正例正文断言和模型锁诊断见 [`stage-36-demo-stability.md`](stage-36-demo-stability.md)。阶段 5、阶段 6 的完整 V1 仍是 `PARTIAL`。浏览器回答仍是 Mock 正文，不是真实 DeepSeek 作答。
