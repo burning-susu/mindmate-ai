@@ -32,4 +32,9 @@ def create_session_factory(engine: Engine) -> sessionmaker:
 
 def quick_check(engine: Engine) -> str:
     with engine.connect() as connection:
-        return str(connection.execute(text("PRAGMA quick_check")).scalar_one())
+        results = [str(row[0]) for row in connection.execute(text("PRAGMA quick_check"))]
+    if not results:
+        return "unknown"
+    if all(result == "ok" for result in results):
+        return "ok"
+    return "; ".join(results)

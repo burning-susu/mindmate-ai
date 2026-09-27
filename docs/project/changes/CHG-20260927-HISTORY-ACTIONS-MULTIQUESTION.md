@@ -1,6 +1,6 @@
 # CHG-20260927-HISTORY-ACTIONS-MULTIQUESTION
 
-状态：`IMPLEMENTED_UNCOMMITTED`
+状态：`IMPLEMENTED_PUSHED`
 
 日期：2026-09-27
 
@@ -24,5 +24,5 @@
 
 ## 证据
 
-实现与验证记录见 `docs/test-reports/stage-59-history-actions-multiquestion.md`。前端全量测试、typecheck、lint、build、Ruff、compileall 和 OpenAPI/生成类型同步通过；后端 pytest 因当前沙箱无法创建仓库虚拟环境 Python，保留为 `BLOCKED`，不宣称通过。真实浏览器点击保持 `PARTIAL`。当前 Git 暂存因 `.git/index.lock` `Permission denied` 阻断，代码和文档为 `UNCOMMITTED / NOT_PUSHED`。
+实现与第 59 批当时的验证记录见 `docs/test-reports/stage-59-history-actions-multiquestion.md`；该报告保留当时后端解释器和 Git 暂存阻断的原始记录。第 60 批使用预装 Python 3.12.14 加载仓库依赖补跑了受影响回归，6 个关键测试文件共 `29 passed`；当前实现已由 `16e3316be62768b6ab73695db872bcb9fddc721d` 推送。真实浏览器点击仍为 `PARTIAL`，真实 Provider 仍为 `PENDING`。
 

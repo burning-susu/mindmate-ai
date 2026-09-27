@@ -28,6 +28,7 @@ from mindmate.infrastructure.models import (
 )
 from mindmate.main import create_app
 from test_stage5_source_snapshots import _seed_active_index
+from test_stage7_learning_session import ORIGIN
 from test_stage8_conversation_history import _client as _chat_client
 from test_stage8_conversation_history import _headers, _message_count, _send, _wait
 from test_stage8_learning_history import _client as _learning_client
@@ -247,10 +248,10 @@ def test_multistep_learning_search_keeps_each_question_location(tmp_path: Path) 
     settings = _multi_settings(tmp_path)
     app = create_app(settings)
     with TestClient(app, base_url="http://127.0.0.1") as client:
-        client.post("/api/v1/system/session", headers={"Origin": "http://127.0.0.1"})
+        client.post("/api/v1/system/session", headers={"Origin": ORIGIN})
         factory = cast(Any, client.app).state.session_factory
         data = _seed_active_index(
-            factory, settings, content=MULTI_FACTS[0], display_name="多题定位资料.txt"
+            factory, settings, content=MULTI_FACTS[0], display_name="服务超时策略.txt"
         )
         rows = _add_fact_chunks(factory, data, MULTI_FACTS)
         _install_query(client, _SequenceQuery(rows))
@@ -303,7 +304,7 @@ def test_history_projection_migration_is_reversible(tmp_path: Path) -> None:
     command.upgrade(config, "head")
     engine = create_engine(f"sqlite:///{settings.database_path.as_posix()}")
     with engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "b55c0e1a8d27"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "d17a5e9c4b20"
         assert connection.scalar(
             text("SELECT status FROM history_search_state WHERE state_key = 'projection'")
         ) == "PENDING"

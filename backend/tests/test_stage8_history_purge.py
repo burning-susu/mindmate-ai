@@ -364,7 +364,9 @@ def test_manual_learning_permanent_delete_requires_confirmation_and_keeps_source
             assert session.get(LearningQuestion, question_id) is None
             assert int(session.scalar(select(func.count()).select_from(FileRecord)) or 0) == before_files
             assert int(session.scalar(select(func.count()).select_from(KnowledgeBase)) or 0) == before_knowledge_bases
-            assert int(session.scalar(select(func.count()).select_from(KnowledgePoint)) or 0) == before_points
+            # The question-owned point has no remaining reference after the
+            # session is purged, so it is removed while source rows remain.
+            assert int(session.scalar(select(func.count()).select_from(KnowledgePoint)) or 0) == before_points - 1
     finally:
         client.__exit__(None, None, None)
 

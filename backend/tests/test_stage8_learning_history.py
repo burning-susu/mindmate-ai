@@ -52,11 +52,19 @@ def _client(tmp_path: Path) -> tuple[TestClient, Any]:
     return client, data
 
 
-def _create(client: TestClient, knowledge_base_id: str, key: str) -> dict[str, Any]:
+def _create(
+    client: TestClient,
+    knowledge_base_id: str,
+    key: str,
+    *,
+    target_question_count: int = 1,
+) -> dict[str, Any]:
+    body = _body(knowledge_base_id, key)
+    body["target_question_count"] = target_question_count
     created = client.post(
         "/api/v1/learning-sessions",
         headers=_headers(key),
-        json=_body(knowledge_base_id, key),
+        json=body,
     )
     assert created.status_code == 200, created.text
     return created.json()
@@ -109,7 +117,7 @@ def test_learning_history_sorts_pages_and_hides_answers(tmp_path: Path) -> None:
         item = body["items"][0]
         assert item["answered_count"] == 1
         assert item["target_question_count"] == 1
-        assert item["status"] == "IN_PROGRESS"
+        assert item["status"] == "COMPLETED"
         assert item["source_status"] == "AVAILABLE"
         assert item["scope_name"]
         assert item["scope_file_count"] == 1

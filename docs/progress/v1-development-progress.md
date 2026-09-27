@@ -540,4 +540,12 @@
 - 契约：文件关联知识库接口新增明确的 `FileKnowledgeBaseResponse` / `FileKnowledgeBaseListResponse` OpenAPI 响应，返回知识库 `status`；`FileDetailPage.tsx` 使用生成类型和状态标签，不再读取 `index_state`。没有新增数据库迁移或第二套删除 API。
 - 多题：历史投影仍以每道 `LearningQuestion.question_id` 为定位 ID；新增回归覆盖三道题分别搜索可见题干、已提交答案或已发布点评，确认定位链接可恢复具体题目/反馈；未提交答案键和私有解释的隐藏测试保持有效。
 - 验证：前端 Vitest `15 files / 66 tests passed`，typecheck、lint、build 通过；Ruff、compileall、OpenAPI/生成类型同步、`git diff --check` 通过。仓库后端 pytest 因 `.venv` 解释器路径不可访问无法启动，记为环境阻断，不宣称后端 pytest 通过。浏览器未重试第 58 批已记录的审批/EPERM 阻断，真实页面验收和真实 Provider 仍 `PENDING/PARTIAL`。
-- 交接：报告见 `docs/test-reports/stage-59-history-actions-multiquestion.md`。当前改动待逐文件审阅、中文目的式提交和推送；阶段 7/8 其他未完成项（独立备份 Worker、费用账单对账、人工浏览器确认等）不因本批自动测试通过而改变状态。
+- 交接：报告见 `docs/test-reports/stage-59-history-actions-multiquestion.md`。第 59 批实现已由 `16e3316be62768b6ab73695db872bcb9fddc721d` 推送；报告中当时的 `UNCOMMITTED / NOT_PUSHED` 只作为历史证据保留。阶段 7/8 其他未完成项（独立备份 Worker、费用账单对账、人工浏览器确认等）不因本批自动测试通过而改变状态。
+
+### 第六十批：宿主验收入口与阶段 8 Demo 证据收口
+
+- 状态：后端关键回归 `PASS`（`29 passed`）；前端全量门禁 `PASS`（Vitest `66 passed`、typecheck、lint、build）；宿主浏览器点击仍 `PARTIAL`，真实 Provider 仍 `PENDING`；阶段 7/8 完整 V1 继续 `PARTIAL`。本批因 `.git/index.lock` `Permission denied` 暂为 `UNCOMMITTED / NOT_PUSHED`，未改 ACL 或绕过 Git 索引。
+- 修复：并发同键 `next-question` 在 CAS 失败后重新读取已持久化题目，避免错误 412；SQLite `quick_check` 支持多行结果聚合。回归夹具只校准当前 Origin、来源文件名、Alembic head、会话状态和未引用知识点清理断言，不放宽安全边界。
+- 证据：预装 Python 3.12.14 加载仓库 `.venv` 依赖，仓库内隔离 `basetemp` 执行 `test_stage8_history_purge.py`、`test_stage8_history_fulltext.py`、`test_stage57_learning_multistep.py`、历史查询/会话/学习历史文件，共 `29 passed`；Ruff、定向 Pyright、compileall、Alembic head `d17a5e9c4b20`、PowerShell AST/生命周期自检和 `git diff --check` 通过。全目录 Pyright 既有 43 条 Worker/备份测试类型问题未纳入本批范围。
+- 宿主入口：新增 `docs/demo/阶段60宿主验收入口.md`，复用 `scripts/demo.ps1`、`scripts/dev.ps1` 和 `backend/tests/stage56_online_browser_server.py`，提供隔离数据根、端口、Mock/Test-only Provider、停止方式、health/ready/revision 检查、页面走查及脱敏报告模板。报告见 `docs/test-reports/stage-60-host-acceptance.md`。
+- 未完成：本沙箱没有真实页面点击、刷新、重启或截图，因此 `HISTORY_PURGE_BROWSER`、`LEARNING_ONLINE_BROWSER`、`DEMO_REGRESSION_THIS_BATCH` 不改为 `PASS`；不执行真实 DeepSeek/OpenAI 付费请求。

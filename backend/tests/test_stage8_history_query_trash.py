@@ -191,7 +191,12 @@ def test_learning_query_trash_restore_and_source_block(tmp_path: Path) -> None:
     client, data = _learning_client(tmp_path)
     try:
         pending = _create(client, data.knowledge_base_id, "query-pending")
-        answered = _create(client, data.knowledge_base_id, "query-answered")
+        answered = _create(
+            client,
+            data.knowledge_base_id,
+            "query-answered",
+            target_question_count=3,
+        )
         feedback = _submit_first_option(client, answered, "query-answered-submit")
         other = _create(client, data.knowledge_base_id, "query-other")
         factory = cast(Any, client.app).state.session_factory

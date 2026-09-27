@@ -419,6 +419,23 @@ def create_next_learning_question(
         session.rollback()
         session.expire(record)
         session.refresh(record)
+        # A concurrent same-key request may have committed the question after
+        # this transaction's initial snapshot. Re-check the durable idempotency
+        # row before turning the lost CAS into a false version conflict.
+        replay = session.scalar(
+            select(LearningQuestion).where(
+                LearningQuestion.learning_session_id == learning_session_id,
+                LearningQuestion.generated_request_id == client_request_id,
+            )
+        )
+        if replay is not None:
+            if replay.generated_request_hash != request_hash:
+                raise LearningCommandError(
+                    "IDEMPOTENCY_KEY_REUSED",
+                    "同一个请求 ID 不能用于不同的下一题请求。",
+                    409,
+                )
+            return record
         if (
             record.pending_question_request_id == client_request_id
             and record.pending_question_request_hash == request_hash

@@ -4,10 +4,10 @@
 
 - 当前开发分支：`feat/v1-bootstrap`
 - 当前远程提交：以 `git ls-remote --heads origin feat/v1-bootstrap` 为准；本文件随本批次收口提交推送
-- 最后更新时间：`2026-09-27`
+- 最后更新时间：`2026-09-28`
 - 当前开发阶段：阶段 8 开发中，状态 `PARTIAL`；阶段 5、阶段 6、阶段 7 继续 `PARTIAL`
 - 交付顺序：Demo 首先完成，完整 V1 以后精进。求职 Demo 优先文件整理/导入、建库、带来源问答、最小学习陪练和重启恢复。Demo 可用性与完整 V1 阶段状态分开报告。
-- 当前批次状态：第五十九批补齐历史回收站对话/学习记录的确认式永久删除 UI、3 题历史命中定位回归和文件详情知识库状态契约；第五十八批报告与进度文档已经由提交 `82cb14d` 推送，原报告中的 `UNCOMMITTED / NOT_PUSHED` 只保留为当时证据，不再作为当前状态。第五十九批前端全量 `66 passed`、typecheck/lint/build、Ruff、compileall、OpenAPI/类型同步和 `git diff --check` 通过；仓库 pytest 因 `.venv` 指向当前沙箱不可访问的 Python 解释器而 `BLOCKED`，未把静态检查当作后端测试通过。永久删除和多题定位的真实浏览器点击仍为 `PARTIAL/PENDING`；真实 Provider 冒烟仍 `PENDING`；阶段 7、8 完整 V1 仍 `PARTIAL`。详见 `docs/test-reports/stage-59-history-actions-multiquestion.md`。
+- 当前批次状态：第六十批已补跑第 59 批后端关键回归并建立 Windows 宿主验收入口。第 59 批实现已由 `16e3316be62768b6ab73695db872bcb9fddc721d` 推送；第 59 批报告中的 `UNCOMMITTED / NOT_PUSHED` 只保留为当时证据。第六十批后端关键 pytest `29 passed`（使用预装 Python 3.12.14 加载仓库依赖和隔离 basetemp），前端 `66 passed`、typecheck/lint/build、Ruff、定向 Pyright、compileall、Alembic head `d17a5e9c4b20` 和 `git diff --check` 通过。宿主浏览器没有在本沙箱实际点击，`HISTORY_PURGE_BROWSER`、`LEARNING_ONLINE_BROWSER`、`DEMO_REGRESSION_THIS_BATCH` 继续 `PARTIAL`，`REAL_PROVIDER_SMOKE` 继续 `PENDING`；阶段 7、8 完整 V1 仍 `PARTIAL`。第六十批当前因 `.git/index.lock` `Permission denied` 为 `UNCOMMITTED / NOT_PUSHED`，未改 ACL 或绕过 Git 索引。详见 `docs/test-reports/stage-60-host-acceptance.md` 和 `docs/demo/阶段60宿主验收入口.md`。
 
 ## 已完成阶段
 
