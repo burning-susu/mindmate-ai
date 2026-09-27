@@ -37,6 +37,7 @@ EXCLUDED_TOP_LEVEL = frozenset(
         "tasks",
         "previews",
         "vectors",
+        "recovery-points",
         ".env",
     }
 )

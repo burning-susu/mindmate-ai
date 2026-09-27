@@ -19,6 +19,7 @@ import { Link } from 'react-router-dom'
 import { useState } from 'react'
 
 import { ApiError } from '../api/client'
+import { BackupRestorePanel } from './BackupRestorePanel'
 import {
   createBackup,
   downloadBackup,
@@ -816,17 +817,10 @@ export default function SettingsPage() {
             >
               {createBackupMutation.isPending ? '正在创建备份…' : '创建备份'}
             </button>
-            <button
-              className="quiet-button"
-              type="button"
-              disabled
-              title="恢复能力尚未独立验收，当前版本保持禁用"
-            >
-              恢复当前数据（未就绪）
-            </button>
           </div>
+          <BackupRestorePanel enabled={Boolean(backupsQuery.data?.restore_available)} />
           <p className="settings-hint">
-            恢复入口保持禁用，直到恢复流程完成独立校验。创建过程使用 SQLite 在线备份 API 与显式清单，失败不会留下可误用的完整包。
+            创建过程使用 SQLite 在线备份 API 与显式清单。恢复在重启后切换数据目录，失败会回到旧数据。
           </p>
         </section>
       </div>

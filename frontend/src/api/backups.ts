@@ -119,3 +119,96 @@ export function formatBackupSize(value: number) {
 export function isBackupInProgress(status: string) {
   return status === 'CREATING' || status === 'RUNNING' || status === 'QUEUED'
 }
+
+export type RestoreSummary = {
+  created_at?: string | null
+  backup_format_version?: string
+  app_version?: string | null
+  schema_version?: string
+  schema_plan?: string
+  file_count?: number
+  total_size?: number
+  includes?: Record<string, boolean>
+  excludes?: string[]
+  overwrite_scope?: string
+  warnings?: string[]
+  executable?: boolean
+  block_reason?: string | null
+}
+
+export type RestoreStatus = {
+  restore_available: boolean
+  phase: string
+  precheck_id?: string | null
+  execution_id?: string | null
+  upload_id?: string | null
+  expires_at?: string | null
+  archive_sha256?: string | null
+  summary?: RestoreSummary | null
+  restart_required: boolean
+  writes_frozen: boolean
+  error_code?: string | null
+  error_detail?: string | null
+  index_outcome?: string | null
+  provider_reconfirm_required: boolean
+  recovery_point_available: boolean
+  recovery_point_id?: string | null
+  confirm_phrase: string
+  overwrite_scope: string
+}
+
+export function getRestoreStatus(signal?: AbortSignal) {
+  return apiRequest<RestoreStatus>('/api/v1/backups/restore/status', { signal })
+}
+
+export async function uploadRestoreArchive(file: File) {
+  await ensureLocalSession()
+  const body = new FormData()
+  const filename = file.name.toLowerCase().endsWith('.mindmate-backup') ? file.name : `${file.name}.mindmate-backup`
+  body.append('archive', file, filename)
+  const response = await fetch('/api/v1/backups/restore/uploads', {
+    method: 'POST',
+    body,
+    credentials: 'same-origin',
+    cache: 'no-store',
+    headers: {
+      'X-Request-ID': uuidv7(),
+      'Idempotency-Key': uuidv7(),
+    },
+  })
+  if (!response.ok) {
+    const problem = (await response.json()) as ProblemDetail
+    throw new ApiError(response.status, problem)
+  }
+  return (await response.json()) as { upload_id: string; archive_sha256: string; byte_size: number }
+}
+
+export function precheckRestore(uploadId: string) {
+  return apiRequest<RestoreStatus>('/api/v1/backups/restore/prechecks', {
+    method: 'POST',
+    body: JSON.stringify({ upload_id: uploadId }),
+  })
+}
+
+export function executeRestore(precheckId: string, confirmPhrase: string, idempotencyKey: string) {
+  return apiRequest<RestoreStatus>('/api/v1/backups/restore/executions', {
+    method: 'POST',
+    headers: { 'Idempotency-Key': idempotencyKey },
+    body: JSON.stringify({
+      precheck_id: precheckId,
+      confirm_full_replace: true,
+      confirm_phrase: confirmPhrase,
+    }),
+  })
+}
+
+export function cancelRestore() {
+  return apiRequest<RestoreStatus>('/api/v1/backups/restore/cancel', { method: 'POST', body: '{}' })
+}
+
+export function acknowledgeRestoreProvider() {
+  return apiRequest<RestoreStatus>('/api/v1/backups/restore/provider-reconfirm', {
+    method: 'POST',
+    body: JSON.stringify({ confirm_reconfigure: true }),
+  })
+}

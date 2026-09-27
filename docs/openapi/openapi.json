@@ -349,6 +349,245 @@
         }
       }
     },
+    "/api/v1/backups/restore/uploads": {
+      "post": {
+        "tags": [
+          "backups"
+        ],
+        "summary": "Upload Restore Archive",
+        "operationId": "upload_restore_archive_api_v1_backups_restore_uploads_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_restore_archive_api_v1_backups_restore_uploads_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestoreUploadResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/backups/restore/prechecks": {
+      "post": {
+        "tags": [
+          "backups"
+        ],
+        "summary": "Precheck Restore Archive",
+        "operationId": "precheck_restore_archive_api_v1_backups_restore_prechecks_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestorePrecheckRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Precheck Restore Archive Api V1 Backups Restore Prechecks Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/backups/restore/executions": {
+      "post": {
+        "tags": [
+          "backups"
+        ],
+        "summary": "Execute Restore",
+        "operationId": "execute_restore_api_v1_backups_restore_executions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestoreExecuteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Execute Restore Api V1 Backups Restore Executions Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/backups/restore/cancel": {
+      "post": {
+        "tags": [
+          "backups"
+        ],
+        "summary": "Cancel Restore Endpoint",
+        "operationId": "cancel_restore_endpoint_api_v1_backups_restore_cancel_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Cancel Restore Endpoint Api V1 Backups Restore Cancel Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/backups/restore/status": {
+      "get": {
+        "tags": [
+          "backups"
+        ],
+        "summary": "Restore Status Endpoint",
+        "operationId": "restore_status_endpoint_api_v1_backups_restore_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Restore Status Endpoint Api V1 Backups Restore Status Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/backups/restore/recovery-points": {
+      "get": {
+        "tags": [
+          "backups"
+        ],
+        "summary": "Recovery Points Endpoint",
+        "operationId": "recovery_points_endpoint_api_v1_backups_restore_recovery_points_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Recovery Points Endpoint Api V1 Backups Restore Recovery Points Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/backups/restore/provider-reconfirm": {
+      "post": {
+        "tags": [
+          "backups"
+        ],
+        "summary": "Acknowledge Restore Provider",
+        "operationId": "acknowledge_restore_provider_api_v1_backups_restore_provider_reconfirm_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestoreReconfirmRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Acknowledge Restore Provider Api V1 Backups Restore Provider Reconfirm Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/backups/{backup_id}": {
       "get": {
         "tags": [
@@ -5604,6 +5843,20 @@
         ],
         "title": "Body_create_file_import_api_v1_file_imports_post"
       },
+      "Body_upload_restore_archive_api_v1_backups_restore_uploads_post": {
+        "properties": {
+          "archive": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "Archive"
+          }
+        },
+        "type": "object",
+        "required": [
+          "archive"
+        ],
+        "title": "Body_upload_restore_archive_api_v1_backups_restore_uploads_post"
+      },
       "BudgetUpdateRequest": {
         "properties": {
           "enabled": {
@@ -9545,6 +9798,76 @@
           "file"
         ],
         "title": "ReprocessResponse"
+      },
+      "RestoreExecuteRequest": {
+        "properties": {
+          "precheck_id": {
+            "type": "string",
+            "title": "Precheck Id"
+          },
+          "confirm_full_replace": {
+            "type": "boolean",
+            "title": "Confirm Full Replace",
+            "default": false
+          },
+          "confirm_phrase": {
+            "type": "string",
+            "title": "Confirm Phrase"
+          }
+        },
+        "type": "object",
+        "required": [
+          "precheck_id",
+          "confirm_phrase"
+        ],
+        "title": "RestoreExecuteRequest"
+      },
+      "RestorePrecheckRequest": {
+        "properties": {
+          "upload_id": {
+            "type": "string",
+            "title": "Upload Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "upload_id"
+        ],
+        "title": "RestorePrecheckRequest"
+      },
+      "RestoreReconfirmRequest": {
+        "properties": {
+          "confirm_reconfigure": {
+            "type": "boolean",
+            "title": "Confirm Reconfigure",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "RestoreReconfirmRequest"
+      },
+      "RestoreUploadResponse": {
+        "properties": {
+          "upload_id": {
+            "type": "string",
+            "title": "Upload Id"
+          },
+          "archive_sha256": {
+            "type": "string",
+            "title": "Archive Sha256"
+          },
+          "byte_size": {
+            "type": "integer",
+            "title": "Byte Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "upload_id",
+          "archive_sha256",
+          "byte_size"
+        ],
+        "title": "RestoreUploadResponse"
       },
       "RetrievalTestCandidateResponse": {
         "properties": {

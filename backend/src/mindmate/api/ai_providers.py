@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from mindmate.ai.providers.base import ProviderRequestError
 from mindmate.ai.providers.deepseek import DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, DeepSeekChatProvider
 from mindmate.api.files import get_session
+from mindmate.application.local_restore import restore_provider_reconfirm_required
 from mindmate.application.provider_configuration import (
     DEEPSEEK_SECRET_REFERENCE,
     EXTERNAL_AI_CONSENT_VERSION,
@@ -223,6 +224,12 @@ def test_ai_provider_connection(
             "连接测试前必须确认会向 DeepSeek 发送固定测试文本并产生极小 API 用量。",
             400,
         )
+    if restore_provider_reconfirm_required(session):
+        raise AiProviderApiError(
+            "RESTORE_PROVIDER_RECONFIRM_REQUIRED",
+            "数据已恢复。请先确认重新配置，当前不会读取密钥或自动外发。",
+            409,
+        )
     try:
         assert_external_budget_allows(session)
     except BudgetRejected as exc:
@@ -257,6 +264,12 @@ def set_ai_generation_mode(
     payload: GenerationModeRequest,
     session: Session = Depends(get_session),
 ) -> dict[str, Any]:
+    if payload.mode == "deepseek" and restore_provider_reconfirm_required(session):
+        raise AiProviderApiError(
+            "RESTORE_PROVIDER_RECONFIRM_REQUIRED",
+            "数据已恢复。确认重新配置前保持 Mock，不会切换到在线外发。",
+            409,
+        )
     set_generation_mode(session, payload.mode)
     return _status(request, session, _credential_store(request))
 

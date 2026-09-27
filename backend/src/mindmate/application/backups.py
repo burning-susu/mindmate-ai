@@ -20,6 +20,7 @@ from mindmate.application.local_backup import (
     read_schema_version,
     verify_backup_archive,
 )
+from mindmate.application.local_restore import RESTORE_FLOW_AVAILABLE
 from mindmate.application.tasks import create_task
 from mindmate.config import Settings
 from mindmate.infrastructure.models import BackgroundTask, Backup, BackupEntry, new_id
@@ -79,7 +80,7 @@ def backup_public_view(row: Backup) -> dict[str, Any]:
         "unencrypted_warning": True,
         "warning_message": UNENCRYPTED_WARNING,
         "download_available": download_available,
-        "restore_available": False,
+        "restore_available": RESTORE_FLOW_AVAILABLE,
         "scope": {
             "database_snapshot": True,
             "content_objects": True,

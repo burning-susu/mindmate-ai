@@ -350,6 +350,10 @@
 .settings-backup-item__meta { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; color: var(--muted); font-size: 11px; }
 .settings-backup-item__meta strong { color: var(--text); font-size: 12px; }
 .settings-backup-flag { color: #8a6d1d; font-weight: 650; }
+.settings-restore { display: grid; gap: 10px; margin-top: 12px; }
+.settings-restore__phase { margin: 0; font-weight: 650; }
+.settings-restore__file, .settings-restore__phrase { display: grid; gap: 6px; font-size: 13px; }
+.settings-restore input[type="text"], .settings-restore__phrase input { width: 100%; }
 .settings-checkline { display: flex; align-items: flex-start; gap: 9px; color: var(--text); font-size: 12px; line-height: 1.55; cursor: pointer; }
 .settings-checkline input { flex: 0 0 auto; width: 16px; height: 16px; margin: 1px 0 0; accent-color: var(--primary); }
 .settings-checkline--probe { padding: 10px 12px; border: 1px solid #ead8aa; border-radius: 7px; background: #fffaf0; }

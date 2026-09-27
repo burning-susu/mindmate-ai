@@ -101,10 +101,13 @@ def problem(
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings: Settings = app.state.settings
-    settings.ensure_data_dirs()
     lock = SingleInstanceLock(settings.runtime_dir / "instance.lock")
     lock.acquire()
     try:
+        from mindmate.application.local_restore import apply_pending_restore
+
+        apply_pending_restore(settings)
+        settings.ensure_data_dirs()
         alembic_config = Config(str(settings.alembic_ini))
         alembic_config.attributes["settings"] = settings
         command.upgrade(alembic_config, "head")
@@ -323,6 +326,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "幂等键无效",
                 "幂等键格式或长度不符合要求。",
             )
+        from mindmate.application.local_restore import restore_writes_frozen
+
+        if restore_writes_frozen(app_settings) and request.method not in {"GET", "HEAD", "OPTIONS"}:
+            if request.url.path not in {
+                "/api/v1/system/session",
+                "/api/v1/backups/restore/cancel",
+                "/api/v1/backups/restore/executions",
+            }:
+                return problem(
+                    request,
+                    423,
+                    "RESTORE_WRITES_FROZEN",
+                    "恢复等待重启",
+                    "恢复已确认。重启完成前不能写入文件、任务、聊天或索引。",
+                )
         response = await call_next(request)
         response.headers["X-Request-ID"] = request_id
         if idempotency_key is not None:

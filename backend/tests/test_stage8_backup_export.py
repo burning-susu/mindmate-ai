@@ -103,7 +103,7 @@ def test_empty_database_backup_create_verify_download(tmp_path: Path) -> None:
         assert body["encrypted"] is False
         assert body["unencrypted_warning"] is True
         assert body["contains_user_files_and_history"] is True
-        assert body["restore_available"] is False
+        assert body["restore_available"] is True
         assert body["download_available"] is True
         assert body["file_count"] >= 1  # database snapshot at minimum
         assert "api_key" not in created.text.lower() or "api_key" not in json.dumps(body).lower()

@@ -32,6 +32,7 @@ from mindmate.application.hybrid_search import (
     HybridCandidate,
     HybridCandidateQuery,
 )
+from mindmate.application.local_restore import restore_provider_reconfirm_required
 from mindmate.application.provider_configuration import read_consent, read_generation_mode
 from mindmate.application.retrieval_test_queries import RetrievalQueryEncoderError
 from mindmate.application.source_snapshots import (
@@ -1350,11 +1351,18 @@ class ChatGenerationWorker:
         try:
             if getattr(provider, "requires_external_transfer", True):
                 with self._session_factory() as gate_session:
+                    reconfirm_required = restore_provider_reconfirm_required(gate_session)
                     consent = read_consent(gate_session)
                     try:
                         assert_external_budget_allows(gate_session)
                     except BudgetRejected as exc:
                         raise ProviderRequestError(exc.code, exc.detail, 409) from exc
+                if reconfirm_required:
+                    raise ProviderRequestError(
+                        "RESTORE_PROVIDER_RECONFIRM_REQUIRED",
+                        "数据已恢复。请先确认重新配置，当前不会读取密钥或自动外发。",
+                        409,
+                    )
                 if not consent.get("accepted"):
                     raise ProviderRequestError(
                         "EXTERNAL_AI_CONSENT_REQUIRED",

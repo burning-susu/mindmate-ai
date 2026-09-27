@@ -128,6 +128,9 @@ export interface components {
     "tag_ids"?: string | null;
     "knowledge_base_id"?: string | null
   };
+  "Body_upload_restore_archive_api_v1_backups_restore_uploads_post": {
+    "archive": string
+  };
   "BudgetUpdateRequest": {
     "enabled"?: boolean;
     "hard_stop_usd"?: string | null;
@@ -731,6 +734,22 @@ export interface components {
     "task_id": string;
     "file": components["FileItemResponse"]
   };
+  "RestoreExecuteRequest": {
+    "precheck_id": string;
+    "confirm_full_replace"?: boolean;
+    "confirm_phrase": string
+  };
+  "RestorePrecheckRequest": {
+    "upload_id": string
+  };
+  "RestoreReconfirmRequest": {
+    "confirm_reconfigure"?: boolean
+  };
+  "RestoreUploadResponse": {
+    "upload_id": string;
+    "archive_sha256": string;
+    "byte_size": number
+  };
   "RetrievalTestCandidateResponse": {
     "chunk_id": string;
     "file_id": string;
@@ -915,6 +934,27 @@ export interface operations {
   };
   "GET /api/v1/backups": {
     operationId: "list_backups_endpoint_api_v1_backups_get"
+  };
+  "POST /api/v1/backups/restore/uploads": {
+    operationId: "upload_restore_archive_api_v1_backups_restore_uploads_post"
+  };
+  "POST /api/v1/backups/restore/prechecks": {
+    operationId: "precheck_restore_archive_api_v1_backups_restore_prechecks_post"
+  };
+  "POST /api/v1/backups/restore/executions": {
+    operationId: "execute_restore_api_v1_backups_restore_executions_post"
+  };
+  "POST /api/v1/backups/restore/cancel": {
+    operationId: "cancel_restore_endpoint_api_v1_backups_restore_cancel_post"
+  };
+  "GET /api/v1/backups/restore/status": {
+    operationId: "restore_status_endpoint_api_v1_backups_restore_status_get"
+  };
+  "GET /api/v1/backups/restore/recovery-points": {
+    operationId: "recovery_points_endpoint_api_v1_backups_restore_recovery_points_get"
+  };
+  "POST /api/v1/backups/restore/provider-reconfirm": {
+    operationId: "acknowledge_restore_provider_api_v1_backups_restore_provider_reconfirm_post"
   };
   "GET /api/v1/backups/{backup_id}": {
     operationId: "get_backup_endpoint_api_v1_backups__backup_id__get"
