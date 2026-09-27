@@ -409,6 +409,16 @@
 - 状态：`PARTIAL`
 - 第四十三批完成对话历史的只读找回，第四十四批完成学习历史的只读找回，第四十五批完成首页最近学习卡片，第四十六批完成首页四个快捷操作，第四十七批完成首页最近知识库、最近文件和最近对话，第四十八批完成首页未回收资料计数和后台任务只读摘要，第四十九批完成历史组合查询和可恢复软删除，第五十批完成历史正文安全索引、命中定位，以及首页排队/运行/失败画面，第五十一批完成历史回收站到期安全清理与后台任务记录按期限清理，第五十二批完成本机设置增强与一致性本地备份导出，第五十三批完成该备份包的完整恢复，第五十四批完成对话侧的 DeepSeek / OpenAI 手动选择和 OpenAI 适配器测试，第五十五批复测求职 Demo，并把同一选择接到新建的一题学习。诊断、多题定位、真实浏览器删除确认、独立备份 Worker、周期账单对账、在线学习的浏览器实点和两家直播通仍未验收。阶段 8 仍为 `PARTIAL`。
 
+### 第五十八批：逐题练习稳定验收与第 56/57 批交付收口
+
+- 交付：第 56/57 批代码已经由 `057e0bbc2065480b7e5d17b6bc09411e0d9c32d1` 提交并推送；本批进场时本地和远端 SHA 相同、工作区干净，没有重复提交旧代码。第 56/57 批历史报告保留原始状态。
+- 状态：新隔离库迁移 `PASS`，Alembic head `d17a5e9c4b20`；`LEARNING_MULTIQUESTION_API`、`BACKEND_FIXTURE` `PASS`；`LEARNING_ONLINE_BROWSER`、`DEMO_REGRESSION_THIS_BATCH` `PARTIAL`；`REAL_PROVIDER_SMOKE` `PENDING`；`STAGE7_FULL_V1`、`STAGE8_FULL_V1` `PARTIAL`。
+- 启动诊断：当前沙箱无法启动 `backend/.venv/Scripts/python.exe` 指向的 Python 3.12.11（Windows `Access denied`）。预装 Python 3.12.14 加载仓库现有依赖后，隔离迁移完成且 TestClient lifespan 启停成功；旧 Stage 56 测试端点 health=`ok`、知识库 `READY`、假传输计数为 0。没有发现足以支持产品代码修复的复现证据，不触碰默认个人库。
+- 验证：相关后端 `22 passed`；Ruff 通过、改动文件 Pyright `0 errors`；Vitest `63 passed`；typecheck、lint、build 通过；OpenAPI 3.1 `108 schemas / 116 operations` 与生成类型一致；`git diff --check` 通过。主 JS `508.86 kB` 的既有 Vite chunk 提示继续记录。
+- 页面与 Demo：内嵌浏览器和普通 Chrome 标签页创建都被审批服务 `404` 阻止，动作未执行；没有页面点击或截图。真实在线学习页与本批完整求职 Demo 浏览器回归保持 `PARTIAL`，真实 Provider 保持 `PENDING`。详见 `docs/test-reports/stage-58-multistep-demo-acceptance.md`，其中提供了普通 Windows PowerShell 的隔离 Demo 手工步骤。
+- 阶段边界：Demo 自动化证据不等于页面验收；完整阶段 7、8 继续 `PARTIAL`。
+- Git：本批报告与进度文档因 `.git/index.lock` 权限拒绝仍未提交或推送；逐文件清单和建议的中文提交信息见验收报告。
+
 ### 第五十五批：演示复测与一题在线学习
 
 - 状态：`DEMO_REGRESSION` `PASS`。`LEARNING_PROVIDER_QUESTION` `PASS`（MockTransport）。`LEARNING_PROVIDER_FEEDBACK` `PASS`（MockTransport）。`LEARNING_ONLINE_BROWSER` `PARTIAL`。`OPENAI_LIVE_SMOKE` `PENDING`。`DEEPSEEK_LIVE_SMOKE` `PENDING`。`STAGE7_FULL_V1` `PARTIAL`。第五十三批 `BACKUP_RESTORE` 仍 `PASS`。阶段 5–8 仍为 `PARTIAL`。第四十二批历史 Demo `PASS` 单独保留。进场 SHA `f6f527c09073d5e7c962677bf443a5d53bf791a8`。

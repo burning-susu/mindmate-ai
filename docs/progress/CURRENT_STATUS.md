@@ -7,7 +7,7 @@
 - 最后更新时间：`2026-09-27`
 - 当前开发阶段：阶段 8 开发中，状态 `PARTIAL`；阶段 5、阶段 6、阶段 7 继续 `PARTIAL`
 - 交付顺序：Demo 首先完成，完整 V1 以后精进。求职 Demo 优先文件整理/导入、建库、带来源问答、最小学习陪练和重启恢复。Demo 可用性与完整 V1 阶段状态分开报告。
-- 当前批次状态：第五十七批已接续第五十六批工作区，实现 1–5 题逐题练习（默认 1）、新题幂等/并发门禁、结构化历史结果与主动结束；`LEARNING_MULTIQUESTION_API/UI` 自动化为 `PASS`。`LEARNING_ONLINE_BROWSER` 为 `PARTIAL`：隔离服务启动诊断在 Alembic 后退出，未进入页面/截图。`DEMO_REGRESSION_THIS_BATCH` 为 `PARTIAL`，完整求职 Demo 浏览器流程未重跑。`REAL_PROVIDER_SMOKE` 仍 `PENDING`；`STAGE7_FULL_V1`、`STAGE8_FULL_V1` 仍 `PARTIAL`。第五十六批与本批改动均未提交：普通 Git 写检查创建 `.git/index.lock` 时被当前沙箱以 `Permission denied` 拒绝，未改权限、未推送。详见 `docs/test-reports/stage-57-learning-multistep.md`。
+- 当前批次状态：第五十八批核实第五十六/五十七批代码已提交并推送至 `057e0bbc2065480b7e5d17b6bc09411e0d9c32d1`；全新隔离库迁移至 `d17a5e9c4b20`，后端核心回归 `22 passed`、前端 `63 passed`、typecheck/lint/build、Ruff、改动文件 Pyright 与 OpenAPI/类型同步通过。应用 lifespan 与旧测试服务 API 健康，但当前沙箱无法运行仓库虚拟环境 Python；浏览器标签页创建又被自动审批服务 `404` 阻止，因此 `LEARNING_ONLINE_BROWSER`、本批 `DEMO_REGRESSION` 均为 `PARTIAL`。真实 Provider 冒烟仍 `PENDING`；阶段 7、8 完整 V1 仍 `PARTIAL`。本批报告与进度文档因 `.git/index.lock` 权限拒绝为 `UNCOMMITTED / NOT_PUSHED`，未改 ACL。详见 `docs/test-reports/stage-58-multistep-demo-acceptance.md`。
 
 ## 已完成阶段
 
