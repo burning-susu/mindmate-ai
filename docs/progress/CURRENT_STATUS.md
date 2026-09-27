@@ -7,7 +7,7 @@
 - 最后更新时间：`2026-09-27`
 - 当前开发阶段：阶段 8 开发中，状态 `PARTIAL`；阶段 5、阶段 6、阶段 7 继续 `PARTIAL`
 - 交付顺序：Demo 首先完成，完整 V1 以后精进。求职 Demo 优先文件整理/导入、建库、带来源问答、最小学习陪练和重启恢复。Demo 可用性与完整 V1 阶段状态分开报告。
-- 当前批次状态：第五十三批完成第 52 批备份包的完整恢复闭环。`BACKUP_CREATE` 浏览器创建与离线校验为 `PASS`；`BACKUP_RESTORE` 为 `PASS`（预检、双重确认、进程重启后切换、旧数据恢复点、索引不可检索、Key 不外发）。独立备份 Worker 仍为 `PARTIAL`。周期硬限额完整账单对账仍为 `PARTIAL`。第 51 批历史手动永久删除 UI 与两类浏览器确认点击仍 `PENDING`；多题定位仍 `PARTIAL`。阶段 8 仍为 `PARTIAL`，不因恢复闭环标成完成。求职 Demo 维持第四十二批 `PASS`。真实 DeepSeek 仍为 `PENDING`。阶段 5、6、7 的完整 V1 仍为 `PARTIAL`。详细证据见 `docs/test-reports/stage-53-backup-restore.md`。
+- 当前批次状态：第五十四批加上 OpenAI Chat Completions 适配器和设置里的手动三选一。`OPENAI_ADAPTER` 为 `PASS`（仅 `OPENAI_ADAPTER_TESTED`）。`SETTINGS_MANUAL_SELECTION` 与普通对话 `CHAT_ROUTING` 为 `PASS`。`LEARNING_PROVIDER_GENERATION` 与 `OPENAI_LIVE_SMOKE` 为 `PENDING`。第五十三批 `BACKUP_RESTORE` 仍为 `PASS`。独立备份 Worker、周期官方账单对账仍为 `PARTIAL`。第 51 批历史手动永久删除 UI 与两类浏览器确认点击仍 `PENDING`；多题定位仍 `PARTIAL`。阶段 5–8 的完整 V1 仍为 `PARTIAL`。求职 Demo 维持第四十二批 `PASS`。真实 DeepSeek 仍为 `PENDING`。详细证据见 `docs/test-reports/stage-54-openai-provider-selection.md`。
 
 ## 已完成阶段
 
@@ -327,3 +327,10 @@
 - 恢复：设置页选择备份包后先预检，不改当前数据。用户勾选覆盖说明并输入“覆盖当前全部本地数据”后才确认。确认只写恢复点和重启标记；Windows 上 SQLite 仍打开时不切换目录。下次进程启动、连接关闭后做两阶段目录切换。失败回到旧数据。旧向量隔离，索引在真实重建前不可检索。恢复后保持 Mock，重新确认前不外发。按备份 ID 的旧恢复接口仍返回 501。
 - 浏览器：隔离根 `%TEMP%\mindmate-ai-stage53-a` 与 `%TEMP%\mindmate-ai-stage53-b`，API `127.0.0.1:8013`，页面 `127.0.0.1:5183`，Provider 固定 Mock。根 A 点击创建并下载；根 B 预检、确认、退出进程、再次启动后看到“恢复完成 · 本机已保留恢复点”。合成文件、知识库、对话和学习主题回到 alpha，beta 不在。根外哨兵文件未变。详细证据见 `docs/test-reports/stage-53-backup-restore.md`。
 - 下一批：阶段 8 剩余项另开对话。不把阶段 8、独立备份 Worker、周期账单对账、第 51 批浏览器删除确认标成完成。
+
+## 第五十四批交接
+
+- 本批状态：`OPENAI_ADAPTER` `PASS`（MockTransport，不是直播通）；`SETTINGS_MANUAL_SELECTION` `PASS`；普通对话 `CHAT_ROUTING` `PASS`。`LEARNING_PROVIDER_GENERATION` `PENDING`，出题仍是 `learning-demo-fixture-v1`。`OPENAI_LIVE_SMOKE` `PENDING`。第五十三批恢复闭环仍 `PASS`。独立备份 Worker 与周期官方账单对账仍 `PARTIAL`。第 51 批浏览器删除确认仍 `PENDING`；多题定位仍 `PARTIAL`。阶段 5–8 仍为 `PARTIAL`。求职 Demo 维持第四十二批 `PASS`。真实 DeepSeek 仍为 `PENDING`。进场分支 `feat/v1-bootstrap`，进场 SHA `d5b27a8c5a0c1618208c937d7ba568deb978e6a1`。
+- 选择：设置页三选一为 Mock、DeepSeek、OpenAI GPT-6 Sol。切换不联网。两家 Key、同意和探测分开。在线失败不改选另一家。每次新的 AiOperation 冻结当时的模式、服务、请求模型和费用确认。没有新增迁移。
+- 浏览器：隔离根 `%TEMP%\mindmate-ai-stage54-provider`，API `127.0.0.1:8024`，页面 `127.0.0.1:5184`。OpenAI 无同意、有同意但无 Key，以及 DeepSeek 无同意，都由后端拒绝且不改用另一家。Mock 普通对话可发送、刷新和重启后仍在。学习新建页仍写明出题是本地演示规则。没有真实 Key，也没有真实 OpenAI 或 DeepSeek 请求。详细证据见 `docs/test-reports/stage-54-openai-provider-selection.md`。
+- 下一批：学习出题如要改用已选服务，另开对话。不把直播通、学习模型出题、阶段 5–8 或第 42 批 Demo 重跑标成完成。
