@@ -5,6 +5,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 
 import { apiRequest } from '../api/client'
 import { isVersionConflict, type FileItem, type FolderItem, type TagItem } from '../api/files'
+import type { components } from '../api/generated/openapi'
 
 type Preview = {
   preview_available: boolean
@@ -19,6 +20,20 @@ const statusLabels: Record<string, string> = {
   PARSE_FAILED: '解析失败',
   IN_TRASH: '回收站',
   STORAGE_MISSING: '文件缺失',
+}
+
+const knowledgeBaseStatusLabels: Record<string, string> = {
+  EMPTY: '空知识库',
+  PREPARING: '索引处理中',
+  READY: '索引就绪',
+  PARTIAL: '部分可用',
+  FAILED: '索引失败',
+  NEEDS_REBUILD: '需要重建索引',
+  IN_TRASH: '回收站',
+}
+
+function knowledgeBaseStatusLabel(status: string | null | undefined): string {
+  return knowledgeBaseStatusLabels[status ?? ''] ?? (status || '状态未知')
 }
 
 export default function FileDetailPage() {
@@ -49,7 +64,7 @@ export default function FileDetailPage() {
   const tagsQuery = useQuery({ queryKey: ['tags'], queryFn: () => apiRequest<{ items: TagItem[] }>('/api/v1/tags') })
   const relationsQuery = useQuery({
     queryKey: ['file-knowledge-bases', fileId],
-    queryFn: () => apiRequest<{ items: Array<{ knowledge_base_id: string; name: string; index_state: string }> }>(`/api/v1/files/${fileId}/knowledge-bases`),
+    queryFn: () => apiRequest<{ items: components['FileKnowledgeBaseResponse'][] }>(`/api/v1/files/${fileId}/knowledge-bases`),
     enabled: Boolean(fileId),
   })
   const onConflict = (error: unknown) => {
@@ -122,7 +137,7 @@ export default function FileDetailPage() {
           <label className="detail-field">文件夹<select value={file.folder_id ?? ''} onChange={(event) => patchMutation.mutate({ folder_id: event.target.value || null })}><option value="">未分类</option>{foldersQuery.data?.items.map((folder) => <option key={folder.folder_id} value={folder.folder_id}>{folder.name}</option>)}</select></label>
           <div className="detail-tags">{tagsQuery.data?.items.map((tag) => <button type="button" className={`tag-chip ${activeTagIds.has(tag.tag_id) ? 'tag-chip--active' : ''}`} key={tag.tag_id} onClick={() => tagMutation.mutate({ tagId: tag.tag_id, active: activeTagIds.has(tag.tag_id) })}>{tag.name}</button>)}</div>
           <h2>元数据</h2>
-          <dl className="metadata-list"><div><dt>原始文件名</dt><dd>{file.display_name}</dd></div><div><dt>内容哈希</dt><dd>{file.content_hash}</dd></div><div><dt>最近更新</dt><dd>{new Date(file.updated_at).toLocaleString('zh-CN')}</dd></div><div><dt>解析状态</dt><dd>{statusLabels[file.status] ?? file.status}</dd></div>{file.parse_failure_stage && <div><dt>失败阶段</dt><dd>{file.parse_failure_stage}</dd></div>}{file.parse_error_id && <div><dt>错误 ID</dt><dd>{file.parse_error_id}</dd></div>}<div><dt>重试次数</dt><dd>{file.parse_retry_count}</dd></div><div><dt>所在知识库</dt><dd>{relationsQuery.data?.items.map((item) => `${item.name}（${item.index_state}）`).join('、') || '暂无'}</dd></div></dl>
+          <dl className="metadata-list"><div><dt>原始文件名</dt><dd>{file.display_name}</dd></div><div><dt>内容哈希</dt><dd>{file.content_hash}</dd></div><div><dt>最近更新</dt><dd>{new Date(file.updated_at).toLocaleString('zh-CN')}</dd></div><div><dt>解析状态</dt><dd>{statusLabels[file.status] ?? file.status}</dd></div>{file.parse_failure_stage && <div><dt>失败阶段</dt><dd>{file.parse_failure_stage}</dd></div>}{file.parse_error_id && <div><dt>错误 ID</dt><dd>{file.parse_error_id}</dd></div>}<div><dt>重试次数</dt><dd>{file.parse_retry_count}</dd></div><div><dt>所在知识库</dt><dd>{relationsQuery.data?.items.map((item) => `${item.name}（${knowledgeBaseStatusLabel(item.status)}）`).join('、') || '暂无'}</dd></div></dl>
         </section>
       </div>
     </section>

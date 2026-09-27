@@ -7,7 +7,7 @@
 - 最后更新时间：`2026-09-27`
 - 当前开发阶段：阶段 8 开发中，状态 `PARTIAL`；阶段 5、阶段 6、阶段 7 继续 `PARTIAL`
 - 交付顺序：Demo 首先完成，完整 V1 以后精进。求职 Demo 优先文件整理/导入、建库、带来源问答、最小学习陪练和重启恢复。Demo 可用性与完整 V1 阶段状态分开报告。
-- 当前批次状态：第五十八批核实第五十六/五十七批代码已提交并推送至 `057e0bbc2065480b7e5d17b6bc09411e0d9c32d1`；全新隔离库迁移至 `d17a5e9c4b20`，后端核心回归 `22 passed`、前端 `63 passed`、typecheck/lint/build、Ruff、改动文件 Pyright 与 OpenAPI/类型同步通过。应用 lifespan 与旧测试服务 API 健康，但当前沙箱无法运行仓库虚拟环境 Python；浏览器标签页创建又被自动审批服务 `404` 阻止，因此 `LEARNING_ONLINE_BROWSER`、本批 `DEMO_REGRESSION` 均为 `PARTIAL`。真实 Provider 冒烟仍 `PENDING`；阶段 7、8 完整 V1 仍 `PARTIAL`。本批报告与进度文档因 `.git/index.lock` 权限拒绝为 `UNCOMMITTED / NOT_PUSHED`，未改 ACL。详见 `docs/test-reports/stage-58-multistep-demo-acceptance.md`。
+- 当前批次状态：第五十九批补齐历史回收站对话/学习记录的确认式永久删除 UI、3 题历史命中定位回归和文件详情知识库状态契约；第五十八批报告与进度文档已经由提交 `82cb14d` 推送，原报告中的 `UNCOMMITTED / NOT_PUSHED` 只保留为当时证据，不再作为当前状态。第五十九批前端全量 `66 passed`、typecheck/lint/build、Ruff、compileall、OpenAPI/类型同步和 `git diff --check` 通过；仓库 pytest 因 `.venv` 指向当前沙箱不可访问的 Python 解释器而 `BLOCKED`，未把静态检查当作后端测试通过。永久删除和多题定位的真实浏览器点击仍为 `PARTIAL/PENDING`；真实 Provider 冒烟仍 `PENDING`；阶段 7、8 完整 V1 仍 `PARTIAL`。详见 `docs/test-reports/stage-59-history-actions-multiquestion.md`。
 
 ## 已完成阶段
 
@@ -341,3 +341,12 @@
 - 演示：隔离根 `%TEMP%\mindmate-ai-stage55-demo`，API `127.0.0.1:8001`，页面 `127.0.0.1:5174`，Provider 为 Mock。上传、建库、离开页面后索引就绪、正例出处、负例拒答、一题作答、刷新和重启都通过。默认个人库时间戳未变。没有真实 Key。
 - 学习：新建会话使用当前选择。Mock 仍是本地规则。在线出题和点评在确认、同意、Key 和预算通过后各外发一次，并用 `learning_provider_operations` 记住已发出的请求。迁移 `b55c0e1a8d27`。浏览器没有点通在线出题，所以在线浏览器为 `PARTIAL`。
 - 下一批：另开对话。不把直播通、完整阶段 7 或多题学习标成完成。
+
+## 第五十九批交接
+
+- 本批状态：历史回收站永久删除 UI `CODE PASS / AUTOMATED PASS / BROWSER PARTIAL`；多题历史定位 `CODE PASS / AUTOMATED REGRESSION PASS / BROWSER PARTIAL`；文件详情知识库状态修复 `CODE PASS / FRONTEND TEST PASS`。阶段 8、阶段 7、阶段 5、阶段 6 完整 V1 仍为 `PARTIAL`，真实 Provider 仍为 `PENDING`。
+- 历史操作：回收站对话和学习记录均复用现有 `DELETE .../permanent` API，只发送当前条目的 `row_version` 和 `confirmed=true`。独立确认框要求输入“永久删除”，支持取消、关闭和 Escape 零请求；冲突、已恢复、已被清理和未知响应都会先重新读取回收站并提示数据已变化，不自动重发。成功后刷新历史、回收站、首页摘要和计数查询。
+- 多题定位：现有安全全文投影继续保存每道题的真实 `question_id`；新增三题回归验证题干、已提交答案和已发布反馈分别命中，并通过 `?question=<id>&focus=feedback` 恢复到对应题目。未提交答案键、私有证据和未发布解释仍不进入投影。
+- 文件详情：`GET /api/v1/files/{file_id}/knowledge-bases` 显式返回生成类型 `FileKnowledgeBaseResponse.status`，详情页按知识库状态标签渲染，不再使用不存在的 `index_state`，空列表和未知状态均不输出 `undefined`。
+- 自动化证据：前端全量 `15 files / 66 tests passed`；typecheck、lint、production build 通过（保留既有 500 kB chunk warning）；后端改动文件 Ruff、compileall、OpenAPI JSON/生成类型和 `git diff --check` 通过。后端 pytest 目标已执行但当前仓库 `.venv` 指向不可访问的 Python 解释器，进程创建失败，记为 `BACKEND_PYTEST=BLOCKED`。
+- 浏览器与 Git：本批未重复第 58 批被阻断的浏览器工具调用，真实页面点击保持 `PARTIAL`，未伪造截图或验收。当前工作区包含本批代码、测试和文档改动，状态为 `UNCOMMITTED / NOT_PUSHED`；`git add` 创建 `.git/index.lock` 时返回 `Permission denied`，未改 ACL、未提权、未强推。待环境恢复后按报告中的 VS Code 清单逐文件审阅、中文提交并推送；不改 `main`。

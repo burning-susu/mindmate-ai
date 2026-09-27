@@ -26,10 +26,26 @@ from mindmate.infrastructure.models import (
     LearningQuestion,
     Message,
 )
+from mindmate.main import create_app
+from test_stage5_source_snapshots import _seed_active_index
 from test_stage8_conversation_history import _client as _chat_client
 from test_stage8_conversation_history import _headers, _message_count, _send, _wait
 from test_stage8_learning_history import _client as _learning_client
 from test_stage8_learning_history import _counts, _create
+from test_stage57_learning_multistep import (
+    FACTS as MULTI_FACTS,
+)
+from test_stage57_learning_multistep import (
+    _add_fact_chunks,
+    _answer_question,
+    _create_session,
+    _install_query,
+    _next_question,
+    _SequenceQuery,
+)
+from test_stage57_learning_multistep import (
+    _settings as _multi_settings,
+)
 
 
 def _search(client: TestClient, path: str, query: str) -> dict[str, Any]:
@@ -225,6 +241,59 @@ def test_learning_answer_key_is_hidden_until_feedback_is_published(tmp_path: Pat
         assert _counts(client)[0] >= 1
     finally:
         client.__exit__(None, None, None)
+
+
+def test_multistep_learning_search_keeps_each_question_location(tmp_path: Path) -> None:
+    settings = _multi_settings(tmp_path)
+    app = create_app(settings)
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        client.post("/api/v1/system/session", headers={"Origin": "http://127.0.0.1"})
+        factory = cast(Any, client.app).state.session_factory
+        data = _seed_active_index(
+            factory, settings, content=MULTI_FACTS[0], display_name="多题定位资料.txt"
+        )
+        rows = _add_fact_chunks(factory, data, MULTI_FACTS)
+        _install_query(client, _SequenceQuery(rows))
+        created = _create_session(client, data, key="stage59-history-multi-create", target_count=3)
+        current = created
+        locations: list[tuple[str, str]] = []
+        for index in range(3):
+            question = current["question"]
+            with factory() as session:
+                stored = session.get(LearningQuestion, question["question_id"])
+                assert stored is not None
+                correct_id = str(stored.answer_key_json["option_id"])
+                selected_label = next(
+                    option["label"]
+                    for option in stored.options_json
+                    if option["option_id"] == correct_id
+                )
+            _answer_question(
+                client,
+                factory,
+                question,
+                key=f"stage59-history-multi-answer-{index + 1}",
+            )
+            locations.append((question["question_id"], selected_label))
+            if index < 2:
+                next_response = _next_question(
+                    client,
+                    client.get(
+                        f"/api/v1/learning-sessions/{created['learning_session_id']}"
+                    ).json(),
+                    key=f"stage59-history-multi-next-{index + 2}",
+                )
+                assert next_response.status_code == 200, next_response.text
+                current = next_response.json()
+
+        for question_id, selected_label in locations:
+            page = _search(client, "/api/v1/history/learning-sessions", selected_label)
+            assert page["items"][0]["learning_session_id"] == created["learning_session_id"]
+            assert any(
+                location["record_id"] == question_id
+                and location["section"] in {"submitted_answer", "feedback"}
+                for location in page["items"][0]["locations"]
+            )
 
 
 def test_history_projection_migration_is_reversible(tmp_path: Path) -> None:

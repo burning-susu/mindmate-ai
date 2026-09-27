@@ -532,3 +532,12 @@
 - 契约：新增查询投影 `GET /api/v1/history/conversations`。不新建会话表，不复制消息，不改聊天 SSE 和幂等提交。OpenAPI 3.1 现为 `75 schemas / 78 operations`。Alembic head `b4e1c8a09d27`。
 - 证据：后端定向 `3 passed`；前端历史 Vitest `3 passed`；真实 Chrome 在隔离根完成空列表、两条会话、来源点击、刷新、回收站来源提示和后端重启。报告见 `docs/test-reports/stage-43-conversation-history.md`。
 - 下一批唯一目标：为已保存的学习会话增加历史列表和继续入口。
+
+### 第五十九批：历史永久删除、多题定位与文件详情状态收口
+
+- 状态：回收站永久删除 UI 完成代码和自动化回归；多题历史定位补齐三题命中回归；文件详情“所在知识库（undefined）”修复。真实浏览器点击保持 `PARTIAL`，阶段 8 完整 V1 继续 `PARTIAL`。
+- 实现：`frontend/src/api/history.ts` 新增对话/学习永久删除类型安全封装；`HistoryPage.tsx` 的回收站条目提供独立确认框，要求精确输入“永久删除”，用 `row_version` + `confirmed=true` 调用既有 API，处理取消、Escape、重复点击、版本冲突和未知响应；成功后失效历史、回收站和首页查询。现有软删除/恢复流程未改变。
+- 契约：文件关联知识库接口新增明确的 `FileKnowledgeBaseResponse` / `FileKnowledgeBaseListResponse` OpenAPI 响应，返回知识库 `status`；`FileDetailPage.tsx` 使用生成类型和状态标签，不再读取 `index_state`。没有新增数据库迁移或第二套删除 API。
+- 多题：历史投影仍以每道 `LearningQuestion.question_id` 为定位 ID；新增回归覆盖三道题分别搜索可见题干、已提交答案或已发布点评，确认定位链接可恢复具体题目/反馈；未提交答案键和私有解释的隐藏测试保持有效。
+- 验证：前端 Vitest `15 files / 66 tests passed`，typecheck、lint、build 通过；Ruff、compileall、OpenAPI/生成类型同步、`git diff --check` 通过。仓库后端 pytest 因 `.venv` 解释器路径不可访问无法启动，记为环境阻断，不宣称后端 pytest 通过。浏览器未重试第 58 批已记录的审批/EPERM 阻断，真实页面验收和真实 Provider 仍 `PENDING/PARTIAL`。
+- 交接：报告见 `docs/test-reports/stage-59-history-actions-multiquestion.md`。当前改动待逐文件审阅、中文目的式提交和推送；阶段 7/8 其他未完成项（独立备份 Worker、费用账单对账、人工浏览器确认等）不因本批自动测试通过而改变状态。

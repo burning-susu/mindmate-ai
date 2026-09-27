@@ -98,3 +98,19 @@ export async function restoreLearningSession(learningSessionId: string, expected
     { method: 'POST' },
   )
 }
+
+export async function purgeConversation(conversationId: string, expectedVersion: number) {
+  const params = new URLSearchParams({ expected_version: String(expectedVersion), confirmed: 'true' })
+  return apiRequest<{ conversation_id: string; status: string }>(
+    `/api/v1/conversations/${encodeURIComponent(conversationId)}/permanent?${params}`,
+    { method: 'DELETE' },
+  )
+}
+
+export async function purgeLearningSession(learningSessionId: string, expectedVersion: number) {
+  const params = new URLSearchParams({ expected_version: String(expectedVersion), confirmed: 'true' })
+  return apiRequest<{ learning_session_id: string; status: string }>(
+    `/api/v1/learning-sessions/${encodeURIComponent(learningSessionId)}/permanent?${params}`,
+    { method: 'DELETE' },
+  )
+}

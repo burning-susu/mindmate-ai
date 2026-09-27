@@ -248,6 +248,43 @@ describe('conversation history', () => {
     expect(link.querySelector('mark')?.textContent).toBe('木星')
     expect(link.querySelector('script')).toBeNull()
   })
+
+  it('requires the exact phrase before permanently deleting a trashed conversation', async () => {
+    window.history.pushState({}, '', '/history?view=trash')
+    const calls: string[] = []
+    let finishDelete: ((response: Response) => void) | undefined
+    const deletePending = new Promise<Response>((resolve) => { finishDelete = resolve })
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      calls.push(`${init?.method ?? 'GET'} ${url}`)
+      if (url.includes('/system/session')) return response({ status: 'ready' })
+      if (url.includes('/history/trash') && url.includes('object_type=conversation')) {
+        return response({ items: [{ object_type: 'conversation', object_id: 'conversation-trash-1', title: '待清理对话', deleted_at: '2026-09-27T00:00:00Z', row_version: 7 }], next_cursor: null })
+      }
+      if (init?.method === 'DELETE' && url.includes('/conversations/conversation-trash-1/permanent')) return deletePending
+      return response({ status: 'ok' })
+    }))
+
+    render(<BrowserRouter><App /></BrowserRouter>)
+    fireEvent.click(await screen.findByRole('button', { name: '永久删除' }))
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(calls.some((call) => call.startsWith('DELETE'))).toBe(false)
+
+    fireEvent.click(screen.getByRole('button', { name: '永久删除' }))
+    const dialog = screen.getByRole('dialog')
+    expect(dialog).toHaveTextContent('仅清除此对话，不会删除来源文件与知识库')
+    const confirmButton = screen.getAllByRole('button', { name: '永久删除' }).at(-1)
+    expect(confirmButton).toBeDisabled()
+    fireEvent.change(screen.getByLabelText('确认词'), { target: { value: '永久删除' } })
+    expect(confirmButton).toBeEnabled()
+    fireEvent.click(confirmButton as HTMLElement)
+    await waitFor(() => expect(calls.some((call) => call.startsWith('DELETE') && call.includes('expected_version=7') && call.includes('confirmed=true'))).toBe(true))
+    expect(confirmButton).toBeDisabled()
+    fireEvent.click(confirmButton as HTMLElement)
+    expect(calls.filter((call) => call.startsWith('DELETE')).length).toBe(1)
+    finishDelete?.(response({ conversation_id: 'conversation-trash-1', status: 'PURGED' }))
+  })
 })
 
 const learningHistoryItem = {
@@ -412,5 +449,50 @@ describe('learning history', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('学习历史暂时读不出来。')
     expect(screen.getByRole('button', { name: '重新加载' })).toBeInTheDocument()
     await waitFor(() => expect(screen.queryByText('还没有可找回的学习会话。从知识库开始的一题会保留在这里。')).not.toBeInTheDocument())
+  })
+
+  it('uses the learning-session permanent-delete endpoint from the trash view', async () => {
+    window.history.pushState({}, '', '/history?tab=learning&view=trash')
+    const calls: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      calls.push(`${init?.method ?? 'GET'} ${url}`)
+      if (url.includes('/system/session')) return response({ status: 'ready' })
+      if (url.includes('/history/trash') && url.includes('object_type=learning_session')) {
+        return response({ items: [{ object_type: 'learning_session', object_id: 'learn-trash-1', title: '待清理学习', deleted_at: '2026-09-27T00:00:00Z', row_version: 11 }], next_cursor: null })
+      }
+      if (init?.method === 'DELETE' && url.includes('/learning-sessions/learn-trash-1/permanent')) {
+        return response({ learning_session_id: 'learn-trash-1', status: 'PURGED' })
+      }
+      return response({ status: 'ok' })
+    }))
+
+    render(<BrowserRouter><App /></BrowserRouter>)
+    fireEvent.click(await screen.findByRole('button', { name: '永久删除' }))
+    fireEvent.change(screen.getByLabelText('确认词'), { target: { value: '永久删除' } })
+    const buttons = screen.getAllByRole('button', { name: '永久删除' })
+    fireEvent.click(buttons[buttons.length - 1])
+    await waitFor(() => expect(calls.some((call) => call.startsWith('DELETE') && call.includes('/learning-sessions/learn-trash-1/permanent') && call.includes('expected_version=11') && call.includes('confirmed=true'))).toBe(true))
+  })
+})
+
+describe('file detail knowledge-base status', () => {
+  it('renders the contract status without showing undefined', async () => {
+    window.history.pushState({}, '', '/files/file-status')
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      let payload: unknown = { items: [] }
+      if (url.includes('/system/session')) payload = { status: 'ready' }
+      else if (url.endsWith('/api/v1/files/file-status')) payload = {
+        file_id: 'file-status', display_name: '状态资料.txt', source_name: '状态资料.txt', extension: '.txt', document_type: 'TXT', folder_id: null, folder_name: null, status: 'PARSED', content_hash: 'hash', byte_size: 42, created_at: '2026-09-22T00:00:00Z', updated_at: '2026-09-22T00:00:00Z', deleted_at: null, purge_after: null, row_version: 1, tags: [], parsed_metadata: null, has_parsed_text: true, content_available: true, parse_failure_stage: null, parse_error_id: null, parse_retry_count: 0, can_reprocess: true,
+      }
+      else if (url.endsWith('/preview')) payload = { preview_available: true, text: '状态资料', metadata: { line_count: 1, character_count: 4 } }
+      else if (url.endsWith('/knowledge-bases')) payload = { items: [{ knowledge_base_id: 'kb-status', name: '阶段 8 演示库', status: 'READY', membership_status: 'ACTIVE' }] }
+      return response(payload)
+    }))
+
+    render(<BrowserRouter><App /></BrowserRouter>)
+    expect(await screen.findByText('阶段 8 演示库（索引就绪）')).toBeInTheDocument()
+    expect(screen.queryByText(/undefined/)).not.toBeInTheDocument()
   })
 })

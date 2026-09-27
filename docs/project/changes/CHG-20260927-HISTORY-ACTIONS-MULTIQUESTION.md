@@ -1,0 +1,28 @@
+# CHG-20260927-HISTORY-ACTIONS-MULTIQUESTION
+
+状态：`IMPLEMENTED_UNCOMMITTED`
+
+日期：2026-09-27
+
+## 范围
+
+第五十九批只收口阶段 8 的历史回收站操作、多题历史定位回归和文件详情知识库状态显示。没有改变阶段 7/8 的完整产品范围，没有引入新的删除 API、数据库迁移、Provider 或向量索引。
+
+## 变更对象
+
+- `KEEP`：现有对话/学习软删除、恢复、永久删除服务端 API；现有安全历史全文投影；`question_id` 定位协议；Mock Provider。
+- `REVALIDATE`：历史回收站前端动作、版本冲突处理、三题搜索命中、文件关联知识库响应契约。
+- `ADD`：前端永久删除类型安全封装、确认框、三题历史回归测试、文件知识库 OpenAPI 响应模型和生成类型、第五十九批报告。
+- `REMOVE`：文件详情对关联知识库条目的手写 `index_state` 读取；不删除服务端索引关系字段。
+
+## 安全与数据边界
+
+- 永久删除只能从回收站条目发起，使用页面读取的 `row_version`，并要求服务端 `confirmed=true`。
+- 错误或响应未知时先查询当前回收站状态，不自动重发不可逆请求。
+- 多题投影只包含可见题干、已提交答案和已发布反馈；答案键、私有证据和未发布模型解释继续排除。
+- 所有自动化数据使用隔离数据库和合成会话，不触碰个人历史、真实凭据或付费 Provider。
+
+## 证据
+
+实现与验证记录见 `docs/test-reports/stage-59-history-actions-multiquestion.md`。前端全量测试、typecheck、lint、build、Ruff、compileall 和 OpenAPI/生成类型同步通过；后端 pytest 因当前沙箱无法创建仓库虚拟环境 Python，保留为 `BLOCKED`，不宣称通过。真实浏览器点击保持 `PARTIAL`。当前 Git 暂存因 `.git/index.lock` `Permission denied` 阻断，代码和文档为 `UNCOMMITTED / NOT_PUSHED`。
+

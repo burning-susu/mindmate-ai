@@ -332,6 +332,15 @@ export interface components {
     "parse_retry_count": number;
     "can_reprocess": boolean
   };
+  "FileKnowledgeBaseListResponse": {
+    "items": Array<components["FileKnowledgeBaseResponse"]>
+  };
+  "FileKnowledgeBaseResponse": {
+    "knowledge_base_id": string;
+    "name": string;
+    "status": string;
+    "membership_status": string
+  };
   "FileListResponse": {
     "items": Array<components["FileItemResponse"]>;
     "next_cursor"?: string | null

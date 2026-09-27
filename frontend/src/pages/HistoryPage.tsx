@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { GraduationCap, History, LoaderCircle, MessageSquare } from 'lucide-react'
+import { GraduationCap, History, LoaderCircle, MessageSquare, X } from 'lucide-react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 
@@ -7,6 +7,8 @@ import {
   listConversationHistory,
   listHistoryTrash,
   listLearningHistory,
+  purgeConversation,
+  purgeLearningSession,
   restoreConversation,
   restoreLearningSession,
   trashConversation,
@@ -16,6 +18,7 @@ import {
   type HistoryTrashItem,
   type LearningHistoryItem,
 } from '../api/history'
+import { ApiError } from '../api/client'
 import { sourceStatusLabel } from '../components/sourceStatus'
 import { queryClient } from '../queryClient'
 
@@ -314,12 +317,66 @@ function TrashConfirm({
       <h2 id="history-trash-title">移入回收站</h2>
       <p>确定把「{title}」移入回收站？</p>
       <p>它会保留 30 天，之后可以从回收站恢复。文件和知识库不会被删除。</p>
-      <div>
+      <div className="history-dialog__actions">
         <button className="quiet-button" type="button" onClick={onCancel} disabled={busy}>取消</button>
         <button type="button" onClick={onConfirm} disabled={busy}>{busy ? '正在移入' : '确认移入回收站'}</button>
       </div>
     </div>
   )
+}
+
+function PurgeConfirm({
+  kind,
+  title,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  kind: '对话' | '学习记录'
+  title: string
+  busy: boolean
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  const [phrase, setPhrase] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+  const matches = phrase === '永久删除'
+
+  useEffect(() => {
+    inputRef.current?.focus()
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !busy) onCancel()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [busy, onCancel])
+
+  return (
+    <div className="history-dialog" role="dialog" aria-modal="true" aria-labelledby="history-purge-title" aria-describedby="history-purge-description">
+      <div className="history-dialog__heading">
+        <h2 id="history-purge-title">确认永久删除</h2>
+        <button className="quiet-button history-dialog__close" type="button" aria-label="关闭" onClick={onCancel} disabled={busy}>
+          <X size={16} aria-hidden="true" />
+        </button>
+      </div>
+      <p id="history-purge-description">将永久删除{kind}「{title}」。操作无法撤销；仅清除此{kind}，不会删除来源文件与知识库。</p>
+      <p>请输入确认词“永久删除”后继续。</p>
+      <form onSubmit={(event) => { event.preventDefault(); if (matches && !busy) onConfirm() }}>
+        <label>
+          确认词
+          <input ref={inputRef} value={phrase} onChange={(event) => setPhrase(event.target.value)} placeholder="永久删除" autoComplete="off" />
+        </label>
+        <div className="history-dialog__actions">
+          <button className="quiet-button" type="button" onClick={onCancel} disabled={busy}>取消</button>
+          <button className="danger-button" type="submit" disabled={!matches || busy}>{busy ? '正在删除…' : '永久删除'}</button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
+function isHistoryConflict(error: unknown): boolean {
+  return error instanceof ApiError && [404, 409, 412].includes(error.status)
 }
 
 async function refreshHistoryViews() {
@@ -345,6 +402,7 @@ function ConversationHistory({ trash }: { trash: boolean }) {
     setDraft(filters.q ?? '')
   }
   const [pending, setPending] = useState<ConversationHistoryItem | null>(null)
+  const [pendingPurge, setPendingPurge] = useState<HistoryTrashItem | null>(null)
   const [actionError, setActionError] = useState('')
   const [busy, setBusy] = useState(false)
   const openingRef = useRef('')
@@ -413,8 +471,13 @@ function ConversationHistory({ trash }: { trash: boolean }) {
       pager.reset()
       trashPager.reset()
       await refreshHistoryViews()
-    } catch {
-      setActionError('移入回收站没有完成，请重试。')
+    } catch (error) {
+      try {
+        await historyQuery.refetch()
+      } catch {
+        // The next visible state still comes from the existing query cache.
+      }
+      setActionError(isHistoryConflict(error) ? '这条对话已经发生变化，列表已刷新，请重新确认。' : '移入回收站没有完成，列表已重新读取，请确认状态后重试。')
     } finally {
       setBusy(false)
     }
@@ -428,8 +491,36 @@ function ConversationHistory({ trash }: { trash: boolean }) {
       trashPager.reset()
       pager.reset()
       await refreshHistoryViews()
-    } catch {
-      setActionError('恢复没有完成，请重试。')
+    } catch (error) {
+      try {
+        await trashQuery.refetch()
+      } catch {
+        // The next visible state still comes from the existing query cache.
+      }
+      setActionError(isHistoryConflict(error) ? '这条对话已经发生变化，回收站列表已刷新。' : '恢复没有完成，回收站列表已重新读取，请确认状态后重试。')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const purge = async () => {
+    if (!pendingPurge?.row_version) return
+    setBusy(true)
+    setActionError('')
+    try {
+      await purgeConversation(pendingPurge.object_id, pendingPurge.row_version)
+      setPendingPurge(null)
+      trashPager.reset()
+      pager.reset()
+      await refreshHistoryViews()
+    } catch (error) {
+      setPendingPurge(null)
+      try {
+        await trashQuery.refetch()
+      } catch {
+        // The next visible state still comes from the existing query cache.
+      }
+      setActionError(isHistoryConflict(error) ? '这条对话已经发生变化，回收站列表已刷新。' : '永久删除结果未知，回收站列表已重新读取；请确认记录状态后再操作。')
     } finally {
       setBusy(false)
     }
@@ -477,7 +568,10 @@ function ConversationHistory({ trash }: { trash: boolean }) {
               <small>会话 {item.object_id}</small>
               <small>移入时间 {formatTime(item.deleted_at)}</small>
             </span>
-            <button type="button" disabled={busy} onClick={() => void restore(item)}>恢复</button>
+             <div className="history-item__actions">
+               <button type="button" disabled={busy} onClick={() => void restore(item)}>恢复</button>
+               <button className="danger-button" type="button" disabled={busy} onClick={() => setPendingPurge(item)}>永久删除</button>
+             </div>
           </div>
         )) : visibleItems.map((item) => (
           <div className="history-item" key={item.conversation_id}>
@@ -523,6 +617,9 @@ function ConversationHistory({ trash }: { trash: boolean }) {
       {pending ? (
         <TrashConfirm title={pending.title || pending.summary || '未命名对话'} busy={busy} onCancel={() => setPending(null)} onConfirm={() => void confirmTrash()} />
       ) : null}
+      {pendingPurge ? (
+        <PurgeConfirm kind="对话" title={pendingPurge.title || '未命名对话'} busy={busy} onCancel={() => setPendingPurge(null)} onConfirm={() => void purge()} />
+      ) : null}
     </div>
   )
 }
@@ -541,6 +638,7 @@ function LearningHistory({ trash }: { trash: boolean }) {
     setDraft(filters.q ?? '')
   }
   const [pending, setPending] = useState<LearningHistoryItem | null>(null)
+  const [pendingPurge, setPendingPurge] = useState<HistoryTrashItem | null>(null)
   const [actionError, setActionError] = useState('')
   const [busy, setBusy] = useState(false)
   const openingRef = useRef('')
@@ -609,8 +707,13 @@ function LearningHistory({ trash }: { trash: boolean }) {
       pager.reset()
       trashPager.reset()
       await refreshHistoryViews()
-    } catch {
-      setActionError('移入回收站没有完成，请重试。')
+    } catch (error) {
+      try {
+        await historyQuery.refetch()
+      } catch {
+        // The next visible state still comes from the existing query cache.
+      }
+      setActionError(isHistoryConflict(error) ? '这条学习记录已经发生变化，列表已刷新，请重新确认。' : '移入回收站没有完成，列表已重新读取，请确认状态后重试。')
     } finally {
       setBusy(false)
     }
@@ -624,8 +727,36 @@ function LearningHistory({ trash }: { trash: boolean }) {
       trashPager.reset()
       pager.reset()
       await refreshHistoryViews()
-    } catch {
-      setActionError('恢复没有完成，请重试。')
+    } catch (error) {
+      try {
+        await trashQuery.refetch()
+      } catch {
+        // The next visible state still comes from the existing query cache.
+      }
+      setActionError(isHistoryConflict(error) ? '这条学习记录已经发生变化，回收站列表已刷新。' : '恢复没有完成，回收站列表已重新读取，请确认状态后重试。')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const purge = async () => {
+    if (!pendingPurge?.row_version) return
+    setBusy(true)
+    setActionError('')
+    try {
+      await purgeLearningSession(pendingPurge.object_id, pendingPurge.row_version)
+      setPendingPurge(null)
+      trashPager.reset()
+      pager.reset()
+      await refreshHistoryViews()
+    } catch (error) {
+      setPendingPurge(null)
+      try {
+        await trashQuery.refetch()
+      } catch {
+        // The next visible state still comes from the existing query cache.
+      }
+      setActionError(isHistoryConflict(error) ? '这条学习记录已经发生变化，回收站列表已刷新。' : '永久删除结果未知，回收站列表已重新读取；请确认记录状态后再操作。')
     } finally {
       setBusy(false)
     }
@@ -673,7 +804,10 @@ function LearningHistory({ trash }: { trash: boolean }) {
               <small>会话 {item.object_id}</small>
               <small>移入时间 {formatTime(item.deleted_at)}</small>
             </span>
-            <button type="button" disabled={busy} onClick={() => void restore(item)}>恢复</button>
+             <div className="history-item__actions">
+               <button type="button" disabled={busy} onClick={() => void restore(item)}>恢复</button>
+               <button className="danger-button" type="button" disabled={busy} onClick={() => setPendingPurge(item)}>永久删除</button>
+             </div>
           </div>
         )) : visibleItems.map((item) => (
           <div className="history-item" key={item.learning_session_id}>
@@ -718,6 +852,9 @@ function LearningHistory({ trash }: { trash: boolean }) {
       ) : null}
       {pending ? (
         <TrashConfirm title={pending.topic || '未命名学习'} busy={busy} onCancel={() => setPending(null)} onConfirm={() => void confirmTrash()} />
+      ) : null}
+      {pendingPurge ? (
+        <PurgeConfirm kind="学习记录" title={pendingPurge.title || '未命名学习'} busy={busy} onCancel={() => setPendingPurge(null)} onConfirm={() => void purge()} />
       ) : null}
     </div>
   )

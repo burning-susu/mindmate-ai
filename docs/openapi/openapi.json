@@ -1311,9 +1311,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response File Knowledge Bases Api V1 Files  File Id  Knowledge Bases Get"
+                  "$ref": "#/components/schemas/FileKnowledgeBaseListResponse"
                 }
               }
             }
@@ -7466,6 +7464,50 @@
           "can_reprocess"
         ],
         "title": "FileItemResponse"
+      },
+      "FileKnowledgeBaseListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/FileKnowledgeBaseResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "FileKnowledgeBaseListResponse"
+      },
+      "FileKnowledgeBaseResponse": {
+        "properties": {
+          "knowledge_base_id": {
+            "type": "string",
+            "title": "Knowledge Base Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "membership_status": {
+            "type": "string",
+            "title": "Membership Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "knowledge_base_id",
+          "name",
+          "status",
+          "membership_status"
+        ],
+        "title": "FileKnowledgeBaseResponse"
       },
       "FileListResponse": {
         "properties": {

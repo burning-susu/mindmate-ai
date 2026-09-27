@@ -324,6 +324,51 @@ def test_manual_permanent_delete_requires_confirmation(tmp_path: Path) -> None:
         client.__exit__(None, None, None)
 
 
+def test_manual_learning_permanent_delete_requires_confirmation_and_keeps_sources(
+    tmp_path: Path,
+) -> None:
+    client, data = _learning_client(tmp_path)
+    try:
+        created = _create(client, data.knowledge_base_id, "manual-learning-purge")
+        _submit_first_option(client, created, "manual-learning-purge-answer")
+        learning_session_id = created["learning_session_id"]
+        question_id = created["question"]["question_id"]
+        version = _trash_learning(client, learning_session_id, "manual-learning-purge-trash")
+        factory = cast(Any, client.app).state.session_factory
+        with factory() as session:
+            before_files = int(session.scalar(select(func.count()).select_from(FileRecord)) or 0)
+            before_knowledge_bases = int(
+                session.scalar(select(func.count()).select_from(KnowledgeBase)) or 0
+            )
+            before_points = int(session.scalar(select(func.count()).select_from(KnowledgePoint)) or 0)
+        denied = client.delete(
+            f"/api/v1/learning-sessions/{learning_session_id}/permanent",
+            params={"expected_version": version, "confirmed": False},
+            headers=_origin("manual-learning-purge-denied"),
+        )
+        assert denied.status_code == 400
+        assert denied.json()["code"] == "PURGE_CONFIRMATION_REQUIRED"
+        ok = client.delete(
+            f"/api/v1/learning-sessions/{learning_session_id}/permanent",
+            params={"expected_version": version, "confirmed": True},
+            headers=_origin("manual-learning-purge-ok"),
+        )
+        assert ok.status_code == 200, ok.text
+        assert ok.json()["status"] == "PURGED"
+        assert client.get(f"/api/v1/learning-sessions/{learning_session_id}").status_code == 404
+        assert client.get(
+            "/api/v1/history/learning-sessions", params={"q": "超时时间"}
+        ).json()["items"] == []
+        with factory() as session:
+            assert session.get(LearningSession, learning_session_id) is None
+            assert session.get(LearningQuestion, question_id) is None
+            assert int(session.scalar(select(func.count()).select_from(FileRecord)) or 0) == before_files
+            assert int(session.scalar(select(func.count()).select_from(KnowledgeBase)) or 0) == before_knowledge_bases
+            assert int(session.scalar(select(func.count()).select_from(KnowledgePoint)) or 0) == before_points
+    finally:
+        client.__exit__(None, None, None)
+
+
 def test_history_list_does_not_trigger_purge(tmp_path: Path) -> None:
     client = _chat_client(tmp_path)
     try:

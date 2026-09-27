@@ -53,7 +53,7 @@
 .eyebrow { color: var(--primary); font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .heading-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .primary-button, .quiet-button, .danger-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 36px; padding: 0 13px; border: 1px solid transparent; border-radius: 7px; font-size: 13px; font-weight: 650; text-decoration: none; white-space: nowrap; }
-.primary-button:disabled, .quiet-button:disabled { cursor: not-allowed; opacity: .55; }
+.primary-button:disabled, .quiet-button:disabled, .danger-button:disabled { cursor: not-allowed; opacity: .55; }
 .primary-button { background: var(--primary); color: #fff; }
 .primary-button:hover { background: #0f5870; }
 .quiet-button { background: var(--surface); border-color: var(--border); color: var(--text); }
@@ -557,9 +557,14 @@
 .history-item__meta { display: grid; justify-items: end; gap: 3px; color: var(--muted); font-size: 11px; font-style: normal; }
 .history-item__meta em { font-style: normal; }
 .history-dialog { display: grid; gap: 8px; padding: 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.history-dialog__heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .history-dialog h2 { margin: 0; font-size: 16px; }
 .history-dialog p { margin: 0; font-size: 13px; }
-.history-dialog div { display: flex; gap: 8px; }
+.history-dialog form { display: grid; gap: 10px; }
+.history-dialog label { display: grid; gap: 4px; color: var(--muted); font-size: 12px; }
+.history-dialog input { min-height: 34px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; }
+.history-dialog__actions, .history-item__actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.history-dialog__close { min-width: 36px; padding: 0; }
 .learning-page { display: grid; gap: 16px; }
 .learning-mock-banner { margin: 0; padding: 10px 12px; border: 1px solid #d7b15a; border-radius: 7px; background: #fff8e8; color: #6b4e00; font-size: 13px; line-height: 1.6; }
 .learning-scope-list { margin: 0 0 16px; padding-left: 18px; color: var(--text); }

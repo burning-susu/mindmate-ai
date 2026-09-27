@@ -234,6 +234,17 @@ class FileItemResponse(BaseModel):
     can_reprocess: bool
 
 
+class FileKnowledgeBaseResponse(BaseModel):
+    knowledge_base_id: str
+    name: str
+    status: str
+    membership_status: str
+
+
+class FileKnowledgeBaseListResponse(BaseModel):
+    items: list[FileKnowledgeBaseResponse]
+
+
 class FileListResponse(BaseModel):
     items: list[FileItemResponse]
     next_cursor: str | None = None
@@ -1331,7 +1342,11 @@ def file_text(
     }
 
 
-@router.get("/files/{file_id}/knowledge-bases", tags=["files"])
+@router.get(
+    "/files/{file_id}/knowledge-bases",
+    response_model=FileKnowledgeBaseListResponse,
+    tags=["files"],
+)
 def file_knowledge_bases(file_id: str, session: Session = Depends(get_session)) -> dict[str, Any]:
     _get_file_or_404(session, file_id)
     rows = session.execute(
@@ -1346,7 +1361,7 @@ def file_knowledge_bases(file_id: str, session: Session = Depends(get_session)) 
             {
                 "knowledge_base_id": knowledge_base.knowledge_base_id,
                 "name": knowledge_base.name,
-                "index_state": relation.index_state,
+                "status": knowledge_base.status,
                 "membership_status": relation.membership_status,
             }
             for relation, knowledge_base in rows
