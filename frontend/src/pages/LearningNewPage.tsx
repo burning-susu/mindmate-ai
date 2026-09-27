@@ -5,10 +5,10 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { v7 as uuidv7 } from 'uuid'
 
 import { ApiError, apiRequest } from '../api/client'
-import { createLearningSession } from '../api/learning'
+import { createLearningSession, getLearningProviderPlan } from '../api/learning'
 import { listKnowledgeBaseMembers, type KnowledgeBaseItem, type KnowledgeBaseListResponse } from '../api/knowledgeBases'
 
-const MOCK_BANNER = '模型选择目前适用于 AI 对话；学习出题仍是本地演示规则。'
+const MOCK_BANNER = '新建学习会话使用当前选择。Mock 仍按本地规则出题和评分，不会外发。在线模式会在创建题目和提交答案前分别确认本次费用。已经创建的会话保持创建时的服务。这仍不是完整学习计划或复习。'
 
 export default function LearningNewPage() {
   const [searchParams] = useSearchParams()
@@ -18,6 +18,7 @@ export default function LearningNewPage() {
   const [goalText, setGoalText] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [chargeConfirmed, setChargeConfirmed] = useState(false)
   const clientRequestId = useRef<string | null>(null)
   const submitLock = useRef(false)
   const knowledgeBaseQuery = useQuery({
@@ -39,9 +40,15 @@ export default function LearningNewPage() {
   })
   const knowledgeBase = knowledgeBaseQuery.data
   const ready = knowledgeBase?.status === 'READY' && knowledgeBase.available_file_count > 0
+  const planQuery = useQuery({
+    queryKey: ['learning-provider-plan'],
+    queryFn: getLearningProviderPlan,
+    retry: false,
+  })
+  const online = planQuery.data?.requires_charge_confirmation === true
   const topicReady = topic.trim().length > 0 && topic.trim().length <= 80
   const goalReady = goalText.trim().length > 0 && goalText.trim().length <= 200
-  const canSubmit = Boolean(knowledgeBaseId) && ready && topicReady && goalReady && !knowledgeBaseQuery.isLoading && !membersQuery.isLoading && !submitting
+  const canSubmit = Boolean(knowledgeBaseId) && ready && topicReady && goalReady && !knowledgeBaseQuery.isLoading && !membersQuery.isLoading && !planQuery.isLoading && !submitting && (!online || chargeConfirmed)
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -52,7 +59,12 @@ export default function LearningNewPage() {
     if (!clientRequestId.current) clientRequestId.current = uuidv7()
     try {
       const created = await createLearningSession(
-        { knowledgeBaseId, topic: topic.trim(), goalText: goalText.trim() },
+        {
+          knowledgeBaseId,
+          topic: topic.trim(),
+          goalText: goalText.trim(),
+          confirmProviderCharge: online && chargeConfirmed,
+        },
         clientRequestId.current,
       )
       navigate(`/learning/session/${created.learning_session_id}`)
@@ -141,6 +153,25 @@ export default function LearningNewPage() {
             <textarea aria-label="学习目标" maxLength={200} rows={3} value={goalText} onChange={(event) => setGoalText(event.target.value)} />
           </label>
           <p>题量：1。题型由服务端生成为单选题。难度和题量不能在这里调整。</p>
+          {planQuery.data ? <p role="status">{planQuery.data.outbound_summary}</p> : null}
+          {online && planQuery.data ? (
+            <div className="settings-privacy-copy">
+              <p>
+                将向 {planQuery.data.provider} 发送学习主题、学习目标和至多 2 段服务端批准的资料摘录。
+                请求模型 {planQuery.data.requested_model}。按 {planQuery.data.question_estimate.checked_on} 公开费率，
+                用满本地上限时出题粗估不超过 {planQuery.data.question_estimate.estimated_usd_ceiling} 美元。
+                {planQuery.data.question_estimate.disclaimer}
+              </p>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={chargeConfirmed}
+                  onChange={(event) => setChargeConfirmed(event.target.checked)}
+                />
+                我确认本次向 {planQuery.data.provider} 出题可能产生费用
+              </label>
+            </div>
+          ) : null}
           {error && <div className="inline-error" role="alert">{error}</div>}
           <button className="primary-button" type="submit" disabled={!canSubmit} aria-busy={submitting}>
             {submitting ? '正在创建' : '创建并开始'}

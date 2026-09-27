@@ -427,7 +427,7 @@ export default function SettingsPage() {
           <p className="settings-hint">
             {status.account_notice ?? 'OpenAI 和 DeepSeek 是两套不同账户、API Key 和账单。'}
             {' '}
-            {status.learning_notice ?? '模型选择目前适用于 AI 对话；学习出题仍是本地演示规则。'}
+            {status.learning_notice ?? '新建学习会话使用当前选择。Mock 仍按本地规则出题和评分，不会外发。在线模式会在创建题目和提交答案前分别确认本次费用。已经创建的会话保持创建时的服务。这仍不是完整学习计划或复习。'}
           </p>
           {generationMode === 'deepseek' ? (
             <div className="settings-privacy-copy">
@@ -750,7 +750,7 @@ export default function SettingsPage() {
             <p>OpenAI 需要单独同意。DeepSeek 的同意不能代替向 OpenAI 发送资料。</p>
             <p>
               第一次向 OpenAI 外发前：当前问题、必要上下文，以及知识库模式下至多两段受限证据，可能发送到 OpenAI。
-              模型选择目前适用于 AI 对话；学习出题仍是本地演示规则。
+              新建学习会话也会使用这里的选择；Mock 仍是本地规则，在线出题和点评需要分别确认费用。
             </p>
           </div>
           {openAi?.consent.accepted ? (

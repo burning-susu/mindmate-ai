@@ -90,7 +90,33 @@ def create_learning_session(
     request_id: str | None,
     encoder: Any,
     query: Any,
+    confirm_provider_charge: bool = False,
+    generation_mode: str | None = None,
+    provider_runtime: Any = None,
 ) -> LearningSession:
+    from mindmate.application.provider_configuration import read_generation_mode
+
+    mode = generation_mode or read_generation_mode(session)
+    if mode != "mock":
+        from mindmate.application.learning_model_generation import create_provider_learning_session
+
+        return create_provider_learning_session(
+            session,
+            session_factory=session_factory,
+            topic=topic,
+            goal_text=goal_text,
+            goal_type=goal_type,
+            knowledge_base_id=knowledge_base_id,
+            target_question_count=target_question_count,
+            idempotency_key=idempotency_key,
+            client_request_id=client_request_id,
+            request_hash=request_hash,
+            request_id=request_id,
+            encoder=encoder,
+            query=query,
+            mode=mode,
+            runtime=provider_runtime,
+        )
     if target_question_count != FIXED_QUESTION_COUNT:
         raise LearningCommandError(
             "QUESTION_COUNT_NOT_SUPPORTED",
@@ -305,6 +331,8 @@ def submit_learning_attempt(
     expected_question_version: int,
     idempotency_key: str,
     client_request_id: str,
+    confirm_provider_charge: bool = False,
+    provider_runtime: Any = None,
 ) -> LearningAttempt:
     if not idempotency_key or not client_request_id:
         raise LearningCommandError("IDEMPOTENCY_KEY_REQUIRED", "需要 Idempotency-Key。", 400)
@@ -312,6 +340,19 @@ def submit_learning_attempt(
     if question is None:
         raise LearningCommandError("LEARNING_QUESTION_NOT_FOUND", "题目不存在。", 404)
     record = get_learning_session(session, question.learning_session_id)
+    if (record.provider or MOCK_PROVIDER) != MOCK_PROVIDER:
+        from mindmate.application.learning_model_generation import submit_provider_learning_attempt
+
+        return submit_provider_learning_attempt(
+            session,
+            question_id=question_id,
+            selected_option=selected_option,
+            expected_question_version=expected_question_version,
+            idempotency_key=idempotency_key,
+            client_request_id=client_request_id,
+            confirm_provider_charge=confirm_provider_charge,
+            runtime=provider_runtime,
+        )
     question = session.get(LearningQuestion, question_id)
     if question is None:
         raise LearningCommandError("LEARNING_QUESTION_NOT_FOUND", "题目不存在。", 404)
@@ -575,6 +616,12 @@ def _persist_question(
     linked: list[tuple[HybridCandidate, str, SourceSnapshotCreated]],
     request_id: str | None,
     now: datetime,
+    provider: str = MOCK_PROVIDER,
+    prompt_template_version: str = PROMPT_TEMPLATE_VERSION,
+    difficulty: str = "BASIC",
+    live_model_called: bool = False,
+    requested_model: str | None = None,
+    resolved_model: str | None = None,
 ) -> None:
     normalized = unicodedata.normalize("NFKC", draft_title).casefold()[:80]
     identity = hashlib.sha256(
@@ -598,7 +645,7 @@ def _persist_question(
         question_type_mix_json={"SINGLE_CHOICE": 1},
         source_set_hash=scope.source_set_hash,
         index_version_id=scope.index_version_id or "",
-        prompt_template_version=PROMPT_TEMPLATE_VERSION,
+        prompt_template_version=prompt_template_version,
         status="READY",
         created_at=now,
     )
@@ -609,15 +656,15 @@ def _persist_question(
         question_type="SINGLE_CHOICE",
         prompt_text=prompt_text,
         options_json=options,
-        difficulty="BASIC",
+        difficulty=difficulty,
         answer_key_json={"option_id": correct_option_id},
         acceptable_points_json=None,
         grading_rule_json={"type": "EXACT_OPTION"},
         sequence_number=1,
         status="OPEN",
         generated_request_id=request_id,
-        prompt_template_version=PROMPT_TEMPLATE_VERSION,
-        provider=MOCK_PROVIDER,
+        prompt_template_version=prompt_template_version,
+        provider=provider,
         row_version=1,
         created_at=now,
     )
@@ -665,8 +712,10 @@ def _persist_question(
     record.started_at = now
     record.updated_at = now
     record.row_version += 1
-    record.provider = MOCK_PROVIDER
-    record.live_model_called = False
+    record.provider = provider
+    record.requested_model = requested_model
+    record.resolved_model = resolved_model
+    record.live_model_called = live_model_called
 
 
 def _ensure_scope(
@@ -772,15 +821,23 @@ def _refresh_source_state(session: Session, record: LearningSession) -> None:
 
 
 def _fail(
-    session: Session, record: LearningSession, *, code: str, detail: str
+    session: Session,
+    record: LearningSession,
+    *,
+    code: str,
+    detail: str,
+    preserve_identity: bool = False,
 ) -> LearningSession:
     now = utc_now()
     record.status = "FAILED"
     record.failure_code = code[:80]
     record.failure_detail = detail[:500]
     record.current_question_id = None
-    record.provider = MOCK_PROVIDER
-    record.live_model_called = False
+    if not preserve_identity:
+        record.provider = MOCK_PROVIDER
+        record.live_model_called = False
+        record.requested_model = None
+        record.resolved_model = None
     record.updated_at = now
     record.row_version += 1
     session.commit()

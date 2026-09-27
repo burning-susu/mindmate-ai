@@ -281,7 +281,7 @@ feat: build local knowledge base and hybrid rag
 - 两套 Credential Manager 引用、分别配置/删除/测试；
 - 每家单独的首次外发同意；
 - 设置页手动选择 Mock、DeepSeek 或 OpenAI，失败不自动换服务；
-- 学习出题仍用本地规则，直到另批把适配器接到学习会话；
+- 第五十四批时学习出题仍用本地规则；第五十五批起，新建学习会话按当时的手动选择出一道题并点评，Mock 仍用本地规则；
 - Token/预算记录；
 - 超时、429、5xx、断流与有限重试；
 - Mock Provider；

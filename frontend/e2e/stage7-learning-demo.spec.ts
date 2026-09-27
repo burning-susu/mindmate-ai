@@ -25,7 +25,7 @@ test('真实知识库完成一题反馈、刷新恢复，并拒绝无证据主�
   await expect(page.getByText('索引就绪').first()).toBeVisible()
   await page.getByRole('button', { name: '基于此知识库学习' }).click()
   await expect(page.getByRole('heading', { name: '基于知识库的一题演示' })).toBeVisible()
-  await expect(page.getByText('模型选择目前适用于 AI 对话；学习出题仍是本地演示规则。')).toBeVisible()
+  await expect(page.getByText(/新建学习会话使用当前选择/)).toBeVisible()
 
   await page.getByRole('textbox', { name: '学习主题' }).fill(topic)
   await page.getByRole('textbox', { name: '学习目标' }).fill(goal)

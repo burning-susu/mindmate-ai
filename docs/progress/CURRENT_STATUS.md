@@ -7,7 +7,7 @@
 - 最后更新时间：`2026-09-27`
 - 当前开发阶段：阶段 8 开发中，状态 `PARTIAL`；阶段 5、阶段 6、阶段 7 继续 `PARTIAL`
 - 交付顺序：Demo 首先完成，完整 V1 以后精进。求职 Demo 优先文件整理/导入、建库、带来源问答、最小学习陪练和重启恢复。Demo 可用性与完整 V1 阶段状态分开报告。
-- 当前批次状态：第五十四批加上 OpenAI Chat Completions 适配器和设置里的手动三选一。`OPENAI_ADAPTER` 为 `PASS`（仅 `OPENAI_ADAPTER_TESTED`）。`SETTINGS_MANUAL_SELECTION` 与普通对话 `CHAT_ROUTING` 为 `PASS`。`LEARNING_PROVIDER_GENERATION` 与 `OPENAI_LIVE_SMOKE` 为 `PENDING`。第五十三批 `BACKUP_RESTORE` 仍为 `PASS`。独立备份 Worker、周期官方账单对账仍为 `PARTIAL`。第 51 批历史手动永久删除 UI 与两类浏览器确认点击仍 `PENDING`；多题定位仍 `PARTIAL`。阶段 5–8 的完整 V1 仍为 `PARTIAL`。求职 Demo 维持第四十二批 `PASS`。真实 DeepSeek 仍为 `PENDING`。详细证据见 `docs/test-reports/stage-54-openai-provider-selection.md`。
+- 当前批次状态：第五十五批先复测求职 Demo，再把手动选择接到新建的一题学习。`DEMO_REGRESSION` 为 `PASS`，与第四十二批历史 `PASS` 分开。`LEARNING_PROVIDER_QUESTION` 与 `LEARNING_PROVIDER_FEEDBACK` 为 `PASS`（只代表 MockTransport）。`LEARNING_ONLINE_BROWSER` 为 `PARTIAL`。`OPENAI_LIVE_SMOKE` 与 `DEEPSEEK_LIVE_SMOKE` 为 `PENDING`。`STAGE7_FULL_V1` 仍为 `PARTIAL`。第五十三批 `BACKUP_RESTORE` 仍为 `PASS`。独立备份 Worker、周期官方账单对账仍为 `PARTIAL`。第 51 批历史手动永久删除 UI 与两类浏览器确认点击仍 `PENDING`；多题定位仍 `PARTIAL`。阶段 5–8 的完整 V1 仍为 `PARTIAL`。详细证据见 `docs/test-reports/stage-55-demo-regression-online-learning.md`。
 
 ## 已完成阶段
 
@@ -334,3 +334,10 @@
 - 选择：设置页三选一为 Mock、DeepSeek、OpenAI GPT-6 Sol。切换不联网。两家 Key、同意和探测分开。在线失败不改选另一家。每次新的 AiOperation 冻结当时的模式、服务、请求模型和费用确认。没有新增迁移。
 - 浏览器：隔离根 `%TEMP%\mindmate-ai-stage54-provider`，API `127.0.0.1:8024`，页面 `127.0.0.1:5184`。OpenAI 无同意、有同意但无 Key，以及 DeepSeek 无同意，都由后端拒绝且不改用另一家。Mock 普通对话可发送、刷新和重启后仍在。学习新建页仍写明出题是本地演示规则。没有真实 Key，也没有真实 OpenAI 或 DeepSeek 请求。详细证据见 `docs/test-reports/stage-54-openai-provider-selection.md`。
 - 下一批：学习出题如要改用已选服务，另开对话。不把直播通、学习模型出题、阶段 5–8 或第 42 批 Demo 重跑标成完成。
+
+## 第五十五批交接
+
+- 本批状态：`DEMO_REGRESSION` `PASS`。`LEARNING_PROVIDER_QUESTION` `PASS`（MockTransport）。`LEARNING_PROVIDER_FEEDBACK` `PASS`（MockTransport）。`LEARNING_ONLINE_BROWSER` `PARTIAL`。`OPENAI_LIVE_SMOKE` `PENDING`。`DEEPSEEK_LIVE_SMOKE` `PENDING`。`STAGE7_FULL_V1` `PARTIAL`。第五十三批 `BACKUP_RESTORE` 仍 `PASS`。独立备份 Worker 与周期官方账单对账仍 `PARTIAL`。第 51 批浏览器删除确认仍 `PENDING`；多题定位仍 `PARTIAL`。阶段 5–8 仍为 `PARTIAL`。第四十二批历史 Demo `PASS` 不并入本批复测。进场分支 `feat/v1-bootstrap`，进场 SHA `f6f527c09073d5e7c962677bf443a5d53bf791a8`。
+- 演示：隔离根 `%TEMP%\mindmate-ai-stage55-demo`，API `127.0.0.1:8001`，页面 `127.0.0.1:5174`，Provider 为 Mock。上传、建库、离开页面后索引就绪、正例出处、负例拒答、一题作答、刷新和重启都通过。默认个人库时间戳未变。没有真实 Key。
+- 学习：新建会话使用当前选择。Mock 仍是本地规则。在线出题和点评在确认、同意、Key 和预算通过后各外发一次，并用 `learning_provider_operations` 记住已发出的请求。迁移 `b55c0e1a8d27`。浏览器没有点通在线出题，所以在线浏览器为 `PARTIAL`。
+- 下一批：另开对话。不把直播通、完整阶段 7 或多题学习标成完成。

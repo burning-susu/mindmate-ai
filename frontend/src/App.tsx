@@ -111,7 +111,7 @@ function AppShell() {
         <div className="content-area">
           <Routes>
             <Route path="/" element={<HomePage />} />
-            <Route path="/learning" element={<Placeholder title="学习" description="最小演示从已索引就绪的知识库进入，一次只做一题。打开本页不会创建学习会话。模型选择目前适用于 AI 对话；学习出题仍是本地演示规则。" action={{ to: '/history?tab=learning', label: '学习历史' }} />} />
+            <Route path="/learning" element={<Placeholder title="学习" description="最小演示从已索引就绪的知识库进入，一次只做一题。打开本页不会创建学习会话。新建学习会话使用当前选择；Mock 仍是本地规则，在线出题和点评需要分别确认费用。这仍不是完整学习计划。" action={{ to: '/history?tab=learning', label: '学习历史' }} />} />
             <Route path="/learning/new" element={<LearningNewPage />} />
             <Route path="/learning/session/:sessionId" element={<LearningSessionPage />} />
             <Route path="/chat" element={<ChatPage />} />

@@ -28,7 +28,11 @@ OPENAI_CONSENT_SETTING_KEY = "privacy.openai_external_ai_consent"
 OPENAI_PROBE_SETTING_KEY = "ai.openai.connection_probe"
 GENERATION_MODE_SETTING_KEY = "ai.chat.generation_mode"
 GENERATION_MODES = {"mock", "deepseek", OPENAI_PROVIDER_ID}
-LEARNING_PROVIDER_NOTICE = "模型选择目前适用于 AI 对话；学习出题仍是本地演示规则。"
+LEARNING_PROVIDER_NOTICE = (
+    "新建学习会话使用当前选择。Mock 仍按本地规则出题和评分，不会外发。"
+    "在线模式会在创建题目和提交答案前分别确认本次费用，并只使用所选资料的有限摘录。"
+    "已经创建的会话保持创建时的服务，中途更改设置不会切换它。这仍不是完整学习计划或复习。"
+)
 ACCOUNT_NOTICE = "OpenAI 和 DeepSeek 是两套不同账户、API Key 和账单。"
 _PROVIDER_LOCK = RLock()
 

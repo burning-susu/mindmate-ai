@@ -581,7 +581,8 @@ export interface components {
   "LearningAttemptRequest": {
     "selected_option": string;
     "client_request_id"?: string | null;
-    "expected_question_version": number
+    "expected_question_version": number;
+    "confirm_provider_charge"?: boolean
   };
   "LearningCitationResponse": {
     "citation_id": string;
@@ -606,6 +607,7 @@ export interface components {
     "provider": string;
     "model": string;
     "live_model_called": boolean;
+    "explanation_origin"?: string;
     "citations": Array<components["LearningCitationResponse"]>
   };
   "LearningHistoryItem": {
@@ -646,6 +648,16 @@ export interface components {
     "knowledge_point_title": string | null;
     "prompt_template_version": string
   };
+  "LearningProviderPlanResponse": {
+    "generation_mode": string;
+    "provider": string;
+    "requested_model": string | null;
+    "requires_charge_confirmation": boolean;
+    "requires_provider_key": boolean;
+    "outbound_summary": string;
+    "question_estimate": Record<string, unknown>;
+    "feedback_estimate": Record<string, unknown>
+  };
   "LearningQuestionResponse": {
     "question_id": string;
     "learning_session_id": string;
@@ -670,7 +682,8 @@ export interface components {
     "goal_text": string;
     "goal_type"?: string;
     "target_question_count"?: number;
-    "client_request_id"?: string | null
+    "client_request_id"?: string | null;
+    "confirm_provider_charge"?: boolean
   };
   "LearningSessionResponse": {
     "learning_session_id": string;
@@ -686,7 +699,11 @@ export interface components {
     "current_question_id": string | null;
     "provider": string;
     "model": string;
+    "requested_model"?: string | null;
+    "resolved_model"?: string | null;
     "live_model_called": boolean;
+    "question_operation_status"?: string | null;
+    "feedback_operation_status"?: string | null;
     "row_version": number;
     "created_at": string;
     "started_at": string | null;
@@ -1142,6 +1159,9 @@ export interface operations {
   };
   "POST /api/v1/home/tasks/retention-purge": {
     operationId: "run_task_retention_purge_api_v1_home_tasks_retention_purge_post"
+  };
+  "GET /api/v1/learning/provider-plan": {
+    operationId: "read_learning_provider_plan_api_v1_learning_provider_plan_get"
   };
   "POST /api/v1/learning-sessions": {
     operationId: "create_session_api_v1_learning_sessions_post"

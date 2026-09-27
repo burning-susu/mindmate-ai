@@ -15,7 +15,7 @@ import {
 import { type KnowledgeBaseItem } from '../api/knowledgeBases'
 import { CitedText, SourceCitationPanel } from '../components/SourceCitationPanel'
 
-const MOCK_BANNER = '模型选择目前适用于 AI 对话；学习出题仍是本地演示规则。'
+const MOCK_BANNER = '新建学习会话使用当前选择。Mock 仍按本地规则出题和评分，不会外发。在线模式会在创建题目和提交答案前分别确认本次费用。已经创建的会话保持创建时的服务。这仍不是完整学习计划或复习。'
 
 function resultLabel(result: string) {
   if (result === 'CORRECT') return '正确'
@@ -25,7 +25,16 @@ function resultLabel(result: string) {
 
 function canRevise(session: LearningSession) {
   const code = session.status === 'SOURCE_INVALID' ? 'SOURCE_INVALID' : session.failure_code
-  return code === 'EVIDENCE_INSUFFICIENT' || code === 'CANNOT_FORM_RELIABLE_QUESTION'
+  return code === 'EVIDENCE_INSUFFICIENT'
+    || code === 'CANNOT_FORM_RELIABLE_QUESTION'
+    || code === 'MODEL_OUTPUT_REJECTED'
+    || code === 'LEARNING_PROVIDER_INTERRUPTED'
+}
+
+function explanationLabel(origin: string | null | undefined) {
+  if (origin === 'model_verified') return '在线模型生成的解释'
+  if (origin === 'local_rule' || !origin) return '本地规则评分'
+  return '点评待完成或不可用'
 }
 
 function blocksAnswer(session: LearningSession) {
@@ -50,6 +59,13 @@ export default function LearningSessionPage() {
     staleTime: 0,
     refetchOnMount: 'always',
     retry: false,
+    refetchInterval: (query) => {
+      const data = query.state.data
+      if (!data) return false
+      if (data.status === 'PREPARING') return 1500
+      if (data.question_operation_status === 'DISPATCHED' || data.feedback_operation_status === 'DISPATCHED') return 1500
+      return false
+    },
   })
   const session = sessionQuery.data
   const knowledgeBaseQuery = useQuery({
@@ -58,6 +74,7 @@ export default function LearningSessionPage() {
     enabled: Boolean(session?.knowledge_base_id),
   })
   const [selectedOption, setSelectedOption] = useState('')
+  const [chargeConfirmed, setChargeConfirmed] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const [pendingFeedback, setPendingFeedback] = useState<LearningFeedback | null>(null)
@@ -77,6 +94,7 @@ export default function LearningSessionPage() {
   const feedback = question?.feedback ?? pendingFeedback
   const answered = Boolean(feedback)
   const blocked = session ? blocksAnswer(session) && !answered : false
+  const onlineSession = Boolean(session && session.provider !== 'mock')
 
   const refreshSession = async () => {
     const latest = await getLearningSession(sessionId)
@@ -86,6 +104,7 @@ export default function LearningSessionPage() {
 
   const submit = async () => {
     if (!question || !selectedOption || answered || blocked || submitLock.current) return
+    if (onlineSession && !chargeConfirmed) return
     submitLock.current = true
     setSubmitting(true)
     setSubmitError('')
@@ -94,7 +113,11 @@ export default function LearningSessionPage() {
     try {
       const result = await submitLearningAttempt(
         question.question_id,
-        { selectedOption, expectedQuestionVersion: question.row_version },
+        {
+          selectedOption,
+          expectedQuestionVersion: question.row_version,
+          confirmProviderCharge: onlineSession && chargeConfirmed,
+        },
         requestId,
       )
       setPendingFeedback(result)
@@ -166,6 +189,17 @@ export default function LearningSessionPage() {
           <p>资料范围：{knowledgeBaseName} · {session.scope?.file_ids.length ?? 0} 个文件 · 题量 {session.target_question_count}</p>
           {session.plan?.knowledge_point_title && <p id="learning-knowledge-point">知识点：{session.plan.knowledge_point_title}</p>}
           <p>模型 {session.model} · live_model_called={String(session.live_model_called)}</p>
+          <p>
+            服务 {session.provider}
+            {session.requested_model ? ` · 请求模型 ${session.requested_model}` : ''}
+            {session.resolved_model ? ` · 返回模型 ${session.resolved_model}` : ''}
+            {session.question_operation_status ? ` · 出题 ${session.question_operation_status}` : ''}
+            {session.feedback_operation_status ? ` · 点评 ${session.feedback_operation_status}` : ''}
+            {session.live_model_called ? ' · 已外发' : ' · 未外发'}
+          </p>
+          {session.status === 'PREPARING' || session.question_operation_status === 'DISPATCHED' ? (
+            <p role="status">正在等待所选服务返回题目。刷新后会回到同一次请求，不会自动再发。</p>
+          ) : null}
         </div>
       </div>
       {(session.status === 'FAILED' || session.status === 'SOURCE_INVALID') && (
@@ -201,8 +235,18 @@ export default function LearningSessionPage() {
               </label>
             ))}
           </fieldset>
+          {!answered && onlineSession && (
+            <label>
+              <input
+                type="checkbox"
+                checked={chargeConfirmed}
+                onChange={(event) => setChargeConfirmed(event.target.checked)}
+              />
+              我确认把当前答案和必要依据发给 {session.provider} 请求点评，并接受本次费用估算
+            </label>
+          )}
           {!answered && (
-            <button className="primary-button" type="button" disabled={!selectedOption || submitting} aria-busy={submitting} onClick={() => void submit()}>
+            <button className="primary-button" type="button" disabled={!selectedOption || submitting || (onlineSession && !chargeConfirmed)} aria-busy={submitting} onClick={() => void submit()}>
               {submitting ? '正在提交' : '提交答案'}
             </button>
           )}
@@ -217,6 +261,7 @@ export default function LearningSessionPage() {
             <div className="learning-feedback" id="learning-feedback" aria-label="作答反馈" tabIndex={-1}>
               <p>你的答案：{selectedLabel ?? feedback.selected_option}</p>
               <p>结果：{resultLabel(feedback.result)}</p>
+              <p>{explanationLabel(feedback.explanation_origin)}{feedback.live_model_called ? ' · 点评已外发' : ''}</p>
               <p><CitedText text={feedback.explanation} citations={feedback.citations} onCitation={(citation) => {
                 const match = feedback.citations.find((item) => item.display_number === citation.display_number)
                 if (match) setSelectedCitation(match)

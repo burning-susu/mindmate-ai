@@ -14,7 +14,7 @@ from mindmate.application.provider_configuration import (
     read_setting,
     write_setting,
 )
-from mindmate.infrastructure.models import AiOperation
+from mindmate.infrastructure.models import AiOperation, LearningProviderOperation
 
 BUDGET_SETTING_KEY = "ai.budget.period"
 BUDGET_CURRENCY = "USD"
@@ -64,9 +64,18 @@ def _channel(provider: str) -> str:
 
 def summarize_usage(session: Session, *, days: int = 30) -> dict[str, Any]:
     since = utc_now() - timedelta(days=days)
-    rows = session.scalars(
-        select(AiOperation).where(AiOperation.created_at >= since).order_by(AiOperation.created_at)
-    ).all()
+    rows: list[Any] = list(
+        session.scalars(
+            select(AiOperation).where(AiOperation.created_at >= since).order_by(AiOperation.created_at)
+        ).all()
+    )
+    rows.extend(
+        session.scalars(
+            select(LearningProviderOperation)
+            .where(LearningProviderOperation.created_at >= since)
+            .order_by(LearningProviderOperation.created_at)
+        ).all()
+    )
     daily: dict[str, dict[str, Any]] = {}
     by_model: dict[str, dict[str, Any]] = {}
     totals = {

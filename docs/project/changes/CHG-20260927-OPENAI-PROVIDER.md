@@ -50,3 +50,7 @@ OpenAI 适配器复用 `ChatProviderPort` 和 `httpx`，不新增 SDK。生产�
 ## 证据口径
 
 `OPENAI_ADAPTER_TESTED` 只表示本地 MockTransport / fixture 通过。`OPENAI_LIVE_VERIFIED` 在没有用户授权的真实 OpenAI Platform 调用前保持 `PENDING`。模拟 200 不能写成真实联通。
+
+## 第五十五批附录
+
+第五十四批正文里的“学习仍是本地规则”保持为当时事实。第五十五批起，新建学习会话读取同一手动选择：Mock 继续 `learning-demo-fixture-v1`；DeepSeek 与 OpenAI 只在费用确认、同意、Key 和预算都通过后，用已有适配器出一道有依据的单选题，并在提交后点评。创建时冻结服务。已有会话不改。没有真实付费冒烟。完整学习计划、提示、掌握度和复习仍未做。

@@ -116,6 +116,12 @@ async def lifespan(app: FastAPI):
         app.state.engine = create_sqlite_engine(settings.database_path)
         app.state.database_status = quick_check(app.state.engine)
         app.state.session_factory = create_session_factory(app.state.engine)
+        from mindmate.application.learning_model_generation import (
+            recover_dispatched_learning_operations,
+        )
+
+        with app.state.session_factory() as recovery_session:
+            recover_dispatched_learning_operations(recovery_session)
         install_history_search_listener()
         app.state.session = LocalSession()
         app.state.chat_worker = ChatGenerationWorker(

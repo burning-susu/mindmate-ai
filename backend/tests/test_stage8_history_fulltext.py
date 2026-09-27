@@ -234,7 +234,7 @@ def test_history_projection_migration_is_reversible(tmp_path: Path) -> None:
     command.upgrade(config, "head")
     engine = create_engine(f"sqlite:///{settings.database_path.as_posix()}")
     with engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "a50e7c1b9d44"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "b55c0e1a8d27"
         assert connection.scalar(
             text("SELECT status FROM history_search_state WHERE state_key = 'projection'")
         ) == "PENDING"

@@ -183,7 +183,7 @@ describe.sequential('stage 7 learning demo', () => {
 
     renderAt('/learning/new?knowledge_base_id=kb-1')
     expect(await screen.findByRole('heading', { name: '基于知识库的一题演示' })).toBeInTheDocument()
-    expect(screen.getByText('模型选择目前适用于 AI 对话；学习出题仍是本地演示规则。')).toBeInTheDocument()
+    expect(screen.getByText(/新建学习会话使用当前选择/)).toBeInTheDocument()
     expect(await screen.findByText('服务超时策略.txt')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '创建并开始' })).toBeDisabled()
     fireEvent.change(screen.getByRole('textbox', { name: '学习主题' }), { target: { value: '   ' } })
@@ -226,6 +226,7 @@ describe.sequential('stage 7 learning demo', () => {
       goal_type: 'CUSTOM',
       target_question_count: 1,
       client_request_id: keys[0],
+      confirm_provider_charge: false,
     })
     releaseCreate?.(response(created))
     expect(await screen.findByRole('heading', { name: 'API 单次请求超时' })).toBeInTheDocument()

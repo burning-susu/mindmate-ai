@@ -208,7 +208,7 @@ def test_selection_persists_and_keys_stay_separate(tmp_path: Path) -> None:
         client.post("/api/v1/system/session", headers={"Origin": ORIGIN})
         initial = client.get("/api/v1/ai/provider")
         assert initial.json()["generation_mode"] == "mock"
-        assert "模型选择目前适用于 AI 对话" in initial.json()["learning_notice"]
+        assert "新建学习会话使用当前选择" in initial.json()["learning_notice"]
         assert openai_calls == [] and deepseek_calls == []
 
         selected = client.post(

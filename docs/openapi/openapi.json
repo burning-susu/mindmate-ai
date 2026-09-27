@@ -3204,6 +3204,27 @@
         }
       }
     },
+    "/api/v1/learning/provider-plan": {
+      "get": {
+        "tags": [
+          "learning"
+        ],
+        "summary": "Read Learning Provider Plan",
+        "operationId": "read_learning_provider_plan_api_v1_learning_provider_plan_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningProviderPlanResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/learning-sessions": {
       "post": {
         "tags": [
@@ -8983,6 +9004,11 @@
             "type": "integer",
             "minimum": 1.0,
             "title": "Expected Question Version"
+          },
+          "confirm_provider_charge": {
+            "type": "boolean",
+            "title": "Confirm Provider Charge",
+            "default": false
           }
         },
         "additionalProperties": false,
@@ -9143,6 +9169,11 @@
           "live_model_called": {
             "type": "boolean",
             "title": "Live Model Called"
+          },
+          "explanation_origin": {
+            "type": "string",
+            "title": "Explanation Origin",
+            "default": "local_rule"
           },
           "citations": {
             "items": {
@@ -9381,6 +9412,63 @@
         ],
         "title": "LearningPlanResponse"
       },
+      "LearningProviderPlanResponse": {
+        "properties": {
+          "generation_mode": {
+            "type": "string",
+            "title": "Generation Mode"
+          },
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "requested_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested Model"
+          },
+          "requires_charge_confirmation": {
+            "type": "boolean",
+            "title": "Requires Charge Confirmation"
+          },
+          "requires_provider_key": {
+            "type": "boolean",
+            "title": "Requires Provider Key"
+          },
+          "outbound_summary": {
+            "type": "string",
+            "title": "Outbound Summary"
+          },
+          "question_estimate": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Question Estimate"
+          },
+          "feedback_estimate": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Feedback Estimate"
+          }
+        },
+        "type": "object",
+        "required": [
+          "generation_mode",
+          "provider",
+          "requested_model",
+          "requires_charge_confirmation",
+          "requires_provider_key",
+          "outbound_summary",
+          "question_estimate",
+          "feedback_estimate"
+        ],
+        "title": "LearningProviderPlanResponse"
+      },
       "LearningQuestionResponse": {
         "properties": {
           "question_id": {
@@ -9529,6 +9617,11 @@
               }
             ],
             "title": "Client Request Id"
+          },
+          "confirm_provider_charge": {
+            "type": "boolean",
+            "title": "Confirm Provider Charge",
+            "default": false
           }
         },
         "additionalProperties": false,
@@ -9615,9 +9708,53 @@
             "type": "string",
             "title": "Model"
           },
+          "requested_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested Model"
+          },
+          "resolved_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved Model"
+          },
           "live_model_called": {
             "type": "boolean",
             "title": "Live Model Called"
+          },
+          "question_operation_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question Operation Status"
+          },
+          "feedback_operation_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feedback Operation Status"
           },
           "row_version": {
             "type": "integer",

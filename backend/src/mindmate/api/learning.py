@@ -65,6 +65,7 @@ class LearningSessionCreateRequest(BaseModel):
     goal_type: str = Field(default="CUSTOM", min_length=1, max_length=40)
     target_question_count: int = Field(default=1)
     client_request_id: str | None = Field(default=None, min_length=1, max_length=128)
+    confirm_provider_charge: bool = False
 
 
 class LearningAttemptRequest(BaseModel):
@@ -73,6 +74,7 @@ class LearningAttemptRequest(BaseModel):
     selected_option: str = Field(min_length=1, max_length=32)
     client_request_id: str | None = Field(default=None, min_length=1, max_length=128)
     expected_question_version: int = Field(ge=1)
+    confirm_provider_charge: bool = False
 
 
 class LearningOptionResponse(BaseModel):
@@ -104,6 +106,7 @@ class LearningFeedbackResponse(BaseModel):
     provider: str
     model: str
     live_model_called: bool
+    explanation_origin: str = "local_rule"
     citations: list[LearningCitationResponse]
 
 
@@ -149,7 +152,11 @@ class LearningSessionResponse(BaseModel):
     current_question_id: str | None
     provider: str
     model: str
+    requested_model: str | None = None
+    resolved_model: str | None = None
     live_model_called: bool
+    question_operation_status: str | None = None
+    feedback_operation_status: str | None = None
     row_version: int
     created_at: datetime
     started_at: datetime | None
@@ -164,6 +171,28 @@ def _command_error(exc: LearningCommandError) -> LearningApiError:
         exc.detail,
         exc.status,
         current_row_version=exc.current_row_version,
+    )
+
+
+def _operation_status(session: Session, learning_session_id: str, task_type: str) -> str | None:
+    from mindmate.application.learning_model_generation import (
+        feedback_operation_status,
+        question_operation_status,
+    )
+
+    if task_type == "LEARNING_QUESTION":
+        return question_operation_status(session, learning_session_id)
+    return feedback_operation_status(session, learning_session_id)
+
+
+def _provider_runtime(request: Request, *, confirm_provider_charge: bool) -> Any:
+    from mindmate.application.learning_model_generation import LearningProviderRuntime
+
+    return LearningProviderRuntime(
+        deepseek=getattr(request.app.state, "deepseek_provider", None),
+        openai=getattr(request.app.state, "openai_provider", None),
+        credential_store=request.app.state.credential_store,
+        confirm_provider_charge=confirm_provider_charge,
     )
 
 
@@ -216,7 +245,8 @@ def _feedback_payload(
         explanation=feedback.explanation,
         provider=feedback.provider,
         model=feedback.model,
-        live_model_called=False,
+        live_model_called=bool(feedback.live_model_called),
+        explanation_origin=feedback.explanation_origin or "local_rule",
         citations=citations,
     )
 
@@ -287,8 +317,16 @@ def _session_payload(session: Session, record: Any) -> dict[str, Any]:
         completed_question_count=record.completed_question_count,
         current_question_id=record.current_question_id,
         provider=record.provider or MOCK_PROVIDER,
-        model=MOCK_MODEL,
-        live_model_called=False,
+        model=(record.resolved_model or record.requested_model or MOCK_MODEL)
+        if (record.provider or MOCK_PROVIDER) != MOCK_PROVIDER
+        else MOCK_MODEL,
+        requested_model=record.requested_model,
+        resolved_model=record.resolved_model,
+        live_model_called=bool(record.live_model_called)
+        if (record.provider or MOCK_PROVIDER) != MOCK_PROVIDER
+        else False,
+        question_operation_status=_operation_status(session, record.learning_session_id, "LEARNING_QUESTION"),
+        feedback_operation_status=_operation_status(session, record.learning_session_id, "LEARNING_FEEDBACK"),
         row_version=record.row_version,
         created_at=record.created_at,
         started_at=record.started_at,
@@ -296,6 +334,29 @@ def _session_payload(session: Session, record: Any) -> dict[str, Any]:
         plan=plan_payload,
         question=question_payload,
     ).model_dump(mode="json")
+
+
+class LearningProviderPlanResponse(BaseModel):
+    generation_mode: str
+    provider: str
+    requested_model: str | None
+    requires_charge_confirmation: bool
+    requires_provider_key: bool
+    outbound_summary: str
+    question_estimate: dict[str, Any]
+    feedback_estimate: dict[str, Any]
+
+
+@router.get(
+    "/learning/provider-plan",
+    response_model=LearningProviderPlanResponse,
+    tags=["learning"],
+)
+def read_learning_provider_plan(session: Session = Depends(get_session)) -> dict[str, Any]:
+    from mindmate.application.learning_model_generation import learning_provider_plan
+    from mindmate.application.provider_configuration import read_generation_mode
+
+    return learning_provider_plan(session, read_generation_mode(session))
 
 
 @router.post(
@@ -326,6 +387,11 @@ def create_session(
             request_id=getattr(request.state, "request_id", None),
             encoder=_encoder(request),
             query=_query(request),
+            confirm_provider_charge=payload.confirm_provider_charge,
+            generation_mode=None,
+            provider_runtime=_provider_runtime(
+                request, confirm_provider_charge=payload.confirm_provider_charge
+            ),
         )
     except LearningCommandError as exc:
         raise _command_error(exc) from exc
@@ -462,6 +528,10 @@ def create_attempt(
             expected_question_version=payload.expected_question_version,
             idempotency_key=idempotency_key,
             client_request_id=client_request_id,
+            confirm_provider_charge=payload.confirm_provider_charge,
+            provider_runtime=_provider_runtime(
+                request, confirm_provider_charge=payload.confirm_provider_charge
+            ),
         )
     except LearningCommandError as exc:
         raise _command_error(exc) from exc

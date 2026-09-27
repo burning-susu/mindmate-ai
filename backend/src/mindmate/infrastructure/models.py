@@ -749,6 +749,8 @@ class LearningSession(Base):
     live_model_called: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default=text("0"), nullable=False
     )
+    requested_model: Mapped[str | None] = mapped_column(String(100))
+    resolved_model: Mapped[str | None] = mapped_column(String(200))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -972,7 +974,53 @@ class LearningFeedback(Base):
     provider: Mapped[str] = mapped_column(String(50), nullable=False)
     model: Mapped[str] = mapped_column(String(80), nullable=False)
     prompt_template_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    explanation_origin: Mapped[str] = mapped_column(
+        String(40), default="local_rule", server_default=text("'local_rule'"), nullable=False
+    )
+    live_model_called: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("0"), nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class LearningProviderOperation(Base):
+    """One persisted learning Provider call. A row exists only after the send is committed."""
+
+    __tablename__ = "learning_provider_operations"
+    __table_args__ = (
+        UniqueConstraint("idempotency_key", name="uq_learning_provider_operation_idempotency"),
+        UniqueConstraint("client_request_id", name="uq_learning_provider_operation_client"),
+        Index("ix_learning_provider_operations_session", "learning_session_id", "task_type"),
+    )
+
+    operation_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    learning_session_id: Mapped[str] = mapped_column(
+        ForeignKey("learning_sessions.learning_session_id"), nullable=False
+    )
+    question_id: Mapped[str | None] = mapped_column(String(36))
+    attempt_id: Mapped[str | None] = mapped_column(String(36))
+    task_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    client_request_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False)
+    provider: Mapped[str] = mapped_column(String(50), nullable=False)
+    requested_model: Mapped[str] = mapped_column(String(100), nullable=False)
+    resolved_model: Mapped[str | None] = mapped_column(String(200))
+    prompt_template_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    usage_input_tokens: Mapped[int | None] = mapped_column(Integer)
+    usage_output_tokens: Mapped[int | None] = mapped_column(Integer)
+    usage_total_tokens: Mapped[int | None] = mapped_column(Integer)
+    provider_request_id: Mapped[str | None] = mapped_column(String(128))
+    error_code: Mapped[str | None] = mapped_column(String(100))
+    error_detail: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    row_version: Mapped[int] = mapped_column(
+        Integer, default=1, server_default=text("1"), nullable=False
+    )
 
 
 class HistorySearchState(Base):
