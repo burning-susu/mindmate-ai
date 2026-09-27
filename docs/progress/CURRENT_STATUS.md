@@ -7,7 +7,7 @@
 - 最后更新时间：`2026-09-27`
 - 当前开发阶段：阶段 8 开发中，状态 `PARTIAL`；阶段 5、阶段 6、阶段 7 继续 `PARTIAL`
 - 交付顺序：Demo 首先完成，完整 V1 以后精进。求职 Demo 优先文件整理/导入、建库、带来源问答、最小学习陪练和重启恢复。Demo 可用性与完整 V1 阶段状态分开报告。
-- 当前批次状态：第五十一批完成历史回收站 30 天到期安全清理，以及后台任务记录按 7/30 天期限的安全清理与任务面板最小入口。历史自动清理、独占子行、共享保护、恢复竞态、FTS 与任务期限/引用跳过按本批证据为 `PASS`。历史手动永久删除 UI 与两类浏览器确认点击为 `PENDING`。多题定位仍按第 50 批 `PARTIAL`。阶段 8 仍为 `PARTIAL`。求职 Demo 维持第四十二批 `PASS`。真实 DeepSeek 仍为 `PENDING`。阶段 5、6、7 的完整 V1 仍为 `PARTIAL`。详细证据见 `docs/test-reports/stage-51-retention-purge.md`。
+- 当前批次状态：第五十二批完成本机设置增强（存储/模型/用量/预算）与一致性本地备份导出（创建/校验/下载）。设置存储与用量只读、预算硬停止后端门禁、备份创建与排除/下载按本批证据为 `PASS`；周期硬限额完整对账与备份恢复仍为 `PARTIAL`/`PENDING`。第 51 批历史手动永久删除 UI 与两类浏览器确认点击仍 `PENDING`；多题定位仍 `PARTIAL`。阶段 8 仍为 `PARTIAL`。求职 Demo 维持第四十二批 `PASS`。真实 DeepSeek 仍为 `PENDING`。阶段 5、6、7 的完整 V1 仍为 `PARTIAL`。详细证据见 `docs/test-reports/stage-52-settings-backup-export.md`。
 
 ## 已完成阶段
 

@@ -92,15 +92,33 @@ def test_workers_only_claim_registered_task_types(tmp_path: Path) -> None:
 
 def test_backup_manifest_and_hash_verification(tmp_path: Path) -> None:
     source = tmp_path / "source"
-    source.mkdir()
-    (source / "data.txt").write_text("mindmate-stage3", encoding="utf-8")
+    (source / "database").mkdir(parents=True)
+    db = source / "database" / "mindmate.db"
+    import sqlite3
+
+    with sqlite3.connect(db) as conn:
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0002_stage3')")
+        conn.execute(
+            "CREATE TABLE content_objects ("
+            "content_object_id TEXT PRIMARY KEY, sha256 TEXT, byte_size INT, "
+            "detected_mime_type TEXT, storage_relative_path TEXT, storage_state TEXT, "
+            "reference_count INT, created_at TEXT, verified_at TEXT)"
+        )
+        conn.execute("CREATE TABLE files (file_id TEXT PRIMARY KEY, deleted_at TEXT)")
+        conn.commit()
     (source / "runtime").mkdir()
     (source / "runtime" / "ignored.log").write_text("runtime", encoding="utf-8")
+    (source / "config").mkdir()
+    (source / "config" / "data.txt").write_text("mindmate-stage3", encoding="utf-8")
     archive = tmp_path / "backup.mindmate-backup"
 
     manifest = create_backup(source, archive, "0002_stage3")
-    assert manifest["file_count"] == 1
+    assert manifest["file_count"] >= 1
     verified = verify_backup(archive)
-    assert verified["entries"][0]["path"] == "data.txt"
+    paths = {entry["path"] for entry in verified["entries"]}
+    assert "config/data.txt" in paths
+    assert "database/mindmate.db" in paths
+    assert not any(path.startswith("runtime/") for path in paths)
     with zipfile.ZipFile(archive) as handle:
         assert "manifest.json" in handle.namelist()
