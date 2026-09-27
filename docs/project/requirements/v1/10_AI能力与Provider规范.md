@@ -28,18 +28,17 @@ Provider 信息核对日期：
 
 | 能力 | V1 选择 | 数据位置 |
 | --- | --- | --- |
-| 普通聊天 | DeepSeek API deepseek-flash | 外部 API |
-| 知识库回答 | DeepSeek API deepseek-flash | 外部 API，只发送必要片段 |
-| 学习计划与讲解 | DeepSeek API deepseek-flash | 外部 API，只发送必要片段 |
-| 出题与点评 | DeepSeek API deepseek-flash | 外部 API，只发送必要片段与当前答案 |
-| 对话标题与摘要 | DeepSeek API deepseek-flash，失败时本地规则降级 | 外部 API 或本地降级 |
+| 普通聊天 | 用户手动选择 Mock、DeepSeek `deepseek-flash` 或 OpenAI `gpt-6-sol` | Mock 本地；在线只发送必要文本 |
+| 知识库回答 | 同上，且证据不足时 0 外呼 | 外部 API 只发送至多两段受限证据 |
+| 学习计划、出题与点评 | 当前仍是本地规则 `learning-demo-fixture-v1` | 本机。模型出题另批验收，不能把设置里的在线选择当成已经出题 |
+| 对话标题与摘要 | 本地规则降级 | 本地 |
 | Embedding | BAAI/bge-small-zh-v1.5 | 本地 |
 | 关键词检索 | SQLite FTS5 BM25 | 本地 |
 | 向量检索 | 本地 VectorStore Adapter | 本地 |
 | 重排 | 本地混合分数与多样性重排 | 本地 |
 | API Key | 操作系统安全凭据存储 | 本地 |
 
-V1 不购买“Token 套餐”。用户在 DeepSeek 开放平台注册、充值并创建 API Key，应用按官方 API 实际 Token 计费规则调用。
+V1 不购买“Token 套餐”。DeepSeek 与 OpenAI 各自注册、充值和创建 API Key。应用按所选服务的官方 Token 规则计费，不把一家的 Key 或同意用于另一家。默认启动是 Mock。
 
 ## 4. 选择理由
 
@@ -83,7 +82,7 @@ V1 不默认加载额外神经网络 Reranker，原因：
 
 MindMate AI 作为应用在用户电脑本地运行，文件、数据库、Embedding 和索引默认保存在本地。
 
-但使用 DeepSeek API 时，以下内容会通过网络发送到 DeepSeek：
+但使用所选在线 Provider 时，以下内容会通过网络发送到该服务（DeepSeek 或 OpenAI，以用户当时的选择为准）：
 
 - 当前问题；
 - 必要的对话上下文；
@@ -95,7 +94,7 @@ MindMate AI 作为应用在用户电脑本地运行，文件、数据库、Embed
 
 ### 5.2 第一次使用提示
 
-首次启用 DeepSeek API 前必须明确提示：
+首次向某一家外发前必须单独提示，DeepSeek 的同意记录不能当作 OpenAI 已同意：
 
 - AI 生成需要把必要文本发送到外部 Provider；
 - 不会发送整个知识库；
@@ -114,7 +113,7 @@ V1 不提供本地大语言模型。
 - 仍可本地整理文件；
 - 仍可使用本地全文搜索；
 - 可以查看本地检索结果；
-- 不使用 DeepSeek 生成回答、出题或点评；
+- 不使用 DeepSeek 或 OpenAI 生成回答；学习出题在模型接线完成前继续使用本地规则；
 - 不得伪装成完整 AI 知识库功能。
 
 ## 6. DeepSeek Provider 配置
@@ -152,6 +151,22 @@ deepseek-v4-pro 不作为 V1 默认模型。
 - 独立质量测试通过；
 - 设置单次和周期预算；
 - 不自动从 Flash 切换。
+
+### 6.4 OpenAI GPT-6 Sol
+
+| 配置项 | 值 |
+| --- | --- |
+| provider_id | `openai_gpt6_sol` |
+| provider_type | OPENAI |
+| base_url | `https://api.openai.com/v1` |
+| model | `gpt-6-sol` |
+| 凭据引用 | `provider/openai/api-key` |
+| 同意版本 | `openai-external-ai-v1` |
+| 接口 | Chat Completions 文本流 |
+| 采样参数 | 不发送 `temperature` 或 `max_tokens`；使用 `max_completion_tokens` 与 `reasoning_effort=none` |
+| automatic_fallback | false |
+
+界面只提供这一固定官方地址和模型 ID。推理字段不写入回答正文，也不调用内建工具。费用由 OpenAI Platform 单独结算。2026-09-27 官方模型页标价是估算来源，不是账单。
 
 ## 7. API 调用方式
 

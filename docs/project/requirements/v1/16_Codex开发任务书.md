@@ -277,9 +277,11 @@ feat: build local knowledge base and hybrid rag
 
 ### 13.1 Provider
 
-- `ChatProviderPort` 和 DeepSeek httpx Adapter；
-- Credential Manager 配置/删除/测试；
-- 首次外发同意；
+- `ChatProviderPort`、DeepSeek httpx Adapter，以及 OpenAI `gpt-6-sol` httpx Adapter；
+- 两套 Credential Manager 引用、分别配置/删除/测试；
+- 每家单独的首次外发同意；
+- 设置页手动选择 Mock、DeepSeek 或 OpenAI，失败不自动换服务；
+- 学习出题仍用本地规则，直到另批把适配器接到学习会话；
 - Token/预算记录；
 - 超时、429、5xx、断流与有限重试；
 - Mock Provider；
@@ -361,7 +363,8 @@ feat: complete grounded learning coach workflow
 
 - 首页真实统计、继续学习、快捷操作、最近活动；
 - 对话/学习统一历史筛选；
-- 设置中的存储、日志、模型、Provider、预算、备份；
+- 设置中的存储、日志、模型、双 Provider 手动选择、预算、备份；
+- 恢复后回到 Mock，并要求两家分别重新核对同意与 Key；
 - 业务对象回收站到期清理；
 - 任务记录保留清理；
 - 完整备份/恢复 UI；
