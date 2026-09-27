@@ -544,8 +544,19 @@
 
 ### 第六十批：宿主验收入口与阶段 8 Demo 证据收口
 
-- 状态：后端关键回归 `PASS`（`29 passed`）；前端全量门禁 `PASS`（Vitest `66 passed`、typecheck、lint、build）；宿主浏览器点击仍 `PARTIAL`，真实 Provider 仍 `PENDING`；阶段 7/8 完整 V1 继续 `PARTIAL`。本批因 `.git/index.lock` `Permission denied` 暂为 `UNCOMMITTED / NOT_PUSHED`，未改 ACL 或绕过 Git 索引。
+- 状态：后端关键回归 `PASS`（`29 passed`）；前端全量门禁 `PASS`（Vitest `66 passed`、typecheck、lint、build）；宿主浏览器点击仍 `PARTIAL`，真实 Provider 仍 `PENDING`；阶段 7/8 完整 V1 继续 `PARTIAL`。第六十批实现随后已由中文提交 `验收：补跑历史删除测试并建立本机演示入口` 推送，远端 SHA 为 `0b6fccef85dd83f6773a92dcddc66e004545882d`。该批测试报告保留当时 `UNCOMMITTED / NOT_PUSHED` 的原始记录。
 - 修复：并发同键 `next-question` 在 CAS 失败后重新读取已持久化题目，避免错误 412；SQLite `quick_check` 支持多行结果聚合。回归夹具只校准当前 Origin、来源文件名、Alembic head、会话状态和未引用知识点清理断言，不放宽安全边界。
 - 证据：预装 Python 3.12.14 加载仓库 `.venv` 依赖，仓库内隔离 `basetemp` 执行 `test_stage8_history_purge.py`、`test_stage8_history_fulltext.py`、`test_stage57_learning_multistep.py`、历史查询/会话/学习历史文件，共 `29 passed`；Ruff、定向 Pyright、compileall、Alembic head `d17a5e9c4b20`、PowerShell AST/生命周期自检和 `git diff --check` 通过。全目录 Pyright 既有 43 条 Worker/备份测试类型问题未纳入本批范围。
 - 宿主入口：新增 `docs/demo/阶段60宿主验收入口.md`，复用 `scripts/demo.ps1`、`scripts/dev.ps1` 和 `backend/tests/stage56_online_browser_server.py`，提供隔离数据根、端口、Mock/Test-only Provider、停止方式、health/ready/revision 检查、页面走查及脱敏报告模板。报告见 `docs/test-reports/stage-60-host-acceptance.md`。
 - 未完成：本沙箱没有真实页面点击、刷新、重启或截图，因此 `HISTORY_PURGE_BROWSER`、`LEARNING_ONLINE_BROWSER`、`DEMO_REGRESSION_THIS_BATCH` 不改为 `PASS`；不执行真实 DeepSeek/OpenAI 付费请求。
+
+### 第六十一批：阶段 8 演示验收与交接
+
+- 状态：第六十批远端事实已核实；普通 Windows 浏览器验收未执行。`HISTORY_PURGE_BROWSER`、`LEARNING_ONLINE_BROWSER`、`DEMO_REGRESSION_THIS_BATCH` 为 `PARTIAL`，`REAL_PROVIDER_SMOKE` 为 `PENDING`；阶段 7/8 完整 V1 仍 `PARTIAL`。
+- Demo 可用性：第四十二批已有求职 Demo `PASS` 证据保留；本批未在普通 Windows 浏览器复验，不能把历史结果写成当前批通过。
+- 完整 V1：阶段 7、8 仍 `PARTIAL`，不由求职 Demo 历史结果替代。
+- 环境证据：本批进场时 `git ls-remote --heads origin feat/v1-bootstrap` 返回 `0b6fccef85dd83f6773a92dcddc66e004545882d`，与当时本地 HEAD 及跟踪引用一致。`node --version` 为 `v22.22.2`，`npm --version` 为 `11.16.0`；仓库 `.venv` 的 `python.exe --version` 因其绑定的 Python 3.12.11 路径无法启动而返回 `Unable to create process`。本批没有重跑第六十批 `29 passed / 66 passed`。
+- 浏览器阻断：`cua.getState()` 仅显示无标签页的 Codex 内置浏览器；随后 `cua.listBrowsers()` 被审批层以 `404 Not Found` 拒绝，原因是审批服务不支持当前模型。遵照本批提示词没有重试该受阻工具，也未把 HTTP/自动测试作为页面证据。
+- 准备：复核 `docs/demo/阶段60宿主验收入口.md` 已含隔离 Mock、test-only Provider、停止方法、页面步骤与脱敏模板；`docs/demo/求职Demo三分钟操作.md` 已给出求职演示路径。本批不新增第二份启动文档。逐项验收表和交接材料见 `docs/test-reports/stage-61-demo-host-acceptance.md`。
+- 未完成与交接：没有页面截图、合成会话 ID、服务调用计数、刷新/重启观察或本批缺陷复现。需在普通 Windows 浏览器完成阶段 61 报告中的五项走查，并回传脱敏记录或失败截图后再继续判定；真实付费 Provider 冒烟不在本次操作内。
+- Git 交接：本地提交的中文信息为 `验收：整理阶段八演示验收记录与宿主交接`。两次普通推送命令均无输出挂起并被停止；`git ls-remote` 核实远端仍为进场 SHA `0b6fccef85dd83f6773a92dcddc66e004545882d`，本地领先 1 个提交。推送原因未判定，不强推；在普通 Windows VS Code 终端运行 `git push origin feat/v1-bootstrap`，再用 `git rev-parse HEAD` 和 `git ls-remote --heads origin feat/v1-bootstrap` 核验两边完整 SHA 一致。完整本地提交 SHA 见交付说明。

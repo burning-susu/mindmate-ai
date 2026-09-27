@@ -3,11 +3,11 @@
 ## 基本信息
 
 - 当前开发分支：`feat/v1-bootstrap`
-- 当前远程提交：以 `git ls-remote --heads origin feat/v1-bootstrap` 为准；本文件随本批次收口提交推送
+- 本批进场远端提交：`feat/v1-bootstrap` → `0b6fccef85dd83f6773a92dcddc66e004545882d`（2026-09-28 运行 `git ls-remote --heads origin feat/v1-bootstrap` 核实）
 - 最后更新时间：`2026-09-28`
 - 当前开发阶段：阶段 8 开发中，状态 `PARTIAL`；阶段 5、阶段 6、阶段 7 继续 `PARTIAL`
 - 交付顺序：Demo 首先完成，完整 V1 以后精进。求职 Demo 优先文件整理/导入、建库、带来源问答、最小学习陪练和重启恢复。Demo 可用性与完整 V1 阶段状态分开报告。
-- 当前批次状态：第六十批已补跑第 59 批后端关键回归并建立 Windows 宿主验收入口。第 59 批实现已由 `16e3316be62768b6ab73695db872bcb9fddc721d` 推送；第 59 批报告中的 `UNCOMMITTED / NOT_PUSHED` 只保留为当时证据。第六十批后端关键 pytest `29 passed`（使用预装 Python 3.12.14 加载仓库依赖和隔离 basetemp），前端 `66 passed`、typecheck/lint/build、Ruff、定向 Pyright、compileall、Alembic head `d17a5e9c4b20` 和 `git diff --check` 通过。宿主浏览器没有在本沙箱实际点击，`HISTORY_PURGE_BROWSER`、`LEARNING_ONLINE_BROWSER`、`DEMO_REGRESSION_THIS_BATCH` 继续 `PARTIAL`，`REAL_PROVIDER_SMOKE` 继续 `PENDING`；阶段 7、8 完整 V1 仍 `PARTIAL`。第六十批当前因 `.git/index.lock` `Permission denied` 为 `UNCOMMITTED / NOT_PUSHED`，未改 ACL 或绕过 Git 索引。详见 `docs/test-reports/stage-60-host-acceptance.md` 和 `docs/demo/阶段60宿主验收入口.md`。
+- 当前批次状态：第六十批的实现和验收入口已由提交 `0b6fccef85dd83f6773a92dcddc66e004545882d`（`验收：补跑历史删除测试并建立本机演示入口`）推送到 `origin/feat/v1-bootstrap`；第六十一批进场时本地 HEAD、跟踪引用与 `git ls-remote --heads origin feat/v1-bootstrap` 一致。第六十批报告保留当时尚未提交的原始记录。其后端关键 pytest `29 passed`、前端 `66 passed` 及其他检查属于第六十批证据，本批没有重跑。第六十一批已核对现有 Windows 宿主入口和三分钟 Demo 说明，但未取得普通 Windows 浏览器页面证据：当前只观察到 Codex 内置浏览器，浏览器能力查询随后被审批层以 `404` 拒绝，按提示词不再重试；`HISTORY_PURGE_BROWSER`、`LEARNING_ONLINE_BROWSER`、`DEMO_REGRESSION_THIS_BATCH` 均为 `PARTIAL`，`REAL_PROVIDER_SMOKE` 为 `PENDING`。Node `v22.22.2`、npm `11.16.0` 可运行，仓库 `.venv` Python 启动失败（`Unable to create process`），因此本批未运行 pytest。第六十一批已用中文提交 `验收：整理阶段八演示验收记录与宿主交接` 本地提交；两次推送均无输出挂起后停止，远端只读核验仍为进场 SHA `0b6fccef85dd83f6773a92dcddc66e004545882d`，本地领先 1 个提交。完整提交 SHA 和普通终端交接命令见本批报告及交付说明。阶段 7、8 完整 V1 仍 `PARTIAL`。
 
 ## 已完成阶段
 
