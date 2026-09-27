@@ -6,16 +6,20 @@ import { v7 as uuidv7 } from 'uuid'
 
 import { ApiError, apiRequest } from '../api/client'
 import {
+  createNextLearningQuestion,
+  finishLearningSession,
   getLearningSession,
+  getLearningProviderPlan,
   submitLearningAttempt,
   type LearningCitation,
   type LearningFeedback,
+  type LearningQuestion,
   type LearningSession,
 } from '../api/learning'
 import { type KnowledgeBaseItem } from '../api/knowledgeBases'
 import { CitedText, SourceCitationPanel } from '../components/SourceCitationPanel'
 
-const MOCK_BANNER = '新建学习会话使用当前选择。Mock 仍按本地规则出题和评分，不会外发。在线模式会在创建题目和提交答案前分别确认本次费用。已经创建的会话保持创建时的服务。这仍不是完整学习计划或复习。'
+const MOCK_BANNER = '新建学习会话使用当前选择。Mock 仍按本地规则出题和评分，不会外发。在线模式每道题和每次点评前都会单独确认费用。已经创建的会话保持创建时的服务。这仍不是完整学习计划或复习。'
 
 function resultLabel(result: string) {
   if (result === 'CORRECT') return '正确'
@@ -46,6 +50,20 @@ function readFailureMessage(error: unknown) {
   return '学习会话暂时读不到。服务恢复后点“重新读取”，会回到同一题和已保存的反馈。'
 }
 
+function endReasonLabel(reason: string | null | undefined) {
+  if (reason === 'PLAN_COMPLETED') return '已完成计划题数'
+  if (reason === 'USER_ENDED') return '主动结束'
+  if (reason === 'EVIDENCE_EXHAUSTED') return '资料不足，已提前结束'
+  if (reason === 'PROVIDER_RESULT_UNKNOWN') return '外发结果未知，已停止重发'
+  if (reason === 'QUESTION_GENERATION_FAILED') return '下一题生成失败'
+  return '学习已结束'
+}
+
+function answerLabel(question: LearningQuestion, feedback: LearningFeedback) {
+  return question.options.find((option) => option.option_id === feedback.selected_option)?.label
+    ?? feedback.selected_option
+}
+
 export default function LearningSessionPage() {
   const { sessionId = '' } = useParams()
   const [searchParams] = useSearchParams()
@@ -68,6 +86,7 @@ export default function LearningSessionPage() {
     },
   })
   const session = sessionQuery.data
+  const sessionQuestions = session?.questions ?? (session?.question ? [session.question] : [])
   const knowledgeBaseQuery = useQuery({
     queryKey: ['knowledge-base', session?.knowledge_base_id],
     queryFn: () => apiRequest<KnowledgeBaseItem>(`/api/v1/knowledge-bases/${session?.knowledge_base_id}`),
@@ -75,31 +94,165 @@ export default function LearningSessionPage() {
   })
   const [selectedOption, setSelectedOption] = useState('')
   const [chargeConfirmed, setChargeConfirmed] = useState(false)
+  const [nextChargeConfirmed, setNextChargeConfirmed] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [generatingNext, setGeneratingNext] = useState(false)
+  const [finishing, setFinishing] = useState(false)
   const [submitError, setSubmitError] = useState('')
+  const [nextError, setNextError] = useState('')
+  const [finishError, setFinishError] = useState('')
   const [pendingFeedback, setPendingFeedback] = useState<LearningFeedback | null>(null)
   const [selectedCitation, setSelectedCitation] = useState<LearningCitation | null>(null)
   const clientRequestId = useRef<string | null>(null)
+  const nextRequestId = useRef<string | null>(null)
+  const nextSourceQuestionId = useRef<string | null>(null)
+  const finishRequestId = useRef<string | null>(null)
   const submitLock = useRef(false)
+  const nextLock = useRef(false)
+  const finishLock = useRef(false)
+  const observedQuestionId = useRef<string | null>(null)
   const question = session?.question ?? null
-  const questionMissing = Boolean(focusQuestionId && question && question.question_id !== focusQuestionId)
-  const feedbackMissing = Boolean(focusFeedback && question && !question.feedback && !pendingFeedback)
+  const sessionStatus = session?.status
+  const sessionQuestionId = session?.current_question_id
+  const questionMissing = Boolean(
+    focusQuestionId && session && !sessionQuestions.some((item) => item.question_id === focusQuestionId),
+  )
+  const feedbackMissing = Boolean(
+    focusFeedback
+    && focusQuestionId
+    && session
+    && !sessionQuestions.find((item) => item.question_id === focusQuestionId)?.feedback
+    && !pendingFeedback,
+  )
   useEffect(() => {
-    if (!question || question.question_id !== focusQuestionId) return
-    const targetId = focusFeedback ? 'learning-feedback' : `learning-question-${question.question_id}`
+    const currentQuestionId = session?.current_question_id ?? null
+    if (!currentQuestionId || currentQuestionId === observedQuestionId.current) return
+    observedQuestionId.current = currentQuestionId
+    setSelectedOption('')
+    setChargeConfirmed(false)
+    setPendingFeedback(null)
+    setSubmitError('')
+    clientRequestId.current = null
+    submitLock.current = false
+  }, [session?.current_question_id])
+  useEffect(() => {
+    if (!nextRequestId.current || !sessionStatus) return
+    if (
+      sessionStatus === 'COMPLETED'
+      || sessionStatus === 'FAILED'
+      || sessionStatus === 'SOURCE_INVALID'
+      || (sessionStatus !== 'PREPARING' && sessionQuestionId !== nextSourceQuestionId.current)
+    ) {
+      nextRequestId.current = null
+      nextSourceQuestionId.current = null
+      setNextChargeConfirmed(false)
+    }
+  }, [sessionQuestionId, sessionStatus])
+  useEffect(() => {
+    if (!focusQuestionId) return
+    const targetId = focusFeedback
+      ? `learning-feedback-${focusQuestionId}`
+      : `learning-question-${focusQuestionId}`
     const node = document.getElementById(targetId)
     node?.scrollIntoView({ block: 'center' })
     node?.classList.add('history-target')
   }, [focusFeedback, focusQuestionId, question])
   const feedback = question?.feedback ?? pendingFeedback
   const answered = Boolean(feedback)
-  const blocked = session ? blocksAnswer(session) && !answered : false
+  const blocked = session
+    ? (session.status !== 'IN_PROGRESS' && !(session.status === 'PREPARING' && answered))
+      || (blocksAnswer(session) && !answered)
+    : false
   const onlineSession = Boolean(session && session.provider !== 'mock')
+  const canContinue = Boolean(
+    session
+    && answered
+    && session.status === 'IN_PROGRESS'
+    && session.completed_question_count < session.target_question_count,
+  )
+  const providerPlanQuery = useQuery({
+    queryKey: ['learning-provider-plan'],
+    queryFn: getLearningProviderPlan,
+    enabled: onlineSession && canContinue,
+    retry: false,
+  })
 
   const refreshSession = async () => {
     const latest = await getLearningSession(sessionId)
     queryClient.setQueryData(['learning-session', sessionId], latest)
     return latest
+  }
+
+  const createNext = async () => {
+    if (!session || !canContinue || nextLock.current) return
+    if (onlineSession && (!nextChargeConfirmed || !providerPlanQuery.data)) return
+    nextLock.current = true
+    setGeneratingNext(true)
+    setNextError('')
+    if (!nextRequestId.current) nextRequestId.current = uuidv7()
+    if (!nextSourceQuestionId.current) nextSourceQuestionId.current = session.current_question_id
+    try {
+      const latest = await createNextLearningQuestion(
+        sessionId,
+        {
+          expectedSessionVersion: session.row_version,
+          confirmProviderCharge: onlineSession && nextChargeConfirmed,
+        },
+        nextRequestId.current,
+      )
+      queryClient.setQueryData(['learning-session', sessionId], latest)
+      nextRequestId.current = null
+      setNextChargeConfirmed(false)
+      setNextError('')
+    } catch (caught) {
+      try {
+        const latest = await refreshSession()
+        if (latest.status === 'PREPARING') {
+          setNextError('下一题正在处理。刷新后仍会回到同一请求，不会自动重发。')
+        } else if (latest.current_question_id !== session.current_question_id || latest.result) {
+          nextRequestId.current = null
+          setNextChargeConfirmed(false)
+        } else if (caught instanceof ApiError) {
+          setNextError(caught.problem.detail)
+        } else {
+          setNextError('生成结果未知。请重新读取会话，不要更换这次请求。')
+        }
+      } catch {
+        setNextError('生成结果未知，暂时读不到服务端状态。请稍后重新读取，不要更换这次请求。')
+      }
+    } finally {
+      nextLock.current = false
+      setGeneratingNext(false)
+    }
+  }
+
+  const finish = async () => {
+    if (!session || finishing || finishLock.current) return
+    finishLock.current = true
+    setFinishing(true)
+    setFinishError('')
+    if (!finishRequestId.current) finishRequestId.current = uuidv7()
+    try {
+      const latest = await finishLearningSession(
+        sessionId,
+        session.row_version,
+        finishRequestId.current,
+      )
+      queryClient.setQueryData(['learning-session', sessionId], latest)
+      setFinishError('')
+    } catch (caught) {
+      try {
+        const latest = await refreshSession()
+        if (latest.status === 'COMPLETED') setFinishError('')
+        else if (caught instanceof ApiError) setFinishError(caught.problem.detail)
+        else setFinishError('结束结果未知。请重新读取会话。')
+      } catch {
+        setFinishError('结束结果未知，暂时读不到服务端状态。请重新读取会话。')
+      }
+    } finally {
+      finishLock.current = false
+      setFinishing(false)
+    }
   }
 
   const submit = async () => {
@@ -171,6 +324,13 @@ export default function LearningSessionPage() {
 
   const selectedLabel = question?.options.find((option) => option.option_id === (feedback?.selected_option ?? selectedOption))?.label
   const knowledgeBaseName = knowledgeBaseQuery.data?.name ?? session.knowledge_base_id
+  const activeQuestionId = session.current_question_id ?? question?.question_id
+  const questionHistory = sessionQuestions.filter((item) => {
+    if (session.status === 'IN_PROGRESS' || session.status === 'PREPARING') {
+      return item.feedback && item.question_id !== activeQuestionId
+    }
+    return item.feedback || item.status !== 'ANSWERED'
+  })
 
   return (
     <section className="detail-page learning-page">
@@ -187,6 +347,7 @@ export default function LearningSessionPage() {
           <h1>{session.topic}</h1>
           <p>目标：{session.goal_text}</p>
           <p>资料范围：{knowledgeBaseName} · {session.scope?.file_ids.length ?? 0} 个文件 · 题量 {session.target_question_count}</p>
+          <p>已完成 {session.completed_question_count} / {session.target_question_count} 题</p>
           {session.plan?.knowledge_point_title && <p id="learning-knowledge-point">知识点：{session.plan.knowledge_point_title}</p>}
           <p>模型 {session.model} · live_model_called={String(session.live_model_called)}</p>
           <p>
@@ -258,7 +419,7 @@ export default function LearningSessionPage() {
             </div>
           )}
           {answered && feedback && (
-            <div className="learning-feedback" id="learning-feedback" aria-label="作答反馈" tabIndex={-1}>
+            <div className="learning-feedback" id={`learning-feedback-${question.question_id}`} aria-label="作答反馈" tabIndex={-1}>
               <p>你的答案：{selectedLabel ?? feedback.selected_option}</p>
               <p>结果：{resultLabel(feedback.result)}</p>
               <p>{explanationLabel(feedback.explanation_origin)}{feedback.live_model_called ? ' · 点评已外发' : ''}</p>
@@ -276,12 +437,107 @@ export default function LearningSessionPage() {
                   ))}
                 </div>
               )}
-              {selectedCitation && feedback.citations.some((citation) => citation.citation_id === selectedCitation.citation_id) ? (
-                <SourceCitationPanel citation={selectedCitation} onClose={() => setSelectedCitation(null)} />
-              ) : null}
             </div>
           )}
         </div>
+      )}
+      {session.status === 'PREPARING' && sessionQuestions.length > 0 && (
+        <p role="status">正在准备下一题。刷新后会读取同一会话状态。</p>
+      )}
+      {canContinue && (
+        <section className="detail-section learning-next-question" aria-label="下一题">
+          {onlineSession && providerPlanQuery.data && (
+            <div className="settings-privacy-copy">
+              <p>{providerPlanQuery.data.outbound_summary}</p>
+              <p>
+                本次下一题将发送给 {providerPlanQuery.data.provider}，按公开费率估算不超过
+                {' '}{providerPlanQuery.data.question_estimate.estimated_usd_ceiling} 美元。
+                {providerPlanQuery.data.question_estimate.disclaimer}
+              </p>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={nextChargeConfirmed}
+                  onChange={(event) => setNextChargeConfirmed(event.target.checked)}
+                />
+                我确认本次生成下一题可能产生费用
+              </label>
+            </div>
+          )}
+          {onlineSession && providerPlanQuery.isLoading && <p role="status">正在读取本次费用估算…</p>}
+          {onlineSession && providerPlanQuery.isError && (
+            <div className="inline-error" role="alert">费用估算暂时不可用，不能外发下一题。</div>
+          )}
+          {nextError && (
+            <div className="inline-error" role="alert">
+              <span>{nextError}</span>
+              <button className="quiet-button" type="button" onClick={() => void refreshSession().catch(() => setNextError('重新读取失败。'))}>重新读取</button>
+            </div>
+          )}
+          <button
+            className="primary-button"
+            type="button"
+            disabled={generatingNext || (onlineSession && (!nextChargeConfirmed || !providerPlanQuery.data))}
+            aria-busy={generatingNext}
+            onClick={() => void createNext()}
+          >
+            {generatingNext ? '正在生成' : '下一题'}
+          </button>
+        </section>
+      )}
+      {questionHistory.length > 0 && (
+        <section className="detail-section learning-question-history" aria-label="已完成题目">
+          <h2>题目记录</h2>
+          {questionHistory.map((item) => {
+              const itemFeedback = item.feedback
+              return (
+                <article className="learning-feedback" id={`learning-question-${item.question_id}`} key={item.question_id}>
+                  <h3>第 {item.sequence_number} 题</h3>
+                  <p>{item.prompt_text}</p>
+                  {itemFeedback ? (
+                    <div id={`learning-feedback-${item.question_id}`} aria-label="作答反馈">
+                      <p>你的答案：{answerLabel(item, itemFeedback)}</p>
+                      <p>结果：{resultLabel(itemFeedback.result)}</p>
+                      <p>{explanationLabel(itemFeedback.explanation_origin)}{itemFeedback.live_model_called ? ' · 点评已外发' : ''}</p>
+                      <p><CitedText text={itemFeedback.explanation} citations={itemFeedback.citations} onCitation={(citation) => {
+                        const match = itemFeedback.citations.find((citationItem) => citationItem.display_number === citation.display_number)
+                        if (match) setSelectedCitation(match)
+                      }} /></p>
+                      {itemFeedback.citations.length > 0 && (
+                        <div className="citation-strip">
+                          <span>来源</span>
+                          {itemFeedback.citations.map((citation) => (
+                            <button className="citation-chip" type="button" key={citation.citation_id} onClick={() => setSelectedCitation(citation)}>
+                              [{citation.display_number}] {citation.file_name}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : <p>未提交作答</p>}
+                </article>
+              )
+            })}
+        </section>
+      )}
+      {session.result && (
+        <section className="detail-section learning-session-result" aria-label="本次学习结果">
+          <h2>本次学习结果</h2>
+          <p>实际完成 {session.result.completed_question_count} / {session.result.planned_question_count} 题</p>
+          <p>正确 {session.result.correct_count} · 错误 {session.result.incorrect_count} · 无法判定 {session.result.unjudged_count}</p>
+          <p>{endReasonLabel(session.result.end_reason)}</p>
+        </section>
+      )}
+      {session.status !== 'COMPLETED' && session.status !== 'PREPARING' && (
+        <div className="detail-heading__actions">
+          {finishError && <span className="inline-error" role="alert">{finishError}</span>}
+          <button className="quiet-button" type="button" disabled={finishing} onClick={() => void finish()}>
+            {finishing ? '正在结束' : '结束学习'}
+          </button>
+        </div>
+      )}
+      {selectedCitation && (
+        <SourceCitationPanel citation={selectedCitation} onClose={() => setSelectedCitation(null)} />
       )}
     </section>
   )

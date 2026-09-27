@@ -35,7 +35,10 @@ class QuestionDraft:
 
 
 def draft_single_choice(
-    excerpts: list[str], *, source_hash: str
+    excerpts: list[str],
+    *,
+    source_hash: str,
+    excluded_facts: set[tuple[str, str]] | None = None,
 ) -> QuestionDraft | None:
     """Return one mutually exclusive question, or None when no unique fact exists."""
 
@@ -45,6 +48,7 @@ def draft_single_choice(
     values_by_unit: dict[str, set[int]] = {}
     for match in _UNIT_VALUE.finditer(text):
         values_by_unit.setdefault(match.group("unit"), set()).add(int(match.group("value")))
+    excluded = excluded_facts or set()
     chosen: tuple[str, int, str] | None = None
     for match in _FACT.finditer(text):
         label = match.group("label")
@@ -53,6 +57,8 @@ def draft_single_choice(
         if str(value) in label:
             continue
         if values_by_unit.get(unit) != {value}:
+            continue
+        if _fact_key(label, f"{value} {unit}") in excluded:
             continue
         chosen = (label, value, unit)
         break
@@ -120,3 +126,12 @@ def feedback_copy(*, selected_label: str, correct_label: str, correct: bool) -> 
 def _normalize(value: str) -> str:
     collapsed = re.sub(r"\s+", " ", unicodedata.normalize("NFKC", value))
     return collapsed.strip()
+
+
+def _fact_key(label: str, answer: str) -> tuple[str, str]:
+    normalized_label = unicodedata.normalize("NFKC", label).casefold()
+    normalized_answer = unicodedata.normalize("NFKC", answer).casefold()
+    return (
+        re.sub(r"[^\w\u4e00-\u9fff]", "", normalized_label),
+        re.sub(r"[^\w\u4e00-\u9fff]", "", normalized_answer),
+    )

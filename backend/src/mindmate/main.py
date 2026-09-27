@@ -40,6 +40,7 @@ from mindmate.api.learning import router as learning_router
 from mindmate.api.problem import ProblemDetail
 from mindmate.api.system_settings import SystemSettingsApiError
 from mindmate.api.system_settings import router as system_settings_router
+from mindmate.api.testing import router as testing_router
 from mindmate.application.chat_generation import ChatGenerationWorker
 from mindmate.application.embedding_model_install import EmbeddingModelInstallWorker
 from mindmate.application.history_purge_worker import HistoryTrashPurgeWorker
@@ -58,7 +59,7 @@ from mindmate.application.retrieval_test_queries import LocalRetrievalQueryEncod
 from mindmate.application.task_retention_worker import TaskRetentionWorker
 from mindmate.config import Settings, get_settings
 from mindmate.infrastructure.db import create_session_factory, create_sqlite_engine, quick_check
-from mindmate.security.credentials import WindowsCredentialStore
+from mindmate.security.credentials import InMemoryCredentialStore, WindowsCredentialStore
 from mindmate.security.instance import SingleInstanceLock
 from mindmate.security.session import SESSION_COOKIE, LocalSession
 
@@ -226,6 +227,8 @@ async def lifespan(app: FastAPI):
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     app_settings = settings or get_settings()
+    if app_settings.learning_provider_fixture and app_settings.env != "test":
+        raise ValueError("learning provider fixtures are only available in test environments")
     app = FastAPI(
         title="MindMate AI Local API",
         version=__version__,
@@ -237,14 +240,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = app_settings
     app.state.retrieval_query_encoder = LocalRetrievalQueryEncoder(app_settings.model_dir)
     app.state.embedding_model_manager = ModelManager(app_settings.model_dir)
-    app.state.credential_store = WindowsCredentialStore()
+    provider_fixture = None
+    if app_settings.learning_provider_fixture:
+        from mindmate.testing.provider_fixture import LearningProviderFixture
+
+        provider_fixture = LearningProviderFixture()
+        app.state.provider_fixture = provider_fixture
+        app.state.credential_store = InMemoryCredentialStore()
+    else:
+        app.state.credential_store = WindowsCredentialStore()
     app.state.deepseek_provider = DeepSeekChatProvider(
         base_url=DEEPSEEK_BASE_URL,
         model=DEEPSEEK_MODEL,
         timeout_seconds=app_settings.provider_timeout_seconds,
+        transport=provider_fixture.transport("DEEPSEEK") if provider_fixture else None,
     )
     app.state.openai_provider = OpenAIChatProvider(
         timeout_seconds=app_settings.provider_timeout_seconds,
+        transport=provider_fixture.transport("OPENAI") if provider_fixture else None,
     )
     app.state.chat_provider = (
         MockChatProvider() if app_settings.provider_mode == "mock" else app.state.deepseek_provider
@@ -555,6 +568,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(history_router)
     app.include_router(home_router)
     app.include_router(learning_router)
+    if provider_fixture is not None:
+        app.include_router(testing_router)
     app.include_router(files_router)
 
     return app

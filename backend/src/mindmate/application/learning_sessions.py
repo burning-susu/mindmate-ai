@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import unicodedata
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -51,7 +53,8 @@ from mindmate.infrastructure.models import (
     new_id,
 )
 
-FIXED_QUESTION_COUNT = 1
+DEFAULT_QUESTION_COUNT = 1
+MAX_DEMO_QUESTION_COUNT = 5
 SOURCE_INVALID_DETAIL = "学习范围的资料已失效，不能继续作答，也不会改用普通聊天。"
 
 
@@ -94,6 +97,10 @@ def create_learning_session(
     generation_mode: str | None = None,
     provider_runtime: Any = None,
 ) -> LearningSession:
+    if not 1 <= target_question_count <= MAX_DEMO_QUESTION_COUNT:
+        raise LearningCommandError(
+            "QUESTION_COUNT_NOT_SUPPORTED", "逐题演示支持 1 到 5 道题。", 422
+        )
     from mindmate.application.provider_configuration import read_generation_mode
 
     mode = generation_mode or read_generation_mode(session)
@@ -117,12 +124,6 @@ def create_learning_session(
             mode=mode,
             runtime=provider_runtime,
         )
-    if target_question_count != FIXED_QUESTION_COUNT:
-        raise LearningCommandError(
-            "QUESTION_COUNT_NOT_SUPPORTED",
-            "这一批演示只接受 1 道题。",
-            422,
-        )
     if not idempotency_key or not client_request_id:
         raise LearningCommandError("IDEMPOTENCY_KEY_REQUIRED", "需要 Idempotency-Key。", 400)
     existing = _existing_session(
@@ -143,7 +144,7 @@ def create_learning_session(
             goal_type=goal_type[:40] or "CUSTOM",
             goal_text=goal_text,
             knowledge_base_id=knowledge_base_id,
-            target_question_count=FIXED_QUESTION_COUNT,
+            target_question_count=target_question_count,
             status="PREPARING",
             idempotency_key=idempotency_key,
             client_request_id=client_request_id,
@@ -295,10 +296,435 @@ def create_learning_session(
         correct_option_id=draft.correct_option_id,
         linked=linked,
         request_id=request_id,
+        generated_request_hash=request_hash,
+        sequence_number=1,
         now=utc_now(),
     )
     session.commit()
     return record
+
+
+@dataclass(frozen=True, slots=True)
+class NextQuestionSources:
+    scope: LearningScope
+    sequence_number: int
+    approved: tuple[HybridCandidate, ...]
+    snapshots: tuple[SourceSnapshotCreated, ...]
+
+
+def create_next_learning_question(
+    session: Session,
+    *,
+    session_factory: Callable[[], Session],
+    learning_session_id: str,
+    expected_session_version: int,
+    idempotency_key: str,
+    client_request_id: str,
+    request_hash: str,
+    request_id: str | None,
+    encoder: Any,
+    query: Any,
+    confirm_provider_charge: bool = False,
+    provider_runtime: Any = None,
+) -> LearningSession:
+    if not idempotency_key or not client_request_id:
+        raise LearningCommandError("IDEMPOTENCY_KEY_REQUIRED", "需要 Idempotency-Key。", 400)
+    record = get_learning_session(session, learning_session_id)
+    replay = session.scalar(
+        select(LearningQuestion).where(
+            LearningQuestion.learning_session_id == learning_session_id,
+            LearningQuestion.generated_request_id == client_request_id,
+        )
+    )
+    if replay is not None:
+        if replay.generated_request_hash != request_hash:
+            raise LearningCommandError(
+                "IDEMPOTENCY_KEY_REUSED", "同一个请求 ID 不能用于不同的下一题请求。", 409
+            )
+        return record
+    if record.pending_question_request_id is not None:
+        if record.pending_question_request_id != client_request_id:
+            raise LearningCommandError(
+                "QUESTION_GENERATION_IN_PROGRESS", "下一题正在处理中，请等待同一次请求完成。", 409
+            )
+        if record.pending_question_request_hash != request_hash:
+            raise LearningCommandError(
+                "IDEMPOTENCY_KEY_REUSED", "同一个请求 ID 不能用于不同的下一题请求。", 409
+            )
+        return record
+    if record.status == "IN_PROGRESS" and record.completed_question_count >= record.target_question_count:
+        record.status = "COMPLETED"
+        record.end_reason = "PLAN_COMPLETED"
+        record.completed_at = record.completed_at or utc_now()
+        record.updated_at = utc_now()
+        record.row_version += 1
+        session.commit()
+        return record
+    if record.status in {"COMPLETED", "FAILED", "SOURCE_INVALID"}:
+        return record
+    if record.status != "IN_PROGRESS":
+        raise LearningCommandError(
+            "LEARNING_SESSION_NOT_READY", "学习会话当前不能生成下一题。", 409
+        )
+    if record.row_version != expected_session_version:
+        raise LearningCommandError(
+            "LEARNING_SESSION_VERSION_CONFLICT",
+            "学习会话已变化，请重新读取后再生成下一题。",
+            412,
+            current_row_version=record.row_version,
+        )
+    if record.current_question_id is None:
+        raise LearningCommandError(
+            "QUESTION_NOT_READY", "当前没有已完成的题目可继续。", 409
+        )
+    current = session.get(LearningQuestion, record.current_question_id)
+    attempt = load_attempt(session, record.current_question_id)
+    if current is None or current.status != "ANSWERED" or attempt is None:
+        raise LearningCommandError(
+            "ANSWER_REQUIRED", "提交并保存当前题目的作答后才能生成下一题。", 409
+        )
+    if load_feedback(session, attempt.attempt_id) is None:
+        raise LearningCommandError(
+            "FEEDBACK_NOT_READY", "当前题目的评分尚未保存，不能生成下一题。", 409
+        )
+    if (record.provider or MOCK_PROVIDER).lower() != MOCK_PROVIDER:
+        from mindmate.application.learning_model_generation import (
+            _frozen_from_session,
+            _require_gates,
+        )
+
+        frozen = _frozen_from_session(record, provider_runtime)
+        _require_gates(
+            session, frozen, provider_runtime, output_tokens=1024
+        )
+
+    now = utc_now()
+    claimed = session.execute(
+        update(LearningSession)
+        .where(
+            LearningSession.learning_session_id == learning_session_id,
+            LearningSession.status == "IN_PROGRESS",
+            LearningSession.row_version == expected_session_version,
+            LearningSession.pending_question_request_id.is_(None),
+        )
+        .values(
+            status="PREPARING",
+            pending_question_request_id=client_request_id,
+            pending_question_request_hash=request_hash,
+            updated_at=now,
+            row_version=expected_session_version + 1,
+        )
+    )
+    if int(getattr(claimed, "rowcount", 0) or 0) != 1:
+        session.rollback()
+        session.expire(record)
+        session.refresh(record)
+        if (
+            record.pending_question_request_id == client_request_id
+            and record.pending_question_request_hash == request_hash
+        ):
+            return record
+        raise LearningCommandError(
+            "LEARNING_SESSION_VERSION_CONFLICT",
+            "另一项操作已更新学习会话，请重新读取。",
+            412,
+            current_row_version=record.row_version,
+        )
+    session.commit()
+    session.expire(record)
+    session.refresh(record)
+    prepared = _prepare_next_question_sources(
+        session,
+        record=record,
+        session_factory=session_factory,
+        encoder=encoder,
+        query=query,
+    )
+    if prepared is None:
+        return record
+    if (record.provider or MOCK_PROVIDER).lower() == MOCK_PROVIDER:
+        return _create_mock_next_question(
+            session,
+            record=record,
+            prepared=prepared,
+            client_request_id=client_request_id,
+            request_hash=request_hash,
+            request_id=request_id,
+        )
+    from mindmate.application.learning_model_generation import (
+        create_provider_next_learning_question,
+    )
+
+    return create_provider_next_learning_question(
+        session,
+        record=record,
+        prepared=prepared,
+        client_request_id=client_request_id,
+        idempotency_key=idempotency_key,
+        request_hash=request_hash,
+        request_id=request_id,
+        runtime=provider_runtime,
+    )
+
+
+def _prepare_next_question_sources(
+    session: Session,
+    *,
+    record: LearningSession,
+    session_factory: Callable[[], Session],
+    encoder: Any,
+    query: Any,
+) -> NextQuestionSources | None:
+    scope = load_scope(session, record.learning_session_id)
+    knowledge_base = session.get(KnowledgeBase, record.knowledge_base_id)
+    version = session.get(IndexVersion, scope.index_version_id) if scope and scope.index_version_id else None
+    if (
+        scope is None
+        or scope.knowledge_base_id != record.knowledge_base_id
+        or version is None
+        or version.status != "READY"
+        or knowledge_base is None
+        or knowledge_base.deleted_at is not None
+        or knowledge_base.active_index_version_id != scope.index_version_id
+        or not _active_members(session, record.knowledge_base_id)
+    ):
+        _stop_question_generation(
+            session,
+            record,
+            status="SOURCE_INVALID",
+            code="SOURCE_INVALID",
+            detail=SOURCE_INVALID_DETAIL,
+        )
+        return None
+    assert scope is not None and scope.index_version_id is not None
+    try:
+        result = _retrieve(
+            session,
+            encoder=encoder,
+            query=query,
+            knowledge_base_id=scope.knowledge_base_id,
+            index_version_id=scope.index_version_id,
+            topic=record.topic,
+        )
+    except LearningCommandError as exc:
+        _stop_question_generation(
+            session, record, status="FAILED", code=exc.code, detail=exc.detail
+        )
+        return None
+    session.rollback()
+    if result.assessment.status != "supported":
+        detail = (
+            "当前资料没有足够的新事实支撑下一题。已保留已完成题目。"
+            if result.assessment.status == "insufficient"
+            else "索引或检索当前不可用，已保留已完成题目。"
+        )
+        _stop_question_generation(
+            session,
+            record,
+            status="COMPLETED" if result.assessment.status == "insufficient" else "FAILED",
+            code="EVIDENCE_INSUFFICIENT" if result.assessment.status == "insufficient" else "RETRIEVAL_UNAVAILABLE",
+            detail=detail,
+            end_reason="EVIDENCE_EXHAUSTED" if result.assessment.status == "insufficient" else None,
+        )
+        return None
+    approved = _approved_candidates(result)
+    if not approved:
+        _stop_question_generation(
+            session,
+            record,
+            status="COMPLETED",
+            code="EVIDENCE_INSUFFICIENT",
+            detail="当前资料没有足够的新事实支撑下一题。已保留已完成题目。",
+            end_reason="EVIDENCE_EXHAUSTED",
+        )
+        return None
+    try:
+        snapshots = create_source_snapshots(
+            session_factory,
+            knowledge_base_id=scope.knowledge_base_id,
+            expected_index_version_id=scope.index_version_id or "",
+            result=result,
+        )
+    except SourceSnapshotError as exc:
+        _stop_question_generation(
+            session,
+            record,
+            status="SOURCE_INVALID",
+            code=exc.code,
+            detail="来源在出题前已变化或失效。已保留已完成题目。",
+        )
+        return None
+    snapshot_ids = {item.chunk_id for item in snapshots}
+    usable = tuple(item for item in approved if item.chunk_id in snapshot_ids)
+    if not usable:
+        _stop_question_generation(
+            session,
+            record,
+            status="COMPLETED",
+            code="EVIDENCE_INSUFFICIENT",
+            detail="已批准的来源无法再确认。已保留已完成题目。",
+            end_reason="EVIDENCE_EXHAUSTED",
+        )
+        return None
+    return NextQuestionSources(
+        scope=scope,
+        sequence_number=record.completed_question_count + 1,
+        approved=usable,
+        snapshots=snapshots,
+    )
+
+
+def _create_mock_next_question(
+    session: Session,
+    *,
+    record: LearningSession,
+    prepared: NextQuestionSources,
+    client_request_id: str,
+    request_hash: str,
+    request_id: str | None,
+) -> LearningSession:
+    snapshot_by_chunk = {item.chunk_id: item for item in prepared.snapshots}
+    seen_facts = _known_question_facts(session, record.learning_session_id)
+    for candidate in prepared.approved:
+        chunk = session.get(Chunk, candidate.chunk_id)
+        snapshot = snapshot_by_chunk.get(candidate.chunk_id)
+        content = chunk.content if chunk is not None else (candidate.content or "")
+        if snapshot is None or not content.strip():
+            continue
+        draft = draft_single_choice(
+            [content],
+            source_hash=f"{prepared.scope.source_set_hash}:{prepared.sequence_number}",
+            excluded_facts=seen_facts,
+        )
+        if draft is None:
+            continue
+        linked = [(candidate, content, snapshot)]
+        options = [{"option_id": key, "label": label} for key, label in draft.options]
+        if _question_is_duplicate(
+            session,
+            record.learning_session_id,
+            draft.knowledge_point_title,
+            draft.prompt_text,
+            draft.correct_label,
+            linked,
+        ):
+            continue
+        _persist_question(
+            session,
+            record=record,
+            scope=prepared.scope,
+            draft_title=draft.knowledge_point_title,
+            prompt_text=draft.prompt_text,
+            options=options,
+            correct_option_id=draft.correct_option_id,
+            linked=linked,
+            request_id=client_request_id,
+            now=utc_now(),
+            generated_request_hash=request_hash,
+            sequence_number=prepared.sequence_number,
+        )
+        session.commit()
+        sync_learning_search(session, record.learning_session_id)
+        session.commit()
+        return record
+    _stop_question_generation(
+        session,
+        record,
+        status="COMPLETED",
+        code="EVIDENCE_INSUFFICIENT",
+        detail="当前资料没有足够的新事实支撑下一题。已保留已完成题目。",
+        end_reason="EVIDENCE_EXHAUSTED",
+    )
+    return record
+
+
+def _stop_question_generation(
+    session: Session,
+    record: LearningSession,
+    *,
+    status: str,
+    code: str,
+    detail: str,
+    end_reason: str | None = None,
+) -> None:
+    now = utc_now()
+    record.status = status
+    record.failure_code = code[:80]
+    record.failure_detail = detail[:500]
+    record.end_reason = end_reason
+    record.pending_question_request_id = None
+    record.pending_question_request_hash = None
+    record.completed_at = now if status == "COMPLETED" else record.completed_at
+    record.updated_at = now
+    record.row_version += 1
+    if status in {"COMPLETED", "FAILED", "SOURCE_INVALID"}:
+        finish_learning_plan(session, record)
+    session.commit()
+
+
+def _known_question_facts(session: Session, learning_session_id: str) -> set[tuple[str, str]]:
+    facts: set[tuple[str, str]] = set()
+    questions = session.scalars(
+        select(LearningQuestion).where(
+            LearningQuestion.learning_session_id == learning_session_id
+        )
+    )
+    for question in questions:
+        point = session.get(KnowledgePoint, question.knowledge_point_id)
+        correct_id = str(question.answer_key_json.get("option_id", ""))
+        label = next(
+            (item["label"] for item in question.options_json if item["option_id"] == correct_id),
+            "",
+        )
+        facts.add((_normalize_fact(point.canonical_title if point else ""), _normalize_fact(label)))
+    return facts
+
+
+def _question_is_duplicate(
+    session: Session,
+    learning_session_id: str,
+    title: str,
+    prompt_text: str,
+    correct_label: str,
+    linked: list[tuple[HybridCandidate, str, SourceSnapshotCreated]],
+) -> bool:
+    new_title = _normalize_fact(title)
+    new_prompt = _normalize_fact(prompt_text)
+    new_answer = _normalize_fact(correct_label)
+    new_chunks = {item[0].chunk_id for item in linked}
+    for previous in session.scalars(
+        select(LearningQuestion).where(
+            LearningQuestion.learning_session_id == learning_session_id
+        )
+    ):
+        point = session.get(KnowledgePoint, previous.knowledge_point_id)
+        previous_title = _normalize_fact(point.canonical_title if point else "")
+        previous_prompt = _normalize_fact(previous.prompt_text)
+        option_id = str(previous.answer_key_json.get("option_id", ""))
+        previous_answer = _normalize_fact(
+            next(
+                (item["label"] for item in previous.options_json if item["option_id"] == option_id),
+                "",
+            )
+        )
+        previous_chunks = set(
+            session.scalars(
+                select(QuestionEvidence.chunk_id).where(
+                    QuestionEvidence.question_id == previous.question_id,
+                    QuestionEvidence.chunk_id.is_not(None),
+                )
+            )
+        )
+        if new_title == previous_title or new_prompt == previous_prompt:
+            return True
+        if new_answer == previous_answer and new_chunks.intersection(previous_chunks):
+            return True
+    return False
+
+
+def _normalize_fact(value: str) -> str:
+    normalized = unicodedata.normalize("NFKC", value).casefold()
+    return re.sub(r"[^\w\u4e00-\u9fff]", "", normalized)
 
 
 def get_learning_session(session: Session, learning_session_id: str) -> LearningSession:
@@ -306,6 +732,78 @@ def get_learning_session(session: Session, learning_session_id: str) -> Learning
     if record is None or record.deleted_at is not None:
         raise LearningCommandError("LEARNING_SESSION_NOT_FOUND", "学习会话不存在。", 404)
     _refresh_source_state(session, record)
+    if (
+        record.status == "IN_PROGRESS"
+        and record.completed_question_count >= record.target_question_count
+    ):
+        now = utc_now()
+        record.status = "COMPLETED"
+        record.end_reason = record.end_reason or "PLAN_COMPLETED"
+        record.completed_at = record.completed_at or now
+        record.updated_at = now
+        record.row_version += 1
+        finish_learning_plan(session, record)
+        session.commit()
+    return record
+
+
+def finish_learning_session(
+    session: Session,
+    learning_session_id: str,
+    *,
+    expected_session_version: int,
+) -> LearningSession:
+    record = get_learning_session(session, learning_session_id)
+    if record.status == "COMPLETED":
+        return record
+    if record.status == "PREPARING":
+        raise LearningCommandError(
+            "QUESTION_GENERATION_IN_PROGRESS", "下一题正在处理中，完成后才能结束。", 409
+        )
+    if record.row_version != expected_session_version:
+        raise LearningCommandError(
+            "LEARNING_SESSION_VERSION_CONFLICT",
+            "学习会话已变化，请重新读取后再结束。",
+            412,
+            current_row_version=record.row_version,
+        )
+    now = utc_now()
+    finish_learning_plan(session, record)
+    result = session.execute(
+        update(LearningSession)
+        .where(
+            LearningSession.learning_session_id == learning_session_id,
+            LearningSession.row_version == expected_session_version,
+            LearningSession.status.in_(["IN_PROGRESS", "FAILED", "SOURCE_INVALID"]),
+        )
+        .values(
+            status="COMPLETED",
+            end_reason="USER_ENDED",
+            pending_question_request_id=None,
+            pending_question_request_hash=None,
+            completed_at=now,
+            updated_at=now,
+            row_version=expected_session_version + 1,
+        )
+    )
+    if int(getattr(result, "rowcount", 0) or 0) != 1:
+        session.rollback()
+        session.expire(record)
+        session.refresh(record)
+        if record.status == "COMPLETED":
+            return record
+        raise LearningCommandError(
+            "LEARNING_SESSION_VERSION_CONFLICT",
+            "学习会话已被其他操作更新，请重新读取。",
+            412,
+            current_row_version=record.row_version,
+        )
+    session.expire(record)
+    session.refresh(record)
+    sync_learning_search(session, learning_session_id)
+    session.commit()
+    session.expire(record)
+    session.refresh(record)
     return record
 
 
@@ -477,7 +975,12 @@ def submit_learning_attempt(
     except CitationBindingError as exc:
         session.rollback()
         raise LearningCommandError("SOURCE_INVALID", SOURCE_INVALID_DETAIL, 409) from exc
-    record.completed_question_count = 1
+    record.completed_question_count += 1
+    if record.completed_question_count >= record.target_question_count:
+        record.status = "COMPLETED"
+        record.end_reason = "PLAN_COMPLETED"
+        record.completed_at = now
+    update_learning_plan_after_attempt(session, record, question)
     record.updated_at = now
     record.row_version += 1
     try:
@@ -512,6 +1015,37 @@ def load_plan(session: Session, learning_session_id: str) -> LearningPlan | None
     return session.scalar(
         select(LearningPlan).where(LearningPlan.learning_session_id == learning_session_id)
     )
+
+
+def update_learning_plan_after_attempt(
+    session: Session, record: LearningSession, question: LearningQuestion
+) -> None:
+    plan = load_plan(session, record.learning_session_id)
+    if plan is None:
+        return
+    item = session.scalar(
+        select(LearningPlanItem).where(
+            LearningPlanItem.learning_plan_id == plan.learning_plan_id,
+            LearningPlanItem.sequence_number == question.sequence_number,
+        )
+    )
+    if item is not None:
+        item.status = "COMPLETED"
+    plan.status = (
+        "COMPLETED"
+        if record.completed_question_count >= record.target_question_count
+        else "IN_PROGRESS"
+    )
+
+
+def finish_learning_plan(session: Session, record: LearningSession) -> None:
+    plan = load_plan(session, record.learning_session_id)
+    if plan is not None:
+        plan.status = (
+            "COMPLETED"
+            if record.completed_question_count >= record.target_question_count
+            else "PARTIAL"
+        )
 
 
 def load_scope(session: Session, learning_session_id: str) -> LearningScope | None:
@@ -616,6 +1150,8 @@ def _persist_question(
     linked: list[tuple[HybridCandidate, str, SourceSnapshotCreated]],
     request_id: str | None,
     now: datetime,
+    generated_request_hash: str | None = None,
+    sequence_number: int = 1,
     provider: str = MOCK_PROVIDER,
     prompt_template_version: str = PROMPT_TEMPLATE_VERSION,
     difficulty: str = "BASIC",
@@ -637,18 +1173,21 @@ def _persist_question(
         created_at=now,
         updated_at=now,
     )
-    plan = LearningPlan(
-        learning_plan_id=new_id(),
-        learning_session_id=record.learning_session_id,
-        plan_version=1,
-        target_question_count=FIXED_QUESTION_COUNT,
-        question_type_mix_json={"SINGLE_CHOICE": 1},
-        source_set_hash=scope.source_set_hash,
-        index_version_id=scope.index_version_id or "",
-        prompt_template_version=prompt_template_version,
-        status="READY",
-        created_at=now,
-    )
+    plan = load_plan(session, record.learning_session_id)
+    if plan is None:
+        plan = LearningPlan(
+            learning_plan_id=new_id(),
+            learning_session_id=record.learning_session_id,
+            plan_version=1,
+            target_question_count=record.target_question_count,
+            question_type_mix_json={"SINGLE_CHOICE": record.target_question_count},
+            source_set_hash=scope.source_set_hash,
+            index_version_id=scope.index_version_id or "",
+            prompt_template_version=prompt_template_version,
+            status="READY",
+            created_at=now,
+        )
+        session.add(plan)
     question = LearningQuestion(
         question_id=new_id(),
         learning_session_id=record.learning_session_id,
@@ -660,22 +1199,22 @@ def _persist_question(
         answer_key_json={"option_id": correct_option_id},
         acceptable_points_json=None,
         grading_rule_json={"type": "EXACT_OPTION"},
-        sequence_number=1,
+        sequence_number=sequence_number,
         status="OPEN",
         generated_request_id=request_id,
+        generated_request_hash=generated_request_hash,
         prompt_template_version=prompt_template_version,
         provider=provider,
         row_version=1,
         created_at=now,
     )
     session.add(point)
-    session.add(plan)
     session.add(
         LearningPlanItem(
             learning_plan_item_id=new_id(),
             learning_plan_id=plan.learning_plan_id,
             knowledge_point_id=point.knowledge_point_id,
-            sequence_number=1,
+            sequence_number=sequence_number,
             target_question_count=1,
             status="READY",
         )
@@ -707,6 +1246,7 @@ def _persist_question(
     record.status = "IN_PROGRESS"
     record.failure_code = None
     record.failure_detail = None
+    record.end_reason = None
     record.current_knowledge_point_id = point.knowledge_point_id
     record.current_question_id = question.question_id
     record.started_at = now
@@ -716,6 +1256,8 @@ def _persist_question(
     record.requested_model = requested_model
     record.resolved_model = resolved_model
     record.live_model_called = live_model_called
+    record.pending_question_request_id = None
+    record.pending_question_request_hash = None
 
 
 def _ensure_scope(
@@ -760,7 +1302,7 @@ def _refresh_source_state(session: Session, record: LearningSession) -> None:
     if record.status in {"FAILED", "SOURCE_INVALID"}:
         return
     scope = load_scope(session, record.learning_session_id)
-    if scope is None or record.status != "IN_PROGRESS":
+    if scope is None or record.status not in {"IN_PROGRESS", "COMPLETED"}:
         return
     invalid = scope.index_version_id is None
     knowledge_base = session.get(KnowledgeBase, scope.knowledge_base_id)
@@ -815,6 +1357,7 @@ def _refresh_source_state(session: Session, record: LearningSession) -> None:
     record.status = "SOURCE_INVALID"
     record.failure_code = "SOURCE_INVALID"
     record.failure_detail = SOURCE_INVALID_DETAIL
+    finish_learning_plan(session, record)
     record.updated_at = utc_now()
     record.row_version += 1
     session.commit()
@@ -832,7 +1375,9 @@ def _fail(
     record.status = "FAILED"
     record.failure_code = code[:80]
     record.failure_detail = detail[:500]
-    record.current_question_id = None
+    finish_learning_plan(session, record)
+    record.pending_question_request_id = None
+    record.pending_question_request_hash = None
     if not preserve_identity:
         record.provider = MOCK_PROVIDER
         record.live_model_called = False

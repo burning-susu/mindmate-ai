@@ -92,6 +92,32 @@ function question(feedback: unknown = null) {
 }
 
 function session(overrides: Record<string, unknown> = {}) {
+  const currentQuestion = overrides.question === undefined
+    ? question()
+    : overrides.question as ReturnType<typeof question> | null
+  const targetQuestionCount = (overrides.target_question_count as number | undefined) ?? 1
+  const completedQuestionCount = (overrides.completed_question_count as number | undefined) ?? 0
+  const questions = (overrides.questions as ReturnType<typeof question>[] | undefined)
+    ?? (currentQuestion ? [currentQuestion] : [])
+  const status = (overrides.status as string | undefined)
+    ?? (completedQuestionCount >= targetQuestionCount && completedQuestionCount > 0 ? 'COMPLETED' : 'IN_PROGRESS')
+  const terminal = ['COMPLETED', 'FAILED', 'SOURCE_INVALID'].includes(status)
+  const completed = questions.flatMap((item) => {
+    const itemFeedback = item.feedback as { result: string } | null
+    return itemFeedback ? [itemFeedback] : []
+  })
+  const result = overrides.result !== undefined
+    ? overrides.result
+    : terminal
+      ? {
+          planned_question_count: targetQuestionCount,
+          completed_question_count: completed.length,
+          correct_count: completed.filter((item) => item?.result === 'CORRECT').length,
+          incorrect_count: completed.filter((item) => item?.result === 'INCORRECT').length,
+          unjudged_count: 0,
+          end_reason: status === 'COMPLETED' ? 'PLAN_COMPLETED' : null,
+        }
+      : null
   return {
     learning_session_id: 'session-1',
     topic: 'API 单次请求超时',
@@ -99,7 +125,7 @@ function session(overrides: Record<string, unknown> = {}) {
     goal_text: '记住唯一超时值',
     knowledge_base_id: 'kb-1',
     target_question_count: 1,
-    status: 'IN_PROGRESS',
+    status,
     failure_code: null,
     failure_detail: null,
     completed_question_count: 0,
@@ -123,8 +149,10 @@ function session(overrides: Record<string, unknown> = {}) {
       knowledge_point_title: '超时时间',
       prompt_template_version: 'learning-demo-fixture-v1',
     },
-    question: question(),
     ...overrides,
+    question: currentQuestion,
+    questions,
+    result,
   }
 }
 
@@ -182,7 +210,7 @@ describe.sequential('stage 7 learning demo', () => {
     }))
 
     renderAt('/learning/new?knowledge_base_id=kb-1')
-    expect(await screen.findByRole('heading', { name: '基于知识库的一题演示' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '基于知识库的逐题练习' })).toBeInTheDocument()
     expect(screen.getByText(/新建学习会话使用当前选择/)).toBeInTheDocument()
     expect(await screen.findByText('服务超时策略.txt')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '创建并开始' })).toBeDisabled()
@@ -233,6 +261,102 @@ describe.sequential('stage 7 learning demo', () => {
     expect(window.location.pathname).toBe('/learning/session/session-1')
   })
 
+  it('sends the selected plan count from the start page', async () => {
+    let createdBody: Record<string, unknown> | null = null
+    const created = session({
+      target_question_count: 3,
+      plan: { ...session().plan, target_question_count: 3 },
+    })
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.includes('/system/session')) return response({ status: 'ready' })
+      if (url.endsWith('/api/v1/knowledge-bases/kb-1/files')) return response({ items: [] })
+      if (url.endsWith('/api/v1/knowledge-bases/kb-1')) return response(knowledgeBase)
+      if (url.endsWith('/api/v1/learning/provider-plan')) {
+        return response({ requires_charge_confirmation: false })
+      }
+      if (url.endsWith('/api/v1/learning-sessions') && init?.method === 'POST') {
+        createdBody = JSON.parse(String(init.body)) as Record<string, unknown>
+        return response(created)
+      }
+      if (url.endsWith('/api/v1/learning-sessions/session-1')) return response(created)
+      return response({ status: 'ok', version: '0.1.0' })
+    }))
+
+    renderAt('/learning/new?knowledge_base_id=kb-1')
+    fireEvent.change(await screen.findByRole('textbox', { name: '学习主题' }), { target: { value: 'API 单次请求超时' } })
+    fireEvent.change(screen.getByRole('textbox', { name: '学习目标' }), { target: { value: '记住唯一超时值' } })
+    fireEvent.change(screen.getByRole('combobox', { name: '计划题数' }), { target: { value: '3' } })
+    fireEvent.click(screen.getByRole('button', { name: '创建并开始' }))
+    await waitFor(() => expect(createdBody?.target_question_count).toBe(3))
+  })
+
+  it('requires a new online charge confirmation before generating the next question', async () => {
+    const currentQuestion = question(feedback('CORRECT'))
+    const next = { ...question(), question_id: 'question-2', sequence_number: 2 }
+    const current = session({
+      target_question_count: 2,
+      completed_question_count: 1,
+      current_question_id: currentQuestion.question_id,
+      status: 'IN_PROGRESS',
+      provider: 'DEEPSEEK',
+      requested_model: 'deepseek-flash',
+      row_version: 4,
+      question: currentQuestion,
+      questions: [currentQuestion],
+    })
+    const updated = session({
+      ...current,
+      completed_question_count: 1,
+      current_question_id: next.question_id,
+      row_version: 6,
+      question: next,
+      questions: [currentQuestion, next],
+    })
+    const requests: Array<{ body: Record<string, unknown>; key: string }> = []
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.includes('/system/session')) return response({ status: 'ready' })
+      if (url.endsWith('/api/v1/knowledge-bases/kb-1')) return response(knowledgeBase)
+      if (url.endsWith('/api/v1/learning/provider-plan')) {
+        return response({
+          generation_mode: 'deepseek',
+          provider: 'DEEPSEEK',
+          requested_model: 'deepseek-flash',
+          requires_charge_confirmation: true,
+          requires_provider_key: true,
+          outbound_summary: '本次发送主题、目标和已批准资料摘录。',
+          question_estimate: { checked_on: '2026-09-27', estimated_usd_ceiling: '0.01', disclaimer: '估算。' },
+          feedback_estimate: { checked_on: '2026-09-27', estimated_usd_ceiling: '0.01', disclaimer: '估算。' },
+        })
+      }
+      if (url.endsWith('/api/v1/learning-sessions/session-1/next-question') && init?.method === 'POST') {
+        requests.push({
+          body: JSON.parse(String(init.body)) as Record<string, unknown>,
+          key: new Headers(init.headers).get('Idempotency-Key') ?? '',
+        })
+        return response(updated)
+      }
+      if (url.endsWith('/api/v1/learning-sessions/session-1')) return response(current)
+      return response({ status: 'ok', version: '0.1.0' })
+    }))
+
+    renderAt('/learning/session/session-1')
+    const nextButton = await screen.findByRole('button', { name: '下一题' })
+    expect(nextButton).toBeDisabled()
+    expect(requests).toHaveLength(0)
+    fireEvent.click(await screen.findByLabelText('我确认本次生成下一题可能产生费用'))
+    fireEvent.click(nextButton)
+    await screen.findByText('资料里的超时时间是多少？')
+    await waitFor(() => expect(requests).toHaveLength(1))
+    expect(requests[0].body).toMatchObject({
+      expected_session_version: 4,
+      confirm_provider_charge: true,
+    })
+    expect(requests[0].body.client_request_id).toBe(requests[0].key)
+    expect(await screen.findByText('第 2 题')).toBeInTheDocument()
+  })
+
   it('offers learning from a ready knowledge base without creating a session', async () => {
     const posts: string[] = []
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -249,7 +373,7 @@ describe.sequential('stage 7 learning demo', () => {
 
     renderAt('/knowledge-bases/kb-1')
     fireEvent.click(await screen.findByRole('button', { name: '基于此知识库学习' }))
-    expect(await screen.findByRole('heading', { name: '基于知识库的一题演示' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '基于知识库的逐题练习' })).toBeInTheDocument()
     expect(window.location.pathname).toBe('/learning/new')
     expect(posts.some((url) => url.includes('/learning-sessions'))).toBe(false)
   })

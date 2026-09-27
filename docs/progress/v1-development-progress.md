@@ -416,6 +416,25 @@
 - 证据：见 `docs/test-reports/stage-55-demo-regression-online-learning.md`。
 - 下一批：另开对话。不把直播通或完整阶段 7 标成完成。
 
+### 第五十七批：1–5 题逐题练习
+
+- 状态：`LEARNING_MULTIQUESTION_API`、`LEARNING_MULTIQUESTION_UI` `PASS`；`LEARNING_ONLINE_BROWSER` `PARTIAL`；`DEMO_REGRESSION_THIS_BATCH` `PARTIAL`；`REAL_PROVIDER_SMOKE` `PENDING`；`STAGE7_FULL_V1`、`STAGE8_FULL_V1` `PARTIAL`。
+- 范围：开始页默认 1 题，可选 1–5 道有依据的单选题。用户明确提交答案后保存一条 Attempt/反馈，再由用户明确点击“下一题”。Mock 仍是本地规则；在线每个新题单独确认费用并继续沿用会话冻结 Provider/模型。
+- 数据/API：新增 Alembic revision `d17a5e9c4b20`，仅增加请求恢复字段/摘要和唯一索引，旧行保持可读。新增下一题、主动结束 API；会话返回按序问题、逐题反馈引用和结构化计划/实际数量结果，不返回未作答题答案键。OpenAPI 3.1 与前端生成类型为 `108 schemas / 116 operations`。
+- 安全与恢复：CAS + 请求 ID/摘要和唯一序号约束防重放、多发和重复计分；已 DISPATCHED 的未知 Provider 结果不会重发。资料不足、重复事实、跨库来源或失败会保留已完成题目，结果显示实际数，不凑题、不切换 Provider。
+- 验证：新 Stage 57 API 测试覆盖 1/3/5 边界、三条不同事实、重启恢复、并发重放、重复事实、跨库拒绝、提前结束、DeepSeek/OpenAI 假传输两题/两次点评及未知结果不重发；与阶段 7、55、56 定向后端回归 `22 passed`。前端定向 `10 passed`、全量 `63 passed`、typecheck/lint/build 通过；Ruff、改动文件 Pyright `0 errors`。
+- 浏览器与 Demo：本批仅启动一次新的隔离后端诊断，进程在 Alembic 后退出，未打开 Chromium/Vite 页面或生成截图。浏览器保持 `PARTIAL`；TestClient 验证学习 API/刷新后端重启恢复，但网页上传、索引、聊天及完整 Demo 回归未完成。
+- Git：`STAGE56_LOCAL_CHANGES_COMMITTED` `PENDING`。仓库 Windows ACL 显示本机用户有完全控制，但沙箱对 `.git` 只读；唯一普通写入检查创建 `.git/index.lock` 时 `Permission denied`。未重试、未改 ACL、未提交、未推送；第五十六批和本批文件仍混在当前工作区。进场及远端 SHA 均为 `083073cff29ee1d6b92dc3ff472991d80faf4435`。
+- 证据与变更：`docs/test-reports/stage-57-learning-multistep.md`、`docs/project/changes/CHG-20260927-LEARNING-MULTISTEP.md`。下一批应先处理本地未提交交接并完成浏览器/完整 Demo 验收；不得把完整阶段 7/8 标为完成。
+
+### 第五十六批：在线学习页面验收与逐题练习
+
+- 状态：测试专用 Provider 传输夹具、服务端安全调用计数和浏览器 E2E 用例已实现；`LEARNING_ONLINE_BROWSER` `PARTIAL`。Playwright Chromium 启动失败 `spawn EPERM`；Codex 内嵌浏览器创建动作被自动审批服务以模型不可用 `404` 拒绝，动作未执行。页面未实际点击，假 Provider 服务端计数为 0。按 A 未通过停止条件，B 未开始，`LEARNING_MULTISTEP` `PENDING`。
+- 安全边界：夹具仅在 `MINDMATE_ENV=test` 且显式设置 `MINDMATE_LEARNING_PROVIDER_FIXTURE=true` 时启用；非测试环境拒绝启动。DeepSeek/OpenAI 适配器仍使用固定官方 Host 和模型身份，但服务端 `httpx.MockTransport` 截获调用并返回合成内容；Key 使用隔离 `InMemoryCredentialStore`。测试计数端点只在夹具启用时注册，只返回 Provider、Host、请求模型、题目/点评类别和是否带 Authorization，不返回 Key 或请求正文。没有真实 Provider 外呼、数据库迁移、OpenAPI 生产契约或业务决策变化。
+- 验证：新增夹具边界及业务路径测试 3 项；与第五十五批 Provider 和阶段 7 学习会话后端回归合计 `12 passed`。TestClient 中两家 Provider 各完成一题及一次点评，服务端账本和夹具分别记录 `DEEPSEEK/OPENAI` 各 2 次，无官方网络请求。改动文件 Ruff 通过、Pyright `0 errors`、Python compileall 通过；Alembic head `b55c0e1a8d27`。前端 Vitest `61 passed`、typecheck、lint、build 通过；build 提示主 JS chunk `502.02 kB`。Playwright 文件因 Chromium `spawn EPERM` 未进入用例交互。`DEMO_REGRESSION` 本批仍 `PENDING`；真实 DeepSeek/OpenAI 冒烟仍 `PENDING`；完整阶段 7 与阶段 8 仍为 `PARTIAL`。
+- 证据与限制：详见 `docs/test-reports/stage-56-online-learning-multistep.md`。隔离后端和前端供本机浏览器继续点击，地址 `http://127.0.0.1:5180/settings`，合成知识库 `01a0e27e-fb0e-793c-9eeb-4d39c394c15a`，测试调用计数 `/api/v1/testing/provider-fixture/calls`。截图尚未生成。未运行 B、Demo 浏览器回归或全量后端测试。
+- 下一步：先在本机浏览器完成 A 的 DeepSeek/OpenAI 两条页面操作并核对服务端计数、费用门禁、刷新恢复和 Provider 快照；A 通过后再进入 B。没有真实 Key 或付费 API 调用。
+
 ### 第五十四批：双 Provider 手动选择与 OpenAI 适配器
 
 - 状态：`OPENAI_ADAPTER` `PASS`（只代表 MockTransport 已测，不代表直播通）。`SETTINGS_MANUAL_SELECTION` `PASS`。普通对话 `CHAT_ROUTING` `PASS`。`LEARNING_PROVIDER_GENERATION` `PENDING`。`OPENAI_LIVE_SMOKE` `PENDING`。第五十三批 `BACKUP_RESTORE` 仍 `PASS`。独立备份 Worker 与周期官方账单对账仍 `PARTIAL`。第 51 批浏览器删除确认仍 `PENDING`。多题定位仍 `PARTIAL`。阶段 5–8 仍为 `PARTIAL`。求职 Demo 维持第四十二批 `PASS`。真实 DeepSeek 仍为 `PENDING`。进场 SHA `d5b27a8c5a0c1618208c937d7ba568deb978e6a1`。

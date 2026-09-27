@@ -34,9 +34,10 @@ from mindmate.application.evidence_gate import INSUFFICIENT_MESSAGE
 from mindmate.application.history_search_index import sync_learning_search
 from mindmate.application.learning_question_draft import MOCK_PROVIDER
 from mindmate.application.learning_sessions import (
-    FIXED_QUESTION_COUNT,
+    MAX_DEMO_QUESTION_COUNT,
     SOURCE_INVALID_DETAIL,
     LearningCommandError,
+    NextQuestionSources,
     _active_members,
     _approved_candidates,
     _assert_same_request,
@@ -45,9 +46,12 @@ from mindmate.application.learning_sessions import (
     _existing_session,
     _fail,
     _persist_question,
+    _question_is_duplicate,
     _retrieve,
+    _stop_question_generation,
     load_attempt,
     load_feedback,
+    update_learning_plan_after_attempt,
     utc_now,
 )
 from mindmate.application.provider_configuration import (
@@ -68,6 +72,7 @@ from mindmate.infrastructure.models import (
     Chunk,
     IndexVersion,
     KnowledgeBase,
+    KnowledgePoint,
     LearningAttempt,
     LearningFeedback,
     LearningProviderOperation,
@@ -153,10 +158,21 @@ def recover_dispatched_learning_operations(session: Session) -> int:
         operation.completed_at = now
         operation.row_version += 1
         record = session.get(LearningSession, operation.learning_session_id)
-        if operation.task_type == QUESTION_TASK and record is not None and record.current_question_id is None:
+        pending_next_question = (
+            record is not None
+            and record.pending_question_request_id is not None
+            and operation.client_request_id
+            == f"learning-question-client:{record.pending_question_request_id}"
+        )
+        if operation.task_type == QUESTION_TASK and record is not None and (
+            record.current_question_id is None or pending_next_question
+        ):
             record.status = "FAILED"
             record.failure_code = "LEARNING_PROVIDER_INTERRUPTED"
             record.failure_detail = "出题请求可能已经外发，但结果未知。不会自动重试，也不会改用本地规则。"
+            record.end_reason = "PROVIDER_RESULT_UNKNOWN"
+            record.pending_question_request_id = None
+            record.pending_question_request_hash = None
             record.live_model_called = True
             record.updated_at = now
             record.row_version += 1
@@ -168,9 +184,41 @@ def recover_dispatched_learning_operations(session: Session) -> int:
                 feedback.live_model_called = True
                 feedback.provider = operation.provider
                 feedback.model = operation.requested_model[:80]
-    if rows:
+    pending = list(
+        session.scalars(
+            select(LearningSession).where(
+                LearningSession.status == "PREPARING",
+                LearningSession.pending_question_request_id.is_not(None),
+            )
+        )
+    )
+    for record in pending:
+        client_id = f"learning-question-client:{record.pending_question_request_id}"
+        operation = session.scalar(
+            select(LearningProviderOperation).where(
+                LearningProviderOperation.learning_session_id == record.learning_session_id,
+                LearningProviderOperation.task_type == QUESTION_TASK,
+                LearningProviderOperation.client_request_id == client_id,
+            )
+        )
+        if operation is None:
+            record.status = "IN_PROGRESS"
+            record.pending_question_request_id = None
+            record.pending_question_request_hash = None
+            record.updated_at = now
+            record.row_version += 1
+        elif operation.status != DISPATCHED:
+            record.status = "FAILED"
+            record.failure_code = operation.error_code or "LEARNING_QUESTION_INTERRUPTED"
+            record.failure_detail = operation.error_detail or "下一题生成未完成。已保留已完成题目。"
+            record.end_reason = "QUESTION_GENERATION_FAILED"
+            record.pending_question_request_id = None
+            record.pending_question_request_hash = None
+            record.updated_at = now
+            record.row_version += 1
+    if rows or pending:
         session.commit()
-    return len(rows)
+    return len(rows) + len(pending)
 
 
 def learning_provider_plan(session: Session, mode: str) -> dict[str, Any]:
@@ -223,8 +271,8 @@ def create_provider_learning_session(
     mode: str,
     runtime: LearningProviderRuntime | None,
 ) -> LearningSession:
-    if target_question_count != FIXED_QUESTION_COUNT:
-        raise LearningCommandError("QUESTION_COUNT_NOT_SUPPORTED", "这一批演示只接受 1 道题。", 422)
+    if not 1 <= target_question_count <= MAX_DEMO_QUESTION_COUNT:
+        raise LearningCommandError("QUESTION_COUNT_NOT_SUPPORTED", "逐题演示支持 1 到 5 道题。", 422)
     if not idempotency_key or not client_request_id:
         raise LearningCommandError("IDEMPOTENCY_KEY_REQUIRED", "需要 Idempotency-Key。", 400)
     existing = _existing_session(
@@ -255,7 +303,7 @@ def create_provider_learning_session(
             goal_type=goal_type[:40] or "CUSTOM",
             goal_text=goal_text,
             knowledge_base_id=knowledge_base_id,
-            target_question_count=FIXED_QUESTION_COUNT,
+            target_question_count=target_question_count,
             status="PREPARING",
             idempotency_key=idempotency_key,
             client_request_id=client_request_id,
@@ -451,6 +499,8 @@ def create_provider_learning_session(
         linked=linked,
         request_id=request_id,
         now=utc_now(),
+        generated_request_hash=request_hash,
+        sequence_number=1,
         provider=frozen.provider_name,
         prompt_template_version=QUESTION_PROMPT_VERSION,
         difficulty=draft["difficulty"],
@@ -463,6 +513,169 @@ def create_provider_learning_session(
     sync_learning_search(session, record.learning_session_id)
     session.commit()
     return record
+
+
+def create_provider_next_learning_question(
+    session: Session,
+    *,
+    record: LearningSession,
+    prepared: NextQuestionSources,
+    client_request_id: str,
+    idempotency_key: str,
+    request_hash: str,
+    request_id: str | None,
+    runtime: LearningProviderRuntime | None,
+) -> LearningSession:
+    frozen = _frozen_from_session(record, runtime)
+    _require_gates(session, frozen, runtime, output_tokens=1024)
+    snapshots_by_chunk = {item.chunk_id: item for item in prepared.snapshots}
+    excerpts = _collect_excerpts(
+        session,
+        prepared.approved,
+        tuple(
+            snapshots_by_chunk[candidate.chunk_id]
+            for candidate in prepared.approved
+            if candidate.chunk_id in snapshots_by_chunk
+        ),
+    )
+    if not excerpts:
+        _stop_question_generation(
+            session,
+            record,
+            status="COMPLETED",
+            code="EVIDENCE_INSUFFICIENT",
+            detail="已批准的来源无法再确认。已保留已完成题目。",
+            end_reason="EVIDENCE_EXHAUSTED",
+        )
+        return record
+    user_text = _question_user_text(record.topic, record.goal_text, excerpts)
+    previous = _previous_question_summary(session, record)
+    if previous:
+        user_text += "\n\n已完成题目所用事实，不能重复：\n" + previous
+    if len(user_text) > EXTERNAL_INPUT_CHAR_LIMIT:
+        _stop_question_generation(
+            session,
+            record,
+            status="FAILED",
+            code="OUTBOUND_LIMIT_EXCEEDED",
+            detail="准备外发的题目材料超过本地上限，已停止，没有改用其他服务。",
+        )
+        return record
+    operation = _commit_dispatched(
+        session,
+        record=record,
+        task_type=QUESTION_TASK,
+        idempotency_key=f"learning-question:{client_request_id}",
+        client_request_id=f"learning-question-client:{client_request_id}",
+        request_hash=request_hash,
+        frozen=frozen,
+        prompt_version=QUESTION_PROMPT_VERSION,
+    )
+    if operation.status != DISPATCHED or operation.completed_at is not None:
+        return record
+    response = _call_provider(
+        session,
+        operation,
+        record,
+        frozen,
+        runtime,
+        system_text=QUESTION_SYSTEM,
+        user_text=user_text,
+        max_output_tokens=1024,
+        task_type=QUESTION_TASK,
+    )
+    if response is None:
+        return session.get(LearningSession, record.learning_session_id) or record
+    try:
+        draft = _validate_question(response.content, excerpts)
+    except LearningCommandError as exc:
+        _finish_operation(
+            session,
+            operation,
+            status="FAILED",
+            response=response,
+            error_code=exc.code,
+            error_detail=exc.detail,
+        )
+        _fail(session, record, code=exc.code, detail=exc.detail, preserve_identity=True)
+        return record
+    linked = [
+        (item.candidate, item.text, item.snapshot)
+        for item in excerpts
+        if item.number in draft["evidence_numbers"]
+    ]
+    options = draft["options"]
+    correct_label = next(
+        item["label"] for item in options if item["option_id"] == draft["correct_option_id"]
+    )
+    if _question_is_duplicate(
+        session,
+        record.learning_session_id,
+        draft["knowledge_point"],
+        draft["prompt_text"],
+        correct_label,
+        linked,
+    ):
+        _finish_operation(
+            session,
+            operation,
+            status="FAILED",
+            response=response,
+            error_code="DUPLICATE_LEARNING_QUESTION",
+            error_detail="返回题目重复使用已完成的资料事实。",
+        )
+        _fail(
+            session,
+            record,
+            code="DUPLICATE_LEARNING_QUESTION",
+            detail="返回题目重复使用已完成的资料事实。已保留已完成题目。",
+            preserve_identity=True,
+        )
+        return record
+    _persist_question(
+        session,
+        record=record,
+        scope=prepared.scope,
+        draft_title=draft["knowledge_point"],
+        prompt_text=draft["prompt_text"],
+        options=options,
+        correct_option_id=draft["correct_option_id"],
+        linked=linked,
+        request_id=client_request_id,
+        now=utc_now(),
+        generated_request_hash=request_hash,
+        sequence_number=prepared.sequence_number,
+        provider=frozen.provider_name,
+        prompt_template_version=QUESTION_PROMPT_VERSION,
+        difficulty=draft["difficulty"],
+        live_model_called=True,
+        requested_model=frozen.requested_model,
+        resolved_model=response.resolved_model,
+    )
+    operation.question_id = record.current_question_id
+    _finish_operation(session, operation, status="COMPLETED", response=response)
+    session.commit()
+    sync_learning_search(session, record.learning_session_id)
+    session.commit()
+    return record
+
+
+def _previous_question_summary(session: Session, record: LearningSession) -> str:
+    rows = session.scalars(
+        select(LearningQuestion)
+        .where(LearningQuestion.learning_session_id == record.learning_session_id)
+        .order_by(LearningQuestion.sequence_number)
+    )
+    lines: list[str] = []
+    for question in rows:
+        point = session.get(KnowledgePoint, question.knowledge_point_id)
+        answer_id = str(question.answer_key_json.get("option_id", ""))
+        answer = next(
+            (item["label"] for item in question.options_json if item["option_id"] == answer_id),
+            "",
+        )
+        lines.append(f"{point.canonical_title if point else ''}：{answer}；{question.prompt_text}")
+    return "\n".join(lines)
 
 
 def submit_provider_learning_attempt(
@@ -592,7 +805,12 @@ def submit_provider_learning_attempt(
         )
         session.add(attempt)
         session.add(feedback)
-        record.completed_question_count = 1
+        record.completed_question_count += 1
+        if record.completed_question_count >= record.target_question_count:
+            record.status = "COMPLETED"
+            record.end_reason = "PLAN_COMPLETED"
+            record.completed_at = now
+        update_learning_plan_after_attempt(session, record, question)
         record.updated_at = now
         record.row_version += 1
         session.commit()

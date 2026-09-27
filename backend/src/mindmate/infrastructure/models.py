@@ -740,6 +740,8 @@ class LearningSession(Base):
     )
     current_knowledge_point_id: Mapped[str | None] = mapped_column(String(36))
     current_question_id: Mapped[str | None] = mapped_column(String(36))
+    pending_question_request_id: Mapped[str | None] = mapped_column(String(128))
+    pending_question_request_hash: Mapped[str | None] = mapped_column(String(64))
     idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
     client_request_id: Mapped[str] = mapped_column(String(128), nullable=False)
     request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -878,6 +880,13 @@ class LearningQuestion(Base):
         UniqueConstraint(
             "learning_session_id", "sequence_number", name="uq_learning_question_sequence"
         ),
+        Index(
+            "uq_learning_question_generated_request",
+            "learning_session_id",
+            "generated_request_id",
+            unique=True,
+            sqlite_where=text("generated_request_id IS NOT NULL"),
+        ),
     )
 
     question_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
@@ -897,6 +906,7 @@ class LearningQuestion(Base):
     sequence_number: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[str] = mapped_column(String(30), nullable=False)
     generated_request_id: Mapped[str | None] = mapped_column(String(128))
+    generated_request_hash: Mapped[str | None] = mapped_column(String(64))
     prompt_template_version: Mapped[str] = mapped_column(String(80), nullable=False)
     provider: Mapped[str] = mapped_column(String(50), nullable=False)
     row_version: Mapped[int] = mapped_column(

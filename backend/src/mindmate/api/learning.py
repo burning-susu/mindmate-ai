@@ -9,6 +9,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from mindmate.api.files import get_session
@@ -20,9 +21,13 @@ from mindmate.application.history_purge import (
 from mindmate.application.hybrid_search import HybridCandidateQuery
 from mindmate.application.learning_question_draft import MOCK_MODEL, MOCK_PROVIDER
 from mindmate.application.learning_sessions import (
+    DEFAULT_QUESTION_COUNT,
+    MAX_DEMO_QUESTION_COUNT,
     LearningCommandError,
     create_learning_session,
+    create_next_learning_question,
     current_question,
+    finish_learning_session,
     get_learning_session,
     knowledge_point_title,
     load_attempt,
@@ -63,9 +68,27 @@ class LearningSessionCreateRequest(BaseModel):
     topic: str = Field(min_length=1, max_length=80)
     goal_text: str = Field(min_length=1, max_length=200)
     goal_type: str = Field(default="CUSTOM", min_length=1, max_length=40)
-    target_question_count: int = Field(default=1)
+    target_question_count: int = Field(
+        default=DEFAULT_QUESTION_COUNT,
+        ge=DEFAULT_QUESTION_COUNT,
+        le=MAX_DEMO_QUESTION_COUNT,
+    )
     client_request_id: str | None = Field(default=None, min_length=1, max_length=128)
     confirm_provider_charge: bool = False
+
+
+class LearningNextQuestionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_session_version: int = Field(ge=1)
+    client_request_id: str = Field(min_length=1, max_length=128)
+    confirm_provider_charge: bool = False
+
+
+class LearningFinishRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_session_version: int = Field(ge=1)
 
 
 class LearningAttemptRequest(BaseModel):
@@ -138,6 +161,15 @@ class LearningScopeResponse(BaseModel):
     file_ids: list[str]
 
 
+class LearningSessionResultResponse(BaseModel):
+    planned_question_count: int
+    completed_question_count: int
+    correct_count: int
+    incorrect_count: int
+    unjudged_count: int
+    end_reason: str | None
+
+
 class LearningSessionResponse(BaseModel):
     learning_session_id: str
     topic: str
@@ -163,6 +195,8 @@ class LearningSessionResponse(BaseModel):
     scope: LearningScopeResponse | None
     plan: LearningPlanResponse | None
     question: LearningQuestionResponse | None
+    questions: list[LearningQuestionResponse]
+    result: LearningSessionResultResponse | None
 
 
 def _command_error(exc: LearningCommandError) -> LearningApiError:
@@ -276,15 +310,31 @@ def _question_payload(session: Session, question: Any) -> dict[str, Any]:
 def _session_payload(session: Session, record: Any) -> dict[str, Any]:
     scope = load_scope(session, record.learning_session_id)
     plan = load_plan(session, record.learning_session_id)
-    question_payload = None
-    if record.current_question_id is not None:
-        from mindmate.infrastructure.models import LearningQuestion
+    from mindmate.infrastructure.models import LearningQuestion
 
-        question = session.get(LearningQuestion, record.current_question_id)
-        if question is not None:
-            question_payload = LearningQuestionResponse.model_validate(
-                _question_payload(session, question)
-            )
+    stored_questions = list(
+        session.scalars(
+            select(LearningQuestion)
+            .where(LearningQuestion.learning_session_id == record.learning_session_id)
+            .order_by(LearningQuestion.sequence_number)
+        )
+    )
+    question_payloads = [
+        LearningQuestionResponse.model_validate(_question_payload(session, item))
+        for item in stored_questions
+    ]
+    question_payload = next(
+        (item for item in question_payloads if item.question_id == record.current_question_id),
+        None,
+    )
+    completed_payloads = [item for item in question_payloads if item.feedback is not None]
+    correct_count = sum(item.feedback.result == "CORRECT" for item in completed_payloads if item.feedback)
+    incorrect_count = sum(item.feedback.result == "INCORRECT" for item in completed_payloads if item.feedback)
+    unjudged_count = sum(
+        item.feedback.result not in {"CORRECT", "INCORRECT"}
+        for item in completed_payloads
+        if item.feedback
+    )
     scope_payload = None
     if scope is not None:
         scope_payload = LearningScopeResponse(
@@ -304,6 +354,16 @@ def _session_payload(session: Session, record: Any) -> dict[str, Any]:
             ),
             prompt_template_version=plan.prompt_template_version,
         )
+    result_payload = None
+    if record.status in {"COMPLETED", "FAILED", "SOURCE_INVALID"}:
+        result_payload = LearningSessionResultResponse(
+            planned_question_count=record.target_question_count,
+            completed_question_count=len(completed_payloads),
+            correct_count=correct_count,
+            incorrect_count=incorrect_count,
+            unjudged_count=unjudged_count,
+            end_reason=record.end_reason,
+        )
     return LearningSessionResponse(
         learning_session_id=record.learning_session_id,
         topic=record.topic,
@@ -314,7 +374,7 @@ def _session_payload(session: Session, record: Any) -> dict[str, Any]:
         status=record.status,
         failure_code=record.failure_code,
         failure_detail=record.failure_detail,
-        completed_question_count=record.completed_question_count,
+        completed_question_count=len(completed_payloads),
         current_question_id=record.current_question_id,
         provider=record.provider or MOCK_PROVIDER,
         model=(record.resolved_model or record.requested_model or MOCK_MODEL)
@@ -333,6 +393,8 @@ def _session_payload(session: Session, record: Any) -> dict[str, Any]:
         scope=scope_payload,
         plan=plan_payload,
         question=question_payload,
+        questions=question_payloads,
+        result=result_payload,
     ).model_dump(mode="json")
 
 
@@ -392,6 +454,64 @@ def create_session(
             provider_runtime=_provider_runtime(
                 request, confirm_provider_charge=payload.confirm_provider_charge
             ),
+        )
+    except LearningCommandError as exc:
+        raise _command_error(exc) from exc
+    return _session_payload(session, record)
+
+
+@router.post(
+    "/learning-sessions/{learning_session_id}/next-question",
+    response_model=LearningSessionResponse,
+    tags=["learning"],
+)
+def create_next_question(
+    learning_session_id: str,
+    payload: LearningNextQuestionRequest,
+    request: Request,
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    idempotency_key = request.headers.get("idempotency-key", "").strip()
+    try:
+        record = create_next_learning_question(
+            session,
+            session_factory=request.app.state.session_factory,
+            learning_session_id=learning_session_id,
+            expected_session_version=payload.expected_session_version,
+            idempotency_key=idempotency_key,
+            client_request_id=payload.client_request_id,
+            request_hash=request_hash(payload.model_dump(mode="json")),
+            request_id=getattr(request.state, "request_id", None),
+            encoder=_encoder(request),
+            query=_query(request),
+            confirm_provider_charge=payload.confirm_provider_charge,
+            provider_runtime=_provider_runtime(
+                request, confirm_provider_charge=payload.confirm_provider_charge
+            ),
+        )
+    except LearningCommandError as exc:
+        raise _command_error(exc) from exc
+    return _session_payload(session, record)
+
+
+@router.post(
+    "/learning-sessions/{learning_session_id}/finish",
+    response_model=LearningSessionResponse,
+    tags=["learning"],
+)
+def end_learning_session(
+    learning_session_id: str,
+    payload: LearningFinishRequest,
+    request: Request,
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    if not request.headers.get("idempotency-key", "").strip():
+        raise LearningApiError("IDEMPOTENCY_KEY_REQUIRED", "需要 Idempotency-Key。", 400)
+    try:
+        record = finish_learning_session(
+            session,
+            learning_session_id,
+            expected_session_version=payload.expected_session_version,
         )
     except LearningCommandError as exc:
         raise _command_error(exc) from exc

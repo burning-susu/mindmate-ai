@@ -3266,6 +3266,110 @@
         }
       }
     },
+    "/api/v1/learning-sessions/{learning_session_id}/next-question": {
+      "post": {
+        "tags": [
+          "learning"
+        ],
+        "summary": "Create Next Question",
+        "operationId": "create_next_question_api_v1_learning_sessions__learning_session_id__next_question_post",
+        "parameters": [
+          {
+            "name": "learning_session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Learning Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LearningNextQuestionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningSessionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/learning-sessions/{learning_session_id}/finish": {
+      "post": {
+        "tags": [
+          "learning"
+        ],
+        "summary": "End Learning Session",
+        "operationId": "end_learning_session_api_v1_learning_sessions__learning_session_id__finish_post",
+        "parameters": [
+          {
+            "name": "learning_session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Learning Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LearningFinishRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningSessionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/learning-sessions/{learning_session_id}": {
       "get": {
         "tags": [
@@ -9197,6 +9301,21 @@
         ],
         "title": "LearningFeedbackResponse"
       },
+      "LearningFinishRequest": {
+        "properties": {
+          "expected_session_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Expected Session Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expected_session_version"
+        ],
+        "title": "LearningFinishRequest"
+      },
       "LearningHistoryItem": {
         "properties": {
           "learning_session_id": {
@@ -9353,6 +9472,33 @@
           "row_version"
         ],
         "title": "LearningLifecycleResponse"
+      },
+      "LearningNextQuestionRequest": {
+        "properties": {
+          "expected_session_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Expected Session Version"
+          },
+          "client_request_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Client Request Id"
+          },
+          "confirm_provider_charge": {
+            "type": "boolean",
+            "title": "Confirm Provider Charge",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expected_session_version",
+          "client_request_id"
+        ],
+        "title": "LearningNextQuestionRequest"
       },
       "LearningOptionResponse": {
         "properties": {
@@ -9602,6 +9748,8 @@
           },
           "target_question_count": {
             "type": "integer",
+            "maximum": 5.0,
+            "minimum": 1.0,
             "title": "Target Question Count",
             "default": 1
           },
@@ -9806,6 +9954,23 @@
                 "type": "null"
               }
             ]
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/components/schemas/LearningQuestionResponse"
+            },
+            "type": "array",
+            "title": "Questions"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LearningSessionResultResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -9829,9 +9994,56 @@
           "started_at",
           "scope",
           "plan",
-          "question"
+          "question",
+          "questions",
+          "result"
         ],
         "title": "LearningSessionResponse"
+      },
+      "LearningSessionResultResponse": {
+        "properties": {
+          "planned_question_count": {
+            "type": "integer",
+            "title": "Planned Question Count"
+          },
+          "completed_question_count": {
+            "type": "integer",
+            "title": "Completed Question Count"
+          },
+          "correct_count": {
+            "type": "integer",
+            "title": "Correct Count"
+          },
+          "incorrect_count": {
+            "type": "integer",
+            "title": "Incorrect Count"
+          },
+          "unjudged_count": {
+            "type": "integer",
+            "title": "Unjudged Count"
+          },
+          "end_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "planned_question_count",
+          "completed_question_count",
+          "correct_count",
+          "incorrect_count",
+          "unjudged_count",
+          "end_reason"
+        ],
+        "title": "LearningSessionResultResponse"
       },
       "MessageCreateRequest": {
         "properties": {

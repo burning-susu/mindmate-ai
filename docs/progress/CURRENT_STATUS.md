@@ -7,7 +7,7 @@
 - 最后更新时间：`2026-09-27`
 - 当前开发阶段：阶段 8 开发中，状态 `PARTIAL`；阶段 5、阶段 6、阶段 7 继续 `PARTIAL`
 - 交付顺序：Demo 首先完成，完整 V1 以后精进。求职 Demo 优先文件整理/导入、建库、带来源问答、最小学习陪练和重启恢复。Demo 可用性与完整 V1 阶段状态分开报告。
-- 当前批次状态：第五十五批先复测求职 Demo，再把手动选择接到新建的一题学习。`DEMO_REGRESSION` 为 `PASS`，与第四十二批历史 `PASS` 分开。`LEARNING_PROVIDER_QUESTION` 与 `LEARNING_PROVIDER_FEEDBACK` 为 `PASS`（只代表 MockTransport）。`LEARNING_ONLINE_BROWSER` 为 `PARTIAL`。`OPENAI_LIVE_SMOKE` 与 `DEEPSEEK_LIVE_SMOKE` 为 `PENDING`。`STAGE7_FULL_V1` 仍为 `PARTIAL`。第五十三批 `BACKUP_RESTORE` 仍为 `PASS`。独立备份 Worker、周期官方账单对账仍为 `PARTIAL`。第 51 批历史手动永久删除 UI 与两类浏览器确认点击仍 `PENDING`；多题定位仍 `PARTIAL`。阶段 5–8 的完整 V1 仍为 `PARTIAL`。详细证据见 `docs/test-reports/stage-55-demo-regression-online-learning.md`。
+- 当前批次状态：第五十七批已接续第五十六批工作区，实现 1–5 题逐题练习（默认 1）、新题幂等/并发门禁、结构化历史结果与主动结束；`LEARNING_MULTIQUESTION_API/UI` 自动化为 `PASS`。`LEARNING_ONLINE_BROWSER` 为 `PARTIAL`：隔离服务启动诊断在 Alembic 后退出，未进入页面/截图。`DEMO_REGRESSION_THIS_BATCH` 为 `PARTIAL`，完整求职 Demo 浏览器流程未重跑。`REAL_PROVIDER_SMOKE` 仍 `PENDING`；`STAGE7_FULL_V1`、`STAGE8_FULL_V1` 仍 `PARTIAL`。第五十六批与本批改动均未提交：普通 Git 写检查创建 `.git/index.lock` 时被当前沙箱以 `Permission denied` 拒绝，未改权限、未推送。详见 `docs/test-reports/stage-57-learning-multistep.md`。
 
 ## 已完成阶段
 

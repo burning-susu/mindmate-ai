@@ -8,7 +8,7 @@ import { ApiError, apiRequest } from '../api/client'
 import { createLearningSession, getLearningProviderPlan } from '../api/learning'
 import { listKnowledgeBaseMembers, type KnowledgeBaseItem, type KnowledgeBaseListResponse } from '../api/knowledgeBases'
 
-const MOCK_BANNER = '新建学习会话使用当前选择。Mock 仍按本地规则出题和评分，不会外发。在线模式会在创建题目和提交答案前分别确认本次费用。已经创建的会话保持创建时的服务。这仍不是完整学习计划或复习。'
+const MOCK_BANNER = '新建学习会话使用当前选择。Mock 仍按本地规则出题和评分，不会外发。在线模式每道题和每次点评前都会单独确认费用。已经创建的会话保持创建时的服务。这仍不是完整学习计划或复习。'
 
 export default function LearningNewPage() {
   const [searchParams] = useSearchParams()
@@ -16,6 +16,7 @@ export default function LearningNewPage() {
   const knowledgeBaseId = searchParams.get('knowledge_base_id')?.trim() ?? ''
   const [topic, setTopic] = useState('')
   const [goalText, setGoalText] = useState('')
+  const [targetQuestionCount, setTargetQuestionCount] = useState(1)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [chargeConfirmed, setChargeConfirmed] = useState(false)
@@ -63,6 +64,7 @@ export default function LearningNewPage() {
           knowledgeBaseId,
           topic: topic.trim(),
           goalText: goalText.trim(),
+          targetQuestionCount,
           confirmProviderCharge: online && chargeConfirmed,
         },
         clientRequestId.current,
@@ -87,8 +89,8 @@ export default function LearningNewPage() {
       <div className="detail-heading">
         <div>
           <span className="eyebrow">开始学习</span>
-          <h1>基于知识库的一题演示</h1>
-          <p>打开本页不会创建学习会话。演示题量固定为 1，不提供难度、题型或题量切换。</p>
+          <h1>基于知识库的逐题练习</h1>
+          <p>打开本页不会创建学习会话。每次只展示一道单选题。</p>
         </div>
       </div>
       {!knowledgeBaseId && (
@@ -152,7 +154,15 @@ export default function LearningNewPage() {
           <label>学习目标
             <textarea aria-label="学习目标" maxLength={200} rows={3} value={goalText} onChange={(event) => setGoalText(event.target.value)} />
           </label>
-          <p>题量：1。题型由服务端生成为单选题。难度和题量不能在这里调整。</p>
+          <label>计划题数
+            <select
+              aria-label="计划题数"
+              value={targetQuestionCount}
+              onChange={(event) => setTargetQuestionCount(Number(event.target.value))}
+            >
+              {[1, 2, 3, 4, 5].map((count) => <option key={count} value={count}>{count} 题</option>)}
+            </select>
+          </label>
           {planQuery.data ? <p role="status">{planQuery.data.outbound_summary}</p> : null}
           {online && planQuery.data ? (
             <div className="settings-privacy-copy">

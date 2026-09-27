@@ -610,6 +610,9 @@ export interface components {
     "explanation_origin"?: string;
     "citations": Array<components["LearningCitationResponse"]>
   };
+  "LearningFinishRequest": {
+    "expected_session_version": number
+  };
   "LearningHistoryItem": {
     "learning_session_id": string;
     "topic": string;
@@ -636,6 +639,11 @@ export interface components {
     "topic": string;
     "deleted_at": string | null;
     "row_version": number
+  };
+  "LearningNextQuestionRequest": {
+    "expected_session_version": number;
+    "client_request_id": string;
+    "confirm_provider_charge"?: boolean
   };
   "LearningOptionResponse": {
     "option_id": string;
@@ -709,7 +717,17 @@ export interface components {
     "started_at": string | null;
     "scope": components["LearningScopeResponse"] | null;
     "plan": components["LearningPlanResponse"] | null;
-    "question": components["LearningQuestionResponse"] | null
+    "question": components["LearningQuestionResponse"] | null;
+    "questions": Array<components["LearningQuestionResponse"]>;
+    "result": components["LearningSessionResultResponse"] | null
+  };
+  "LearningSessionResultResponse": {
+    "planned_question_count": number;
+    "completed_question_count": number;
+    "correct_count": number;
+    "incorrect_count": number;
+    "unjudged_count": number;
+    "end_reason": string | null
   };
   "MessageCreateRequest": {
     "content": string;
@@ -1165,6 +1183,12 @@ export interface operations {
   };
   "POST /api/v1/learning-sessions": {
     operationId: "create_session_api_v1_learning_sessions_post"
+  };
+  "POST /api/v1/learning-sessions/{learning_session_id}/next-question": {
+    operationId: "create_next_question_api_v1_learning_sessions__learning_session_id__next_question_post"
+  };
+  "POST /api/v1/learning-sessions/{learning_session_id}/finish": {
+    operationId: "end_learning_session_api_v1_learning_sessions__learning_session_id__finish_post"
   };
   "GET /api/v1/learning-sessions/{learning_session_id}": {
     operationId: "read_session_api_v1_learning_sessions__learning_session_id__get"
