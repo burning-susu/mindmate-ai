@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     index_activation_worker_poll_seconds: float = 0.1
     chat_worker_poll_seconds: float = 0.05
     chat_worker_lease_seconds: int = 60
+    history_purge_poll_seconds: float = 30.0
+    history_purge_batch_size: int = 10
+    task_retention_poll_seconds: float = 30.0
+    task_retention_batch_size: int = 20
     alembic_ini: Path = Path(__file__).resolve().parents[2] / "alembic.ini"
 
     @property

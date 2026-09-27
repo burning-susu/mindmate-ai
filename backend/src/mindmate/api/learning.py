@@ -13,6 +13,10 @@ from sqlalchemy.orm import Session
 
 from mindmate.api.files import get_session
 from mindmate.application.citations import citation_payload, list_feedback_citations
+from mindmate.application.history_purge import (
+    HistoryPurgeError,
+    purge_learning_session_permanent,
+)
 from mindmate.application.hybrid_search import HybridCandidateQuery
 from mindmate.application.learning_question_draft import MOCK_MODEL, MOCK_PROVIDER
 from mindmate.application.learning_sessions import (
@@ -387,6 +391,29 @@ def restore_deleted_learning_session(
     except LearningCommandError as exc:
         raise _command_error(exc) from exc
     return _lifecycle_payload(record)
+
+
+@router.delete(
+    "/learning-sessions/{learning_session_id}/permanent",
+    tags=["learning"],
+)
+def permanently_delete_learning_session(
+    learning_session_id: str,
+    expected_version: int = Query(ge=1),
+    confirmed: bool = Query(default=False),
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    """Permanently remove one trashed learning session and its owned rows."""
+    try:
+        return purge_learning_session_permanent(
+            session,
+            learning_session_id,
+            expected_version=expected_version,
+            confirmed=confirmed,
+            require_due=False,
+        )
+    except HistoryPurgeError as exc:
+        raise LearningApiError(exc.code, exc.detail, exc.status) from exc
 
 
 def _lifecycle_payload(record: Any) -> dict[str, Any]:

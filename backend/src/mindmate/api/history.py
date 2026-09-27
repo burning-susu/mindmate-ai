@@ -15,6 +15,11 @@ from mindmate.application.conversation_history import (
     list_conversation_history,
     list_trashed_conversations,
 )
+from mindmate.application.history_purge import (
+    HistoryPurgeError,
+    preview_expired_history,
+    purge_expired_history,
+)
 from mindmate.application.learning_history import (
     list_learning_history,
     list_trashed_learning_sessions,
@@ -235,4 +240,54 @@ def list_history_trash(
             return list_trashed_learning_sessions(session, limit=limit, cursor=cursor)
         raise HistoryQueryError("HISTORY_QUERY_INVALID", "回收站类型不是当前可查看的历史对象。")
     except HistoryQueryError as exc:
+        raise HistoryApiError(exc.code, exc.detail, exc.status) from exc
+
+
+class HistoryPurgePreviewResponse(BaseModel):
+    as_of: datetime
+    eligible_conversations: int
+    eligible_learning_sessions: int
+    eligible_total: int
+    trashed_missing_purge_after: int
+
+
+class HistoryPurgeRunResponse(BaseModel):
+    as_of: datetime
+    scanned: int
+    purged_conversations: int
+    purged_learning_sessions: int
+    skipped_restored: int
+    skipped_not_due: int
+    errors: int
+    error_codes: list[str]
+
+
+@router.get(
+    "/history/trash/purge-preview",
+    response_model=HistoryPurgePreviewResponse,
+    tags=["history"],
+)
+def preview_history_trash_purge(
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    """Read-only count of expired trash owners. Does not delete rows."""
+    try:
+        return preview_expired_history(session)
+    except HistoryPurgeError as exc:
+        raise HistoryApiError(exc.code, exc.detail, exc.status) from exc
+
+
+@router.post(
+    "/history/trash/purge-expired",
+    response_model=HistoryPurgeRunResponse,
+    tags=["history"],
+)
+def run_history_trash_purge(
+    limit: int = Query(default=10, ge=1, le=50),
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    """Explicit bounded maintenance action for expired history trash."""
+    try:
+        return purge_expired_history(session, limit=limit)
+    except HistoryPurgeError as exc:
         raise HistoryApiError(exc.code, exc.detail, exc.status) from exc

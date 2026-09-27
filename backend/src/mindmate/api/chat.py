@@ -24,6 +24,10 @@ from mindmate.application.chat_generation import (
 )
 from mindmate.application.citations import citation_payload, list_answer_citations
 from mindmate.application.conversation_lifecycle import restore_conversation, trash_conversation
+from mindmate.application.history_purge import (
+    HistoryPurgeError,
+    purge_conversation_permanent,
+)
 from mindmate.infrastructure.models import (
     AiOperation,
     AnswerVersion,
@@ -493,6 +497,29 @@ def restore_deleted_conversation(
     except ChatCommandError as exc:
         raise _command_error(exc) from exc
     return _lifecycle_payload(record)
+
+
+@router.delete(
+    "/conversations/{conversation_id}/permanent",
+    tags=["chat"],
+)
+def permanently_delete_conversation(
+    conversation_id: str,
+    expected_version: int = Query(ge=1),
+    confirmed: bool = Query(default=False),
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    """Permanently remove one trashed conversation and its owned rows."""
+    try:
+        return purge_conversation_permanent(
+            session,
+            conversation_id,
+            expected_version=expected_version,
+            confirmed=confirmed,
+            require_due=False,
+        )
+    except HistoryPurgeError as exc:
+        raise ChatApiError(exc.code, exc.detail, exc.status) from exc
 
 
 def _lifecycle_payload(record: Conversation) -> dict[str, Any]:

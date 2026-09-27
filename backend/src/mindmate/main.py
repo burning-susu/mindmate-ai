@@ -36,6 +36,7 @@ from mindmate.api.learning import router as learning_router
 from mindmate.api.problem import ProblemDetail
 from mindmate.application.chat_generation import ChatGenerationWorker
 from mindmate.application.embedding_model_install import EmbeddingModelInstallWorker
+from mindmate.application.history_purge_worker import HistoryTrashPurgeWorker
 from mindmate.application.history_search_index import (
     HistorySearchBackfill,
     install_history_search_listener,
@@ -147,6 +148,14 @@ async def lifespan(app: FastAPI):
         app.state.index_activation_worker.start()
         app.state.history_search_backfill = HistorySearchBackfill(app.state.session_factory)
         app.state.history_search_backfill.start()
+        app.state.history_trash_purge_worker = HistoryTrashPurgeWorker(
+            app.state.session_factory,
+            poll_seconds=settings.history_purge_poll_seconds,
+            batch_size=settings.history_purge_batch_size,
+        )
+        # Tests drive purge explicitly so a background scan cannot race fixtures.
+        if settings.env != "test":
+            app.state.history_trash_purge_worker.start()
         yield
     finally:
         chat_worker = getattr(app.state, "chat_worker", None)
@@ -179,6 +188,9 @@ async def lifespan(app: FastAPI):
         history_backfill = getattr(app.state, "history_search_backfill", None)
         if history_backfill is not None:
             history_backfill.stop()
+        history_purge = getattr(app.state, "history_trash_purge_worker", None)
+        if history_purge is not None:
+            history_purge.stop()
         engine = getattr(app.state, "engine", None)
         if engine is not None:
             engine.dispose()
