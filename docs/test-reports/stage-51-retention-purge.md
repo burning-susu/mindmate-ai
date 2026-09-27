@@ -2,7 +2,7 @@
 
 - 进场：`feat/v1-bootstrap`，本地与 `origin/feat/v1-bootstrap` 均为 `efc8e3b34f1deee3cc7689595d38008fb94aef99`，工作区干净。
 - 检查点 A：`9a4b485062cf87d92368d99afe8dc572aa6532d1`，`实现：历史回收站到期安全清理`。
-- 检查点 B：本文件收口提交，`实现：后台任务记录按期限安全清理`。
+- 检查点 B：`018135cd62442190b01fa18126742db6691acb20`，`实现：后台任务记录按期限安全清理`。
 - 验证限定在 pytest 临时目录与公开合成内容；Mock Provider；未调用真实 DeepSeek；未触碰默认 `%LOCALAPPDATA%\MindMateAI`。
 
 ## A. 历史 30 天到期永久清理
