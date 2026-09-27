@@ -29,6 +29,7 @@ from mindmate.api.files import FileApiError
 from mindmate.api.files import router as files_router
 from mindmate.api.history import HistoryApiError
 from mindmate.api.history import router as history_router
+from mindmate.api.home import HomeApiError
 from mindmate.api.home import router as home_router
 from mindmate.api.knowledge_bases import router as knowledge_bases_router
 from mindmate.api.learning import LearningApiError
@@ -49,6 +50,7 @@ from mindmate.application.index_preprocessing_worker import IndexPreprocessingWo
 from mindmate.application.knowledge_membership_worker import KnowledgeMembershipWorker
 from mindmate.application.parse_worker_service import ParsingWorker
 from mindmate.application.retrieval_test_queries import LocalRetrievalQueryEncoder
+from mindmate.application.task_retention_worker import TaskRetentionWorker
 from mindmate.config import Settings, get_settings
 from mindmate.infrastructure.db import create_session_factory, create_sqlite_engine, quick_check
 from mindmate.security.credentials import WindowsCredentialStore
@@ -156,6 +158,13 @@ async def lifespan(app: FastAPI):
         # Tests drive purge explicitly so a background scan cannot race fixtures.
         if settings.env != "test":
             app.state.history_trash_purge_worker.start()
+        app.state.task_retention_worker = TaskRetentionWorker(
+            app.state.session_factory,
+            poll_seconds=settings.task_retention_poll_seconds,
+            batch_size=settings.task_retention_batch_size,
+        )
+        if settings.env != "test":
+            app.state.task_retention_worker.start()
         yield
     finally:
         chat_worker = getattr(app.state, "chat_worker", None)
@@ -191,6 +200,9 @@ async def lifespan(app: FastAPI):
         history_purge = getattr(app.state, "history_trash_purge_worker", None)
         if history_purge is not None:
             history_purge.stop()
+        task_retention = getattr(app.state, "task_retention_worker", None)
+        if task_retention is not None:
+            task_retention.stop()
         engine = getattr(app.state, "engine", None)
         if engine is not None:
             engine.dispose()
@@ -379,6 +391,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             exc.status,
             exc.code,
             "对话历史读取失败",
+            exc.detail,
+        )
+
+    @app.exception_handler(HomeApiError)
+    async def home_api_error(request: Request, exc: HomeApiError) -> JSONResponse:
+        return problem(
+            request,
+            exc.status,
+            exc.code,
+            "首页请求失败",
             exc.detail,
         )
 

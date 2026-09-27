@@ -317,7 +317,9 @@ def _purge_owner(
 
 
 def _due_cutoff(now: datetime) -> datetime:
-    return _as_utc(now) if now.tzinfo is not None else now.replace(tzinfo=UTC)
+    aware = _as_utc(now)
+    assert aware is not None
+    return aware
 
 
 def _purge_conversation(

@@ -495,6 +495,9 @@
 .home-task-panel__detail div { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 8px; font-size: 13px; }
 .home-task-panel__detail dt { color: var(--muted); }
 .home-task-panel__detail dd { margin: 0; overflow-wrap: anywhere; }
+.home-task-panel__cleanup { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); display: grid; gap: 10px; }
+.home-task-panel__cleanup h3 { margin: 0; font-size: 16px; }
+.home-task-panel__cleanup p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--muted); }
 @media (max-width: 800px) {
   .home-overview__counts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
