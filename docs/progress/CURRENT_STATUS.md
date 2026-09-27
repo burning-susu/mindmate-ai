@@ -7,7 +7,7 @@
 - 最后更新时间：`2026-09-27`
 - 当前开发阶段：阶段 8 开发中，状态 `PARTIAL`；阶段 5、阶段 6、阶段 7 继续 `PARTIAL`
 - 交付顺序：Demo 首先完成，完整 V1 以后精进。求职 Demo 优先文件整理/导入、建库、带来源问答、最小学习陪练和重启恢复。Demo 可用性与完整 V1 阶段状态分开报告。
-- 当前批次状态：第五十二批完成本机设置增强（存储/模型/用量/预算）与一致性本地备份导出（创建/校验/下载）。设置存储与用量只读、预算硬停止后端门禁、备份创建与排除/下载按本批证据为 `PASS`；周期硬限额完整对账与备份恢复仍为 `PARTIAL`/`PENDING`。第 51 批历史手动永久删除 UI 与两类浏览器确认点击仍 `PENDING`；多题定位仍 `PARTIAL`。阶段 8 仍为 `PARTIAL`。求职 Demo 维持第四十二批 `PASS`。真实 DeepSeek 仍为 `PENDING`。阶段 5、6、7 的完整 V1 仍为 `PARTIAL`。详细证据见 `docs/test-reports/stage-52-settings-backup-export.md`。
+- 当前批次状态：第五十三批完成第 52 批备份包的完整恢复闭环。`BACKUP_CREATE` 浏览器创建与离线校验为 `PASS`；`BACKUP_RESTORE` 为 `PASS`（预检、双重确认、进程重启后切换、旧数据恢复点、索引不可检索、Key 不外发）。独立备份 Worker 仍为 `PARTIAL`。周期硬限额完整账单对账仍为 `PARTIAL`。第 51 批历史手动永久删除 UI 与两类浏览器确认点击仍 `PENDING`；多题定位仍 `PARTIAL`。阶段 8 仍为 `PARTIAL`，不因恢复闭环标成完成。求职 Demo 维持第四十二批 `PASS`。真实 DeepSeek 仍为 `PENDING`。阶段 5、6、7 的完整 V1 仍为 `PARTIAL`。详细证据见 `docs/test-reports/stage-53-backup-restore.md`。
 
 ## 已完成阶段
 
@@ -320,3 +320,10 @@
 - 浏览器：隔离根 `%TEMP%\mindmate-ai-stage45-home-learning`，公开合成资料和已校验 ONNX。主库 `01a0de2b-b93e-7ab4-af7d-3ef505c7e667`。API `127.0.0.1:8004`，页面 `127.0.0.1:5177`，Provider 固定 Mock。空首页先出现上述两个引导。未作答会话 `01a0de2e-3d6e-7efa-a9f2-b361ee9d30c7` 从首页进入原 URL，提交一次后首页为“已作答 1 / 1”，点击“查看反馈”仍是原题和“结果：正确”。模型 `learning-demo-fixture-v1`，`live_model_called=false`。Attempt `01a0de2f-8ef2-7858-bbb0-d094e0d1e1ff`，题目 `01a0de2e-4096-7412-aa71-31726dc3a007`。
 - 重启：旧监听 PID `4804` 停止后脚本退出码 0，8004/5177 已释放。新监听 PID `28280` 上，首页卡片、会话 ID 和 Attempt 数量不变。文件 `01a0de2b-ba3d-7163-8c6d-735dfb0913c8`（服务超时策略.txt）进入回收站后，首页最新卡片写明“文件已在回收站”，没有“继续学习”；已作答项保留“查看反馈”，未作答项 `01a0de33-28ea-76c8-a117-5ade18ec2479` 只有“查看原会话”。验证结束时 Attempt 仍是 1 条，题目仍是 1 道。
 - 下一批唯一目标：补首页四个快捷操作（开始学习、导入文件、创建知识库、AI 提问）。不接首页真实统计、最近文件、任务摘要、历史筛选、设置、备份或真实 DeepSeek。
+
+## 第五十三批交接
+
+- 本批状态：`BACKUP_CREATE` 浏览器创建与离线校验 `PASS`；`BACKUP_RESTORE` `PASS`。独立备份 Worker 仍 `PARTIAL`。周期硬限额完整对账仍 `PARTIAL`。第 51 批历史手动永久删除 UI 与两类浏览器确认点击仍 `PENDING`；多题定位仍 `PARTIAL`。阶段 8 仍为 `PARTIAL`。求职 Demo 维持第四十二批 `PASS`。真实 DeepSeek 仍为 `PENDING`。阶段 5、6、7 的完整 V1 仍为 `PARTIAL`。进场分支 `feat/v1-bootstrap`，进场 SHA `1bb767d2fbe7d4a4f94ab9005ac9900d9d467618`。
+- 恢复：设置页选择备份包后先预检，不改当前数据。用户勾选覆盖说明并输入“覆盖当前全部本地数据”后才确认。确认只写恢复点和重启标记；Windows 上 SQLite 仍打开时不切换目录。下次进程启动、连接关闭后做两阶段目录切换。失败回到旧数据。旧向量隔离，索引在真实重建前不可检索。恢复后保持 Mock，重新确认前不外发。按备份 ID 的旧恢复接口仍返回 501。
+- 浏览器：隔离根 `%TEMP%\mindmate-ai-stage53-a` 与 `%TEMP%\mindmate-ai-stage53-b`，API `127.0.0.1:8013`，页面 `127.0.0.1:5183`，Provider 固定 Mock。根 A 点击创建并下载；根 B 预检、确认、退出进程、再次启动后看到“恢复完成 · 本机已保留恢复点”。合成文件、知识库、对话和学习主题回到 alpha，beta 不在。根外哨兵文件未变。详细证据见 `docs/test-reports/stage-53-backup-restore.md`。
+- 下一批：阶段 8 剩余项另开对话。不把阶段 8、独立备份 Worker、周期账单对账、第 51 批浏览器删除确认标成完成。
