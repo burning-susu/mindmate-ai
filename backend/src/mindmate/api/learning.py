@@ -7,7 +7,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
@@ -26,8 +26,10 @@ from mindmate.application.learning_sessions import (
     load_plan,
     load_scope,
     request_hash,
+    restore_learning_session,
     scope_file_ids,
     submit_learning_attempt,
+    trash_learning_session,
 )
 from mindmate.infrastructure.vector_store import SqliteVecAdapter
 
@@ -340,6 +342,60 @@ def read_session(
     except LearningCommandError as exc:
         raise _command_error(exc) from exc
     return _session_payload(session, record)
+
+
+class LearningLifecycleResponse(BaseModel):
+    learning_session_id: str
+    topic: str
+    deleted_at: datetime | None
+    row_version: int
+
+
+@router.delete(
+    "/learning-sessions/{learning_session_id}",
+    response_model=LearningLifecycleResponse,
+    tags=["learning"],
+)
+def delete_learning_session(
+    learning_session_id: str,
+    expected_version: int = Query(ge=1),
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    try:
+        record = trash_learning_session(
+            session, learning_session_id, expected_version=expected_version
+        )
+    except LearningCommandError as exc:
+        raise _command_error(exc) from exc
+    return _lifecycle_payload(record)
+
+
+@router.post(
+    "/learning-sessions/{learning_session_id}/restore",
+    response_model=LearningLifecycleResponse,
+    tags=["learning"],
+)
+def restore_deleted_learning_session(
+    learning_session_id: str,
+    expected_version: int = Query(ge=1),
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    try:
+        record = restore_learning_session(
+            session, learning_session_id, expected_version=expected_version
+        )
+    except LearningCommandError as exc:
+        raise _command_error(exc) from exc
+    return _lifecycle_payload(record)
+
+
+def _lifecycle_payload(record: Any) -> dict[str, Any]:
+    return {
+        "learning_session_id": record.learning_session_id,
+        "topic": record.topic,
+        "deleted_at": record.deleted_at,
+        "row_version": record.row_version,
+    }
 
 
 @router.get(

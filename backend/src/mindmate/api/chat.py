@@ -23,6 +23,7 @@ from mindmate.application.chat_generation import (
     request_chat_stop,
 )
 from mindmate.application.citations import citation_payload, list_answer_citations
+from mindmate.application.conversation_lifecycle import restore_conversation, trash_conversation
 from mindmate.infrastructure.models import (
     AiOperation,
     AnswerVersion,
@@ -185,6 +186,13 @@ class AiOperationResponse(BaseModel):
     user_message: MessageResponse | None = None
     assistant_message: MessageResponse | None = None
     answer_version: AnswerVersionResponse | None = None
+
+
+class ConversationLifecycleResponse(BaseModel):
+    conversation_id: str
+    title: str
+    deleted_at: datetime | None
+    row_version: int
 
 
 class ConversationSubmissionResponse(BaseModel):
@@ -447,6 +455,53 @@ def get_conversation(
     if conversation is None or conversation.deleted_at is not None:
         raise ChatApiError("CONVERSATION_NOT_FOUND", "会话不存在。", 404)
     return _conversation_payload(session, conversation)
+
+
+@router.delete(
+    "/conversations/{conversation_id}",
+    response_model=ConversationLifecycleResponse,
+    tags=["chat"],
+)
+def delete_conversation(
+    conversation_id: str,
+    expected_version: int = Query(ge=1),
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    try:
+        record = trash_conversation(
+            session, conversation_id, expected_version=expected_version
+        )
+    except ChatCommandError as exc:
+        raise _command_error(exc) from exc
+    return _lifecycle_payload(record)
+
+
+@router.post(
+    "/conversations/{conversation_id}/restore",
+    response_model=ConversationLifecycleResponse,
+    tags=["chat"],
+)
+def restore_deleted_conversation(
+    conversation_id: str,
+    expected_version: int = Query(ge=1),
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    try:
+        record = restore_conversation(
+            session, conversation_id, expected_version=expected_version
+        )
+    except ChatCommandError as exc:
+        raise _command_error(exc) from exc
+    return _lifecycle_payload(record)
+
+
+def _lifecycle_payload(record: Conversation) -> dict[str, Any]:
+    return {
+        "conversation_id": record.conversation_id,
+        "title": record.title,
+        "deleted_at": record.deleted_at,
+        "row_version": record.row_version,
+    }
 
 
 @router.post(

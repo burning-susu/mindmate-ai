@@ -144,11 +144,19 @@ export interface components {
     "source_status": string;
     "message_count": number;
     "created_at": string;
-    "updated_at": string
+    "updated_at": string;
+    "row_version": number;
+    "locations"?: Array<components["HistoryLocation"]>
   };
   "ConversationHistoryListResponse": {
     "items": Array<components["ConversationHistoryItem"]>;
     "next_cursor"?: string | null
+  };
+  "ConversationLifecycleResponse": {
+    "conversation_id": string;
+    "title": string;
+    "deleted_at": string | null;
+    "row_version": number
   };
   "ConversationListResponse": {
     "items": Array<components["ConversationResponse"]>;
@@ -307,6 +315,21 @@ export interface components {
   };
   "HTTPValidationError": {
     "detail"?: Array<components["ValidationError"]>
+  };
+  "HistoryLocation": {
+    "section": string;
+    "snippet": string
+  };
+  "HistoryTrashItem": {
+    "object_type": string;
+    "object_id": string;
+    "title": string;
+    "deleted_at": string;
+    "row_version": number
+  };
+  "HistoryTrashResponse": {
+    "items": Array<components["HistoryTrashItem"]>;
+    "next_cursor"?: string | null
   };
   "HomeCountScopeResponse": {
     "files": string;
@@ -516,11 +539,19 @@ export interface components {
     "answered_count": number;
     "target_question_count": number;
     "created_at": string;
-    "updated_at": string
+    "updated_at": string;
+    "row_version": number;
+    "locations"?: Array<components["HistoryLocation"]>
   };
   "LearningHistoryListResponse": {
     "items": Array<components["LearningHistoryItem"]>;
     "next_cursor"?: string | null
+  };
+  "LearningLifecycleResponse": {
+    "learning_session_id": string;
+    "topic": string;
+    "deleted_at": string | null;
+    "row_version": number
   };
   "LearningOptionResponse": {
     "option_id": string;
@@ -836,6 +867,12 @@ export interface operations {
   "GET /api/v1/conversations/{conversation_id}": {
     operationId: "get_conversation_api_v1_conversations__conversation_id__get"
   };
+  "DELETE /api/v1/conversations/{conversation_id}": {
+    operationId: "delete_conversation_api_v1_conversations__conversation_id__delete"
+  };
+  "POST /api/v1/conversations/{conversation_id}/restore": {
+    operationId: "restore_deleted_conversation_api_v1_conversations__conversation_id__restore_post"
+  };
   "POST /api/v1/conversations/{conversation_id}/messages": {
     operationId: "create_message_api_v1_conversations__conversation_id__messages_post"
   };
@@ -863,6 +900,9 @@ export interface operations {
   "GET /api/v1/history/learning-sessions": {
     operationId: "list_history_learning_sessions_api_v1_history_learning_sessions_get"
   };
+  "GET /api/v1/history/trash": {
+    operationId: "list_history_trash_api_v1_history_trash_get"
+  };
   "GET /api/v1/home/overview": {
     operationId: "get_home_overview_api_v1_home_overview_get"
   };
@@ -871,6 +911,12 @@ export interface operations {
   };
   "GET /api/v1/learning-sessions/{learning_session_id}": {
     operationId: "read_session_api_v1_learning_sessions__learning_session_id__get"
+  };
+  "DELETE /api/v1/learning-sessions/{learning_session_id}": {
+    operationId: "delete_learning_session_api_v1_learning_sessions__learning_session_id__delete"
+  };
+  "POST /api/v1/learning-sessions/{learning_session_id}/restore": {
+    operationId: "restore_deleted_learning_session_api_v1_learning_sessions__learning_session_id__restore_post"
   };
   "GET /api/v1/learning-sessions/{learning_session_id}/current-question": {
     operationId: "read_current_question_api_v1_learning_sessions__learning_session_id__current_question_get"

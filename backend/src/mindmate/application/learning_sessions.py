@@ -6,7 +6,7 @@ import hashlib
 import json
 import unicodedata
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import select, update
@@ -890,3 +890,90 @@ def _source_hash(
 
 def _collapse(value: str) -> str:
     return " ".join(unicodedata.normalize("NFKC", value).split())
+
+
+TRASH_RETENTION_DAYS = 30
+
+
+def trash_learning_session(
+    session: Session, learning_session_id: str, *, expected_version: int
+) -> LearningSession:
+    """Soft-delete the session row only. Questions, attempts and sources stay."""
+    record = session.get(LearningSession, learning_session_id)
+    if record is None:
+        raise LearningCommandError("LEARNING_SESSION_NOT_FOUND", "学习会话不存在。", 404)
+    if record.deleted_at is not None:
+        return record
+    now = utc_now()
+    result = session.execute(
+        update(LearningSession)
+        .where(
+            LearningSession.learning_session_id == learning_session_id,
+            LearningSession.row_version == expected_version,
+            LearningSession.deleted_at.is_(None),
+        )
+        .values(
+            deleted_at=now,
+            purge_after=now + timedelta(days=TRASH_RETENTION_DAYS),
+            row_version=expected_version + 1,
+            updated_at=now,
+        )
+    )
+    if int(getattr(result, "rowcount", 0) or 0) != 1:
+        session.rollback()
+        session.expire(record)
+        session.refresh(record)
+        if record.deleted_at is not None:
+            return record
+        raise LearningCommandError(
+            "LEARNING_SESSION_VERSION_CONFLICT",
+            "学习会话已被其他操作更新，请重新加载后再移入回收站。",
+            412,
+            current_row_version=record.row_version,
+        )
+    session.commit()
+    session.expire(record)
+    session.refresh(record)
+    return record
+
+
+def restore_learning_session(
+    session: Session, learning_session_id: str, *, expected_version: int
+) -> LearningSession:
+    """Restore the same session id. Does not create questions or answers."""
+    record = session.get(LearningSession, learning_session_id)
+    if record is None:
+        raise LearningCommandError("LEARNING_SESSION_NOT_FOUND", "学习会话不存在。", 404)
+    if record.deleted_at is None:
+        return record
+    now = utc_now()
+    result = session.execute(
+        update(LearningSession)
+        .where(
+            LearningSession.learning_session_id == learning_session_id,
+            LearningSession.row_version == expected_version,
+            LearningSession.deleted_at.is_not(None),
+        )
+        .values(
+            deleted_at=None,
+            purge_after=None,
+            row_version=expected_version + 1,
+            updated_at=now,
+        )
+    )
+    if int(getattr(result, "rowcount", 0) or 0) != 1:
+        session.rollback()
+        session.expire(record)
+        session.refresh(record)
+        if record.deleted_at is None:
+            return record
+        raise LearningCommandError(
+            "LEARNING_SESSION_VERSION_CONFLICT",
+            "学习会话已被其他操作更新，请重新加载后再恢复。",
+            412,
+            current_row_version=record.row_version,
+        )
+    session.commit()
+    session.expire(record)
+    session.refresh(record)
+    return record

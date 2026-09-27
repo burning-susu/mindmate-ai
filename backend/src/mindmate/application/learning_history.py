@@ -24,6 +24,8 @@ from mindmate.infrastructure.models import (
 )
 
 _AVAILABLE = "AVAILABLE"
+QUERY_LIMIT = 80
+SCAN_BATCH = 50
 
 
 def list_learning_history(
@@ -31,15 +33,80 @@ def list_learning_history(
     *,
     limit: int,
     cursor: str | None,
+    q: str | None = None,
+    goal_type: str | None = None,
+    status: str | None = None,
+    source_status: str | None = None,
+    active_from: datetime | None = None,
+    active_before: datetime | None = None,
 ) -> dict[str, object]:
+    """Active sessions only. Keyword matches topic and goal text, not questions.
+
+    Question prompts, unsubmitted answer keys and feedback stay out of this list.
+    """
+    keyword = _keyword(q)
     stamp, learning_session_id = _decode_cursor(cursor)
-    statement = select(LearningSession).where(LearningSession.deleted_at.is_(None))
+    collected: list[dict[str, object]] = []
+    seek_stamp = stamp
+    seek_id = learning_session_id
+    while len(collected) <= limit:
+        statement = _active_statement(
+            keyword=keyword,
+            goal_type=goal_type,
+            active_from=active_from,
+            active_before=active_before,
+            seek_stamp=seek_stamp,
+            seek_id=seek_id,
+        )
+        rows = list(
+            session.scalars(
+                statement.order_by(
+                    LearningSession.updated_at.desc(),
+                    LearningSession.learning_session_id.desc(),
+                ).limit(SCAN_BATCH)
+            )
+        )
+        if not rows:
+            break
+        filled = False
+        for row in rows:
+            seek_stamp = row.updated_at
+            seek_id = row.learning_session_id
+            item = _item(session, row)
+            if status is not None and item["status"] != status:
+                continue
+            if source_status is not None and item["source_status"] != source_status:
+                continue
+            item["locations"] = _locations(keyword, str(item["topic"]), row.goal_text)
+            collected.append(item)
+            if len(collected) > limit:
+                filled = True
+                break
+        if filled or len(rows) < SCAN_BATCH:
+            break
+    page = collected[:limit]
+    next_cursor = None
+    if len(collected) > limit and page:
+        updated = page[-1]["updated_at"]
+        if isinstance(updated, datetime):
+            next_cursor = _encode_cursor(updated, str(page[-1]["learning_session_id"]))
+    return {"items": page, "next_cursor": next_cursor}
+
+
+def list_trashed_learning_sessions(
+    session: Session,
+    *,
+    limit: int,
+    cursor: str | None,
+) -> dict[str, object]:
+    stamp, learning_session_id = _decode_trash_cursor(cursor)
+    statement = select(LearningSession).where(LearningSession.deleted_at.is_not(None))
     if stamp is not None and learning_session_id is not None:
         statement = statement.where(
             or_(
-                LearningSession.updated_at < stamp,
+                LearningSession.deleted_at < stamp,
                 and_(
-                    LearningSession.updated_at == stamp,
+                    LearningSession.deleted_at == stamp,
                     LearningSession.learning_session_id < learning_session_id,
                 ),
             )
@@ -47,19 +114,64 @@ def list_learning_history(
     rows = list(
         session.scalars(
             statement.order_by(
-                LearningSession.updated_at.desc(),
+                LearningSession.deleted_at.desc(),
                 LearningSession.learning_session_id.desc(),
             ).limit(limit + 1)
         )
     )
     has_more = len(rows) > limit
     page = rows[:limit]
-    items = [_item(session, row) for row in page]
+    items = [
+        {
+            "object_type": "learning_session",
+            "object_id": row.learning_session_id,
+            "title": row.topic,
+            "deleted_at": row.deleted_at,
+            "row_version": row.row_version,
+        }
+        for row in page
+    ]
     next_cursor = None
-    if has_more and page:
-        last = page[-1]
-        next_cursor = _encode_cursor(last.updated_at, last.learning_session_id)
+    if has_more and page and page[-1].deleted_at is not None:
+        next_cursor = _encode_trash_cursor(page[-1].deleted_at, page[-1].learning_session_id)
     return {"items": items, "next_cursor": next_cursor}
+
+
+def _active_statement(
+    *,
+    keyword: str | None,
+    goal_type: str | None,
+    active_from: datetime | None,
+    active_before: datetime | None,
+    seek_stamp: datetime | None,
+    seek_id: str | None,
+):
+    statement = select(LearningSession).where(LearningSession.deleted_at.is_(None))
+    if goal_type is not None:
+        statement = statement.where(LearningSession.goal_type == goal_type)
+    if active_from is not None:
+        statement = statement.where(LearningSession.updated_at >= active_from)
+    if active_before is not None:
+        statement = statement.where(LearningSession.updated_at < active_before)
+    if keyword is not None:
+        pattern = _like_pattern(keyword)
+        statement = statement.where(
+            or_(
+                LearningSession.topic.like(pattern, escape="\\"),
+                LearningSession.goal_text.like(pattern, escape="\\"),
+            )
+        )
+    if seek_stamp is not None and seek_id is not None:
+        statement = statement.where(
+            or_(
+                LearningSession.updated_at < seek_stamp,
+                and_(
+                    LearningSession.updated_at == seek_stamp,
+                    LearningSession.learning_session_id < seek_id,
+                ),
+            )
+        )
+    return statement
 
 
 def _item(session: Session, record: LearningSession) -> dict[str, object]:
@@ -94,6 +206,8 @@ def _item(session: Session, record: LearningSession) -> dict[str, object]:
         "target_question_count": record.target_question_count,
         "created_at": record.created_at,
         "updated_at": record.updated_at,
+        "row_version": record.row_version,
+        "locations": [],
     }
 
 
@@ -169,6 +283,47 @@ def _file_status(
     return _AVAILABLE
 
 
+def _keyword(value: str | None) -> str | None:
+    if value is None:
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    if len(text) > QUERY_LIMIT or any(ord(char) < 32 for char in text):
+        raise HistoryQueryError("HISTORY_QUERY_INVALID", "搜索词不能超过 80 个字符，且不能包含控制字符。")
+    return text
+
+
+def _like_pattern(value: str) -> str:
+    escaped = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+
+def _locations(keyword: str | None, topic: str, goal_text: str) -> list[dict[str, str]]:
+    if keyword is None:
+        return []
+    found: list[dict[str, str]] = []
+    topic_snippet = _window(topic, keyword)
+    if topic_snippet is not None:
+        found.append({"section": "topic", "snippet": topic_snippet})
+    goal_snippet = _window(goal_text, keyword)
+    if goal_snippet is not None:
+        found.append({"section": "goal", "snippet": goal_snippet})
+    return found[:2]
+
+
+def _window(text: str, keyword: str) -> str | None:
+    index = text.casefold().find(keyword.casefold())
+    if index < 0:
+        return None
+    start = max(0, index - 16)
+    end = min(len(text), index + len(keyword) + 16)
+    snippet = text[start:end]
+    if len(snippet) > QUERY_LIMIT:
+        snippet = snippet[:QUERY_LIMIT]
+    return snippet
+
+
 def _encode_cursor(stamp: datetime, learning_session_id: str) -> str:
     raw = f"1|{_as_utc(stamp).isoformat()}|{learning_session_id}".encode()
     return base64.urlsafe_b64encode(raw).decode().rstrip("=")
@@ -182,6 +337,26 @@ def _decode_cursor(cursor: str | None) -> tuple[datetime | None, str | None]:
         raw = base64.urlsafe_b64decode(padded.encode()).decode()
         version, stamp, learning_session_id = raw.split("|", 2)
         if version != "1" or not learning_session_id:
+            raise ValueError
+        parsed = datetime.fromisoformat(stamp)
+    except (ValueError, UnicodeError):
+        raise HistoryQueryError("HISTORY_CURSOR_INVALID", "历史游标无效。") from None
+    return _as_utc(parsed), learning_session_id
+
+
+def _encode_trash_cursor(stamp: datetime, learning_session_id: str) -> str:
+    raw = f"2|{_as_utc(stamp).isoformat()}|{learning_session_id}".encode()
+    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+
+def _decode_trash_cursor(cursor: str | None) -> tuple[datetime | None, str | None]:
+    if cursor is None or cursor == "":
+        return None, None
+    try:
+        padded = cursor + ("=" * (-len(cursor) % 4))
+        raw = base64.urlsafe_b64decode(padded.encode()).decode()
+        version, stamp, learning_session_id = raw.split("|", 2)
+        if version != "2" or not learning_session_id:
             raise ValueError
         parsed = datetime.fromisoformat(stamp)
     except (ValueError, UnicodeError):

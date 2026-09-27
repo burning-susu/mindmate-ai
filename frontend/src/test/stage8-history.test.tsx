@@ -190,6 +190,40 @@ describe('conversation history', () => {
     expect(screen.getByRole('button', { name: '重新加载' })).toBeInTheDocument()
     await waitFor(() => expect(screen.queryByText('还没有可阅读的对话。发送过的对话会保留在这里。')).not.toBeInTheDocument())
   })
+
+  it('filters on the server and confirms before moving a conversation to the trash', async () => {
+    window.history.pushState({}, '', '/history')
+    const calls: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      calls.push(`${init?.method ?? 'GET'} ${url}`)
+      if (url.includes('/system/session')) return response({ status: 'ready' })
+      if (url.includes('/history/conversations')) {
+        return response({
+          items: [{ ...historyItem, row_version: 4, locations: [] }],
+          next_cursor: null,
+        })
+      }
+      if (init?.method === 'DELETE' && url.includes('/conversations/conversation-1')) {
+        return response({
+          conversation_id: 'conversation-1',
+          title: historyItem.title,
+          deleted_at: '2026-09-27T00:00:00Z',
+          row_version: 5,
+        })
+      }
+      return response({ status: 'ok', version: '0.1.0' })
+    }))
+    render(<BrowserRouter><App /></BrowserRouter>)
+    expect(await screen.findByRole('button', { name: /超时时间/ })).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('模式'), { target: { value: 'KNOWLEDGE_CHAT' } })
+    await waitFor(() => expect(calls.some((call) => call.includes('mode=KNOWLEDGE_CHAT'))).toBe(true))
+    fireEvent.click(screen.getByRole('button', { name: '移入回收站' }))
+    expect(screen.getByRole('dialog')).toHaveTextContent('文件和知识库不会被删除')
+    expect(calls.some((call) => call.startsWith('DELETE'))).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: '确认移入回收站' }))
+    await waitFor(() => expect(calls.some((call) => call.startsWith('DELETE') && call.includes('expected_version=4'))).toBe(true))
+  })
 })
 
 const learningHistoryItem = {
