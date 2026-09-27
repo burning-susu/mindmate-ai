@@ -22,6 +22,8 @@ from mindmate.ai.providers.deepseek import DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, De
 from mindmate.ai.providers.mock import MockChatProvider
 from mindmate.api.ai_providers import AiProviderApiError
 from mindmate.api.ai_providers import router as ai_provider_router
+from mindmate.api.backups import BackupApiError
+from mindmate.api.backups import router as backups_router
 from mindmate.api.chat import ChatApiError
 from mindmate.api.chat import router as chat_router
 from mindmate.api.embedding_models import router as embedding_models_router
@@ -35,6 +37,8 @@ from mindmate.api.knowledge_bases import router as knowledge_bases_router
 from mindmate.api.learning import LearningApiError
 from mindmate.api.learning import router as learning_router
 from mindmate.api.problem import ProblemDetail
+from mindmate.api.system_settings import SystemSettingsApiError
+from mindmate.api.system_settings import router as system_settings_router
 from mindmate.application.chat_generation import ChatGenerationWorker
 from mindmate.application.embedding_model_install import EmbeddingModelInstallWorker
 from mindmate.application.history_purge_worker import HistoryTrashPurgeWorker
@@ -373,6 +377,30 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             retryable=exc.retryable,
         )
 
+    @app.exception_handler(SystemSettingsApiError)
+    async def system_settings_api_error(
+        request: Request, exc: SystemSettingsApiError
+    ) -> JSONResponse:
+        return problem(
+            request,
+            exc.status,
+            exc.code,
+            "系统设置失败",
+            exc.detail,
+            retryable=exc.retryable,
+        )
+
+    @app.exception_handler(BackupApiError)
+    async def backup_api_error(request: Request, exc: BackupApiError) -> JSONResponse:
+        return problem(
+            request,
+            exc.status,
+            exc.code,
+            "备份操作失败",
+            exc.detail,
+            retryable=exc.retryable,
+        )
+
     @app.exception_handler(LearningApiError)
     async def learning_api_error(request: Request, exc: LearningApiError) -> JSONResponse:
         return problem(
@@ -485,19 +513,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "vector_store": "sqlite-vec-stage-1-validated",
         }
 
-    @app.get("/api/v1/system/storage", tags=["system"])
-    async def storage() -> dict[str, Any]:
-        settings: Settings = app.state.settings
-        return {
-            "data_dir_configured": bool(settings.data_dir),
-            "database": "sqlite",
-            "writable": True,
-        }
-
     @app.get("/api/v1/system/openapi.json", include_in_schema=False)
     async def openapi_json() -> dict[str, Any]:
         return app.openapi()
 
+    app.include_router(system_settings_router)
+    app.include_router(backups_router)
     app.include_router(knowledge_bases_router)
     app.include_router(embedding_models_router)
     app.include_router(ai_provider_router)

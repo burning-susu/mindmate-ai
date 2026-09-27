@@ -59,6 +59,89 @@ const initialStatus: FixtureStatus = {
   pricing_url: 'https://api-docs.deepseek.com/quick_start/pricing',
 }
 
+function settingsAuxiliaryResponse(url: string) {
+  if (url.endsWith('/api/v1/system/storage')) {
+    return response({
+      data_dir_configured: true,
+      data_dir_display: '%LOCALAPPDATA%\\MindMateAI',
+      database: 'sqlite',
+      writable: true,
+      categories: [],
+      total_byte_size: 0,
+      readable: true,
+      message: null,
+    })
+  }
+  if (url.endsWith('/api/v1/system/ai-usage')) {
+    return response({
+      period_days: 30,
+      since: '2026-08-28T00:00:00Z',
+      until: '2026-09-27T00:00:00Z',
+      currency: 'USD',
+      totals: {
+        mock: { operations: 0, input_tokens: 0, output_tokens: 0, total_tokens: 0, unknown_usage_operations: 0, estimated_usd: null, usage_complete: true },
+        online: { operations: 0, input_tokens: 0, output_tokens: 0, total_tokens: 0, unknown_usage_operations: 0, estimated_usd: '0', usage_complete: true },
+      },
+      daily: [],
+      by_model: [],
+      online_actual_usage_available: false,
+      online_actual_usage_message: '在线实际用量暂无记录',
+      unknown_usage_operations: 0,
+      estimated_online_usd: '0',
+      estimate_disclaimer: '估算说明',
+      cost_estimate: { checked_on: '2026-09-26', pricing_url: 'https://example.invalid', rate_assumption: 'fixture', input_usd_per_million_tokens: '0.30', output_usd_per_million_tokens: '1.20', disclaimer: '估算说明' },
+    })
+  }
+  if (url.endsWith('/api/v1/system/ai-budget')) {
+    return response({
+      budget: { enabled: false, currency: 'USD', period: '30d', hard_stop_usd: null, soft_remind_usd: null, unknown_usage_policy: 'deny', updated_at: null },
+      usage_summary: { estimated_online_usd: '0', unknown_usage_operations: 0, online_operations: 0, online_usage_complete: true, online_actual_usage_message: '在线实际用量暂无记录' },
+      spent_estimated_usd: '0',
+      remaining_estimated_usd: null,
+      soft_remind_triggered: false,
+      hard_stop_would_block: false,
+      currency: 'USD',
+      estimate_disclaimer: '估算说明',
+    })
+  }
+  if (url.endsWith('/api/v1/system/privacy')) {
+    return response({
+      log_retention: { available: false, message: '日志清理尚未验收' },
+      diagnostics_export: { available: false, message: '诊断导出尚未提供' },
+      storage_migration: { available: false, message: '存储迁移尚未实现' },
+      secrets_policy: { api_key_in_sqlite: false, api_key_in_backup: false, message: 'Key 仅存系统凭据' },
+    })
+  }
+  if (url.endsWith('/api/v1/embedding-model')) {
+    return response({
+      state: 'MISSING',
+      phase: null,
+      base_model_id: 'BAAI/bge-small-zh-v1.5',
+      base_model_url: 'https://example.invalid',
+      artifact_repository_id: 'fixture',
+      artifact_url: 'https://example.invalid',
+      license: 'MIT',
+      base_revision: 'fixture',
+      artifact_revision: 'fixture',
+      artifact_fingerprint: 'fixture',
+      total_size_bytes: 0,
+      downloaded_bytes: 0,
+      current_file: null,
+      file_downloaded_bytes: null,
+      file_size_bytes: null,
+      task_id: null,
+      diagnostic_id: null,
+      error_code: null,
+      can_install: true,
+      can_cancel: false,
+    })
+  }
+  if (url.endsWith('/api/v1/backups') || url.includes('/api/v1/backups?')) {
+    return response({ items: [], restore_available: false, warning_message: '备份未加密' })
+  }
+  return null
+}
+
 describe('stage 6 AI provider configuration', () => {
   afterEach(() => vi.unstubAllGlobals())
 
@@ -69,6 +152,8 @@ describe('stage 6 AI provider configuration', () => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
       if (url.includes('/system/session')) return response({ status: 'ready' })
+      const auxiliary = settingsAuxiliaryResponse(url)
+      if (auxiliary) return auxiliary
       if (url.endsWith('/api/v1/ai/provider/key') && init?.method === 'POST') {
         calls.push({ url, method: init.method, body: JSON.parse(String(init.body)) })
         currentStatus = { ...currentStatus, configured: true }
@@ -117,6 +202,8 @@ describe('stage 6 AI provider configuration', () => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
       if (url.includes('/system/session')) return response({ status: 'ready' })
+      const auxiliary = settingsAuxiliaryResponse(url)
+      if (auxiliary) return auxiliary
       if (url.endsWith('/api/v1/ai/consent') && init?.method === 'POST') {
         consentBody = JSON.parse(String(init.body))
         currentStatus = {
@@ -144,6 +231,8 @@ describe('stage 6 AI provider configuration', () => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
       if (url.includes('/system/session')) return response({ status: 'ready' })
+      const auxiliary = settingsAuxiliaryResponse(url)
+      if (auxiliary) return auxiliary
       if (url.endsWith('/api/v1/ai/provider/generation-mode') && init?.method === 'POST') {
         calls.push(String(init.body))
         currentStatus = { ...currentStatus, generation_mode: 'deepseek' }

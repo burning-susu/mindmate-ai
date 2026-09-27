@@ -1,8 +1,32 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, CircleAlert, ExternalLink, Eye, EyeOff, KeyRound, LoaderCircle, ShieldCheck, Trash2, Wifi } from 'lucide-react'
+import {
+  Check,
+  CircleAlert,
+  Database,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  HardDrive,
+  KeyRound,
+  LoaderCircle,
+  ShieldCheck,
+  Trash2,
+  Wallet,
+  Wifi,
+  Cpu,
+} from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { useState } from 'react'
 
 import { ApiError } from '../api/client'
+import {
+  createBackup,
+  downloadBackup,
+  formatBackupSize,
+  isBackupInProgress,
+  listBackups,
+  type BackupRecord,
+} from '../api/backups'
 import {
   acceptExternalAiConsent,
   deleteAiProviderKey,
@@ -12,6 +36,15 @@ import {
   testAiProviderConnection,
   type GenerationMode,
 } from '../api/aiProvider'
+import { getEmbeddingModelStatus } from '../api/knowledgeBases'
+import {
+  formatBytes,
+  getAiBudgetStatus,
+  getAiUsageSummary,
+  getPrivacyStatus,
+  getStorageOverview,
+  updateAiBudget,
+} from '../api/systemSettings'
 
 function formatTime(value: string | null | undefined) {
   if (!value) return '尚未测试'
@@ -28,14 +61,66 @@ function Capability({ value }: { value: 'supported' | 'unsupported' | 'unknown' 
   return <span className={`ai-capability ai-capability--${value}`}>{label}</span>
 }
 
+function LoadingBlock({ label }: { label: string }) {
+  return (
+    <div className="settings-loading">
+      <LoaderCircle className="spin" size={18} aria-hidden="true" />
+      {label}
+    </div>
+  )
+}
+
+function FailBlock({ error, onRetry }: { error: unknown; onRetry: () => void }) {
+  return (
+    <div className="settings-error" role="alert">
+      <CircleAlert size={18} aria-hidden="true" />
+      <span>{errorText(error)}</span>
+      <button className="quiet-button" type="button" onClick={onRetry}>
+        重新读取
+      </button>
+    </div>
+  )
+}
+
 export default function SettingsPage() {
   const queryClient = useQueryClient()
   const [apiKey, setApiKey] = useState('')
   const [showKey, setShowKey] = useState(false)
   const [confirmTransfer, setConfirmTransfer] = useState(false)
   const [consentChecked, setConsentChecked] = useState(false)
+  const [budgetEnabled, setBudgetEnabled] = useState<boolean | null>(null)
+  const [hardStop, setHardStop] = useState<string | null>(null)
+  const [softRemind, setSoftRemind] = useState<string | null>(null)
+
   const query = useQuery({ queryKey: ['ai-provider'], queryFn: ({ signal }) => getAiProviderStatus(signal) })
+  const storageQuery = useQuery({ queryKey: ['system-storage'], queryFn: ({ signal }) => getStorageOverview(signal) })
+  const modelQuery = useQuery({
+    queryKey: ['embedding-model-status'],
+    queryFn: ({ signal }) => getEmbeddingModelStatus(signal),
+  })
+  const usageQuery = useQuery({ queryKey: ['ai-usage'], queryFn: ({ signal }) => getAiUsageSummary(signal) })
+  const budgetQuery = useQuery({
+    queryKey: ['ai-budget'],
+    queryFn: ({ signal }) => getAiBudgetStatus(signal),
+  })
+  const privacyQuery = useQuery({ queryKey: ['system-privacy'], queryFn: ({ signal }) => getPrivacyStatus(signal) })
+  const backupsQuery = useQuery({
+    queryKey: ['system-backups'],
+    queryFn: ({ signal }) => listBackups(signal),
+    refetchInterval: (query) => {
+      const items = query.state.data?.items ?? []
+      return items.some((item) => isBackupInProgress(item.status)) ? 1500 : false
+    },
+  })
+
+  const [backupMessage, setBackupMessage] = useState<string | null>(null)
+  const [backupError, setBackupError] = useState<string | null>(null)
+  const [downloadingId, setDownloadingId] = useState<string | null>(null)
+
   const status = query.data
+  const budgetEnabledValue = budgetEnabled ?? budgetQuery.data?.budget.enabled ?? false
+  const hardStopValue = hardStop ?? budgetQuery.data?.budget.hard_stop_usd ?? ''
+  const softRemindValue = softRemind ?? budgetQuery.data?.budget.soft_remind_usd ?? ''
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['ai-provider'] })
   const saveMutation = useMutation({
@@ -69,18 +154,95 @@ export default function SettingsPage() {
     mutationFn: (mode: GenerationMode) => setAiGenerationMode(mode),
     onSuccess: () => void refresh(),
   })
+  const budgetMutation = useMutation({
+    mutationFn: () =>
+      updateAiBudget({
+        enabled: budgetEnabledValue,
+        hard_stop_usd: hardStopValue.trim() || null,
+        soft_remind_usd: softRemindValue.trim() || null,
+        period: '30d',
+        unknown_usage_policy: 'deny',
+      }),
+    onSuccess: () => {
+      setBudgetEnabled(null)
+      setHardStop(null)
+      setSoftRemind(null)
+      void queryClient.invalidateQueries({ queryKey: ['ai-budget'] })
+      void queryClient.invalidateQueries({ queryKey: ['ai-usage'] })
+    },
+  })
+  const createBackupMutation = useMutation({
+    mutationFn: () => createBackup(),
+    onMutate: () => {
+      setBackupError(null)
+      setBackupMessage(null)
+    },
+    onSuccess: (backup) => {
+      setBackupMessage(
+        backup.status === 'COMPLETED'
+          ? '备份已完成，可下载到本地保存。'
+          : '备份任务已创建，正在写入一致性快照…',
+      )
+      void queryClient.invalidateQueries({ queryKey: ['system-backups'] })
+    },
+    onError: (error) => {
+      setBackupError(errorText(error))
+    },
+  })
 
-  const busy = saveMutation.isPending || deleteMutation.isPending || testMutation.isPending || consentMutation.isPending || modeMutation.isPending
+  async function handleDownloadBackup(backup: BackupRecord) {
+    setBackupError(null)
+    setDownloadingId(backup.backup_id)
+    try {
+      await downloadBackup(backup.backup_id)
+      setBackupMessage('备份包已开始下载。请保存在受保护磁盘，勿上传云端。')
+    } catch (error) {
+      setBackupError(errorText(error))
+    } finally {
+      setDownloadingId(null)
+    }
+  }
+
+  function backupStatusLabel(statusValue: string) {
+    if (statusValue === 'COMPLETED') return '已完成'
+    if (statusValue === 'FAILED') return '失败'
+    if (isBackupInProgress(statusValue)) return '创建中'
+    return statusValue
+  }
+
+  const busy =
+    saveMutation.isPending ||
+    deleteMutation.isPending ||
+    testMutation.isPending ||
+    consentMutation.isPending ||
+    modeMutation.isPending ||
+    budgetMutation.isPending
   const generationMode = status?.generation_mode ?? 'mock'
   const canTest = Boolean(status?.configured && status.credential_store.available && confirmTransfer && !busy)
 
   if (query.isLoading) {
-    return <section className="settings-page"><div className="settings-loading"><LoaderCircle className="spin" size={18} aria-hidden="true" />正在读取 AI 服务状态</div></section>
+    return (
+      <section className="settings-page">
+        <LoadingBlock label="正在读取 AI 服务状态" />
+      </section>
+    )
   }
 
   if (query.isError || !status) {
-    return <section className="settings-page"><div className="settings-error" role="alert"><CircleAlert size={18} aria-hidden="true" /><span>{errorText(query.error)}</span><button className="quiet-button" type="button" onClick={() => void query.refetch()}>重新读取</button></div></section>
+    return (
+      <section className="settings-page">
+        <FailBlock error={query.error} onRetry={() => void query.refetch()} />
+      </section>
+    )
   }
+
+  const modelState = modelQuery.data?.state
+  const modelLabel =
+    modelState === 'READY'
+      ? 'READY'
+      : modelState === 'MISSING_OFFLINE' || modelState === 'MISSING'
+        ? 'MISSING'
+        : modelState ?? (modelQuery.isError ? '暂时无法读取' : '读取中')
 
   return (
     <section className="settings-page">
@@ -88,21 +250,98 @@ export default function SettingsPage() {
         <div>
           <span className="eyebrow">本机运行配置</span>
           <h1>设置</h1>
-          <p>管理 AI 服务凭据和外发说明。Key 只保存在 Windows 凭据管理器中。</p>
+          <p>查看本机存储、模型与用量，并管理 AI 服务凭据。Key 只保存在 Windows 凭据管理器中。</p>
         </div>
       </div>
 
       <div className="settings-grid">
+        <section className="settings-section" aria-labelledby="storage-heading">
+          <div className="settings-section__heading">
+            <div>
+              <span className="settings-icon">
+                <HardDrive size={18} aria-hidden="true" />
+              </span>
+              <h2 id="storage-heading">数据存储与空间</h2>
+              <p>只读展示本机数据目录分类占用，不接受网页传入任意路径。</p>
+            </div>
+          </div>
+          {storageQuery.isLoading ? <LoadingBlock label="正在读取存储信息" /> : null}
+          {storageQuery.isError ? (
+            <FailBlock error={storageQuery.error} onRetry={() => void storageQuery.refetch()} />
+          ) : null}
+          {storageQuery.data ? (
+            <>
+              <div className="settings-provider-meta">
+                <span>数据目录：{storageQuery.data.data_dir_display}</span>
+                <span>数据库：{storageQuery.data.database}</span>
+                <span>可写：{storageQuery.data.writable ? '是' : '否'}</span>
+                <span>
+                  合计：
+                  {storageQuery.data.total_byte_size == null
+                    ? '暂时无法读取'
+                    : formatBytes(storageQuery.data.total_byte_size)}
+                </span>
+              </div>
+              {storageQuery.data.message ? <p className="settings-hint">{storageQuery.data.message}</p> : null}
+              <ul className="settings-stat-list">
+                {storageQuery.data.categories.map((item) => (
+                  <li key={item.key}>
+                    <span>{item.label}</span>
+                    <strong>{item.available ? formatBytes(item.byte_size) : item.message ?? '暂时无法读取'}</strong>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
+        </section>
+
+        <section className="settings-section" aria-labelledby="embedding-heading">
+          <div className="settings-section__heading">
+            <div>
+              <span className="settings-icon">
+                <Cpu size={18} aria-hidden="true" />
+              </span>
+              <h2 id="embedding-heading">本地 Embedding 模型</h2>
+              <p>展示本机固定 ONNX 模型状态；安装与校验继续使用知识库中的模型管理入口。</p>
+            </div>
+            <span className={`settings-state ${modelState === 'READY' ? 'settings-state--ready' : ''}`}>
+              {modelQuery.isLoading ? '读取中' : modelLabel}
+            </span>
+          </div>
+          {modelQuery.isError ? (
+            <FailBlock error={modelQuery.error} onRetry={() => void modelQuery.refetch()} />
+          ) : null}
+          {modelQuery.data ? (
+            <>
+              <div className="settings-provider-meta">
+                <span>基础模型：{modelQuery.data.base_model_id}</span>
+                <span>产物 revision：{modelQuery.data.artifact_revision}</span>
+                <span>大小：{formatBytes(modelQuery.data.total_size_bytes)}</span>
+              </div>
+              <p className="settings-hint">
+                当前状态为真实本机检测结果。如需安装或重试，请前往知识库详情中的模型管理，不在此页重新下载。
+              </p>
+              <Link className="quiet-button" to="/knowledge-bases">
+                打开知识库模型入口
+              </Link>
+            </>
+          ) : null}
+        </section>
+
         <section className="settings-section" aria-labelledby="ai-provider-heading">
           <div className="settings-section__heading">
             <div>
-              <span className="settings-icon"><KeyRound size={18} aria-hidden="true" /></span>
+              <span className="settings-icon">
+                <KeyRound size={18} aria-hidden="true" />
+              </span>
               <h2 id="ai-provider-heading">AI 服务配置</h2>
-              <p>当前固定使用 DeepSeek，模型别名为 <code>{status.requested_model}</code>。</p>
+              <p>
+                当前固定使用 DeepSeek，模型别名为 <code>{status.requested_model}</code>。
+              </p>
             </div>
             <span className={`settings-state ${status.configured ? 'settings-state--ready' : ''}`}>
               {status.configured ? <Check size={14} aria-hidden="true" /> : <CircleAlert size={14} aria-hidden="true" />}
-              {status.configured ? '已配置' : '未配置'}
+              {status.configured ? '已配置' : '未配置 / 需要重新配置'}
             </span>
           </div>
 
@@ -112,18 +351,50 @@ export default function SettingsPage() {
             <span>生成模式：{generationMode === 'deepseek' ? 'DeepSeek 在线' : 'Mock'}</span>
           </div>
           <div className="settings-mode-actions">
-            <button className="quiet-button" type="button" disabled={busy || generationMode === 'mock'} onClick={() => modeMutation.mutate('mock')}>使用 Mock（无费用）</button>
-            <button className="quiet-button" type="button" disabled={busy || generationMode === 'deepseek'} onClick={() => modeMutation.mutate('deepseek')}>使用 DeepSeek 在线生成</button>
+            <button
+              className="quiet-button"
+              type="button"
+              disabled={busy || generationMode === 'mock'}
+              onClick={() => modeMutation.mutate('mock')}
+            >
+              使用 Mock（无费用）
+            </button>
+            <button
+              className="quiet-button"
+              type="button"
+              disabled={busy || generationMode === 'deepseek'}
+              onClick={() => modeMutation.mutate('deepseek')}
+            >
+              使用 DeepSeek 在线生成
+            </button>
           </div>
           {generationMode === 'deepseek' ? (
             <div className="settings-privacy-copy">
               <p>DeepSeek 在线生成、会外发当前问题与必要的少量证据。</p>
-              {status.cost_estimate ? <p>{status.cost_estimate.disclaimer} 知识库问题按本地上限粗估不超过 {status.cost_estimate.knowledge_question_estimated_usd_ceiling} 美元；连接探测粗估不超过 {status.cost_estimate.probe_estimated_usd_ceiling} 美元。假设：{status.cost_estimate.rate_assumption}。</p> : null}
+              {status.cost_estimate ? (
+                <p>
+                  {status.cost_estimate.disclaimer} 知识库问题按本地上限粗估不超过{' '}
+                  {status.cost_estimate.knowledge_question_estimated_usd_ceiling} 美元；连接探测粗估不超过{' '}
+                  {status.cost_estimate.probe_estimated_usd_ceiling} 美元。假设：{status.cost_estimate.rate_assumption}。
+                </p>
+              ) : null}
             </div>
-          ) : <p className="settings-hint">当前是 Mock。启动、刷新和发送都不会调用 DeepSeek，也不会产生费用。</p>}
-          {modeMutation.isError && <p className="settings-error-text" role="alert">{errorText(modeMutation.error)}</p>}
+          ) : (
+            <p className="settings-hint">当前是 Mock。启动、刷新和发送都不会调用 DeepSeek，也不会产生费用。</p>
+          )}
+          {modeMutation.isError && (
+            <p className="settings-error-text" role="alert">
+              {errorText(modeMutation.error)}
+            </p>
+          )}
 
-          <form className="settings-key-form" onSubmit={(event) => { event.preventDefault(); if (apiKey.trim()) saveMutation.mutate(apiKey.trim()) }}>
+          <form
+            className="settings-key-form"
+            onSubmit={(event) => {
+              event.preventDefault()
+              if (apiKey.trim()) saveMutation.mutate(apiKey.trim())
+            }}
+          >
             <label htmlFor="deepseek-api-key">DeepSeek API Key</label>
             <div className="settings-key-input">
               <input
@@ -135,32 +406,175 @@ export default function SettingsPage() {
                 placeholder={status.configured ? '已配置；输入新 Key 可覆盖' : '粘贴 API Key'}
                 spellCheck={false}
               />
-              <button className="icon-button icon-button--small" type="button" onClick={() => setShowKey((value) => !value)} aria-label={showKey ? '隐藏 API Key' : '显示 API Key'} title={showKey ? '隐藏 API Key' : '显示 API Key'}>
+              <button
+                className="icon-button icon-button--small"
+                type="button"
+                onClick={() => setShowKey((value) => !value)}
+                aria-label={showKey ? '隐藏 API Key' : '显示 API Key'}
+                title={showKey ? '隐藏 API Key' : '显示 API Key'}
+              >
                 {showKey ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
               </button>
             </div>
             <p className="settings-hint">保存后输入框会清空，页面不会读取或回显已保存的完整 Key。</p>
-            {saveMutation.isError && <p className="settings-error-text" role="alert">{errorText(saveMutation.error)}</p>}
+            {saveMutation.isError && (
+              <p className="settings-error-text" role="alert">
+                {errorText(saveMutation.error)}
+              </p>
+            )}
             <div className="settings-actions">
-              <button className="primary-button" type="submit" disabled={!apiKey.trim() || busy}><KeyRound size={15} aria-hidden="true" />{saveMutation.isPending ? '正在保存' : '保存 Key'}</button>
-              <button className="danger-button" type="button" disabled={!status.configured || busy} onClick={() => deleteMutation.mutate()}><Trash2 size={15} aria-hidden="true" />{deleteMutation.isPending ? '正在删除' : '删除本地 Key'}</button>
+              <button className="primary-button" type="submit" disabled={!apiKey.trim() || busy}>
+                <KeyRound size={15} aria-hidden="true" />
+                {saveMutation.isPending ? '正在保存' : '保存 Key'}
+              </button>
+              <button
+                className="danger-button"
+                type="button"
+                disabled={!status.configured || busy}
+                onClick={() => deleteMutation.mutate()}
+              >
+                <Trash2 size={15} aria-hidden="true" />
+                {deleteMutation.isPending ? '正在删除' : '删除本地 Key'}
+              </button>
             </div>
           </form>
 
           <div className="settings-links">
-            <a href={status.source_url} target="_blank" rel="noreferrer"><ExternalLink size={14} aria-hidden="true" />获取 API Key</a>
-            <a href={status.pricing_url} target="_blank" rel="noreferrer"><ExternalLink size={14} aria-hidden="true" />查看官方价格</a>
+            <a href={status.source_url} target="_blank" rel="noreferrer">
+              <ExternalLink size={14} aria-hidden="true" />
+              获取 API Key
+            </a>
+            <a href={status.pricing_url} target="_blank" rel="noreferrer">
+              <ExternalLink size={14} aria-hidden="true" />
+              查看官方价格
+            </a>
           </div>
+        </section>
+
+        <section className="settings-section" aria-labelledby="usage-heading">
+          <div className="settings-section__heading">
+            <div>
+              <span className="settings-icon">
+                <Wallet size={18} aria-hidden="true" />
+              </span>
+              <h2 id="usage-heading">本地用量与预算</h2>
+              <p>近 30 天用量来自持久 AiOperation；Mock 与在线分开统计，未知 usage 不会记成 0。</p>
+            </div>
+          </div>
+          {usageQuery.isLoading || budgetQuery.isLoading ? <LoadingBlock label="正在读取用量与预算" /> : null}
+          {usageQuery.isError ? (
+            <FailBlock error={usageQuery.error} onRetry={() => void usageQuery.refetch()} />
+          ) : null}
+          {budgetQuery.isError ? (
+            <FailBlock error={budgetQuery.error} onRetry={() => void budgetQuery.refetch()} />
+          ) : null}
+          {usageQuery.data ? (
+            <>
+              <div className="settings-provider-meta">
+                <span>Mock 操作：{usageQuery.data.totals.mock.operations}</span>
+                <span>
+                  Mock Token：输入 {usageQuery.data.totals.mock.input_tokens} / 输出{' '}
+                  {usageQuery.data.totals.mock.output_tokens}
+                </span>
+                <span>在线操作：{usageQuery.data.totals.online.operations}</span>
+                <span>
+                  在线估算：
+                  {usageQuery.data.estimated_online_usd == null
+                    ? '尚无统计'
+                    : `${usageQuery.data.estimated_online_usd} ${usageQuery.data.currency}`}
+                </span>
+              </div>
+              {usageQuery.data.online_actual_usage_message ? (
+                <p className="settings-hint">{usageQuery.data.online_actual_usage_message}</p>
+              ) : null}
+              {usageQuery.data.unknown_usage_operations > 0 ? (
+                <p className="settings-hint">
+                  有 {usageQuery.data.unknown_usage_operations} 次操作缺少 usage，未计入已计量 Token。
+                </p>
+              ) : null}
+              <p className="settings-hint">
+                {usageQuery.data.estimate_disclaimer} 价格来源日期{' '}
+                {usageQuery.data.cost_estimate.checked_on}；不能断言官方实时余额。
+              </p>
+            </>
+          ) : null}
+          {budgetQuery.data ? (
+            <form
+              className="settings-key-form"
+              onSubmit={(event) => {
+                event.preventDefault()
+                budgetMutation.mutate()
+              }}
+            >
+              <label className="settings-checkline">
+                <input
+                  type="checkbox"
+                  checked={budgetEnabledValue}
+                  onChange={(event) => setBudgetEnabled(event.target.checked)}
+                />
+                <span>启用近 30 天硬停止阈值（默认关闭；在后端外发前判断）</span>
+              </label>
+              <label htmlFor="budget-hard-stop">硬停止阈值（USD）</label>
+              <input
+                id="budget-hard-stop"
+                value={hardStopValue}
+                onChange={(event) => setHardStop(event.target.value)}
+                placeholder="例如 1.00"
+                disabled={!budgetEnabledValue}
+              />
+              <label htmlFor="budget-soft-remind">软提醒阈值（USD，可选）</label>
+              <input
+                id="budget-soft-remind"
+                value={softRemindValue}
+                onChange={(event) => setSoftRemind(event.target.value)}
+                placeholder="例如 0.50"
+                disabled={!budgetEnabledValue}
+              />
+              <div className="settings-provider-meta">
+                <span>币种：{budgetQuery.data.currency}</span>
+                <span>已用估算：{budgetQuery.data.spent_estimated_usd}</span>
+                <span>
+                  余量：
+                  {budgetQuery.data.remaining_estimated_usd == null
+                    ? '未启用或尚无阈值'
+                    : budgetQuery.data.remaining_estimated_usd}
+                </span>
+                <span>
+                  未知用量策略：{budgetQuery.data.budget.unknown_usage_policy === 'deny' ? '保守拒绝' : '需确认'}
+                </span>
+              </div>
+              {budgetQuery.data.soft_remind_triggered ? (
+                <p className="settings-hint">已触及软提醒阈值。</p>
+              ) : null}
+              {budgetQuery.data.hard_stop_would_block ? (
+                <p className="settings-error-text" role="status">
+                  当前硬停止将阻止新的外部 Provider 调用。
+                </p>
+              ) : null}
+              {budgetMutation.isError ? (
+                <p className="settings-error-text" role="alert">
+                  {errorText(budgetMutation.error)}
+                </p>
+              ) : null}
+              <button className="quiet-button" type="submit" disabled={busy}>
+                {budgetMutation.isPending ? '正在保存预算' : '保存预算设置'}
+              </button>
+            </form>
+          ) : null}
         </section>
 
         <section className="settings-section" aria-labelledby="external-ai-heading">
           <div className="settings-section__heading">
             <div>
-              <span className="settings-icon settings-icon--safe"><ShieldCheck size={18} aria-hidden="true" /></span>
+              <span className="settings-icon settings-icon--safe">
+                <ShieldCheck size={18} aria-hidden="true" />
+              </span>
               <h2 id="external-ai-heading">数据外发说明</h2>
               <p>连接测试和未来 AI 生成都需要明确确认外部 Provider 边界。</p>
             </div>
-            <span className={`settings-state ${status.consent.accepted ? 'settings-state--ready' : ''}`}>{status.consent.accepted ? '已记录' : '待确认'}</span>
+            <span className={`settings-state ${status.consent.accepted ? 'settings-state--ready' : ''}`}>
+              {status.consent.accepted ? '已记录' : '待确认'}
+            </span>
           </div>
           <div className="settings-privacy-copy">
             <p>未来启用 AI 生成时，只会发送当前问题、必要上下文和选中的少量证据。</p>
@@ -169,40 +583,251 @@ export default function SettingsPage() {
           </div>
           {!status.consent.accepted && (
             <label className="settings-checkline">
-              <input type="checkbox" checked={consentChecked} onChange={(event) => setConsentChecked(event.target.checked)} />
+              <input
+                type="checkbox"
+                checked={consentChecked}
+                onChange={(event) => setConsentChecked(event.target.checked)}
+              />
               <span>我已阅读本版本外发说明，并同意未来 AI 功能按上述范围发送必要文本。</span>
             </label>
           )}
-          {!status.consent.accepted && <button className="quiet-button" type="button" disabled={!consentChecked || busy} onClick={() => consentMutation.mutate(status.consent.current_version)}>{consentMutation.isPending ? '正在记录' : '确认并记录说明版本'}</button>}
-          {consentMutation.isError && <p className="settings-error-text" role="alert">{errorText(consentMutation.error)}</p>}
-          {status.consent.accepted && <p className="settings-success-text"><Check size={14} aria-hidden="true" />已记录版本 {status.consent.version}，时间 {formatTime(status.consent.accepted_at)}</p>}
+          {!status.consent.accepted && (
+            <button
+              className="quiet-button"
+              type="button"
+              disabled={!consentChecked || busy}
+              onClick={() => consentMutation.mutate(status.consent.current_version)}
+            >
+              {consentMutation.isPending ? '正在记录' : '确认并记录说明版本'}
+            </button>
+          )}
+          {consentMutation.isError && (
+            <p className="settings-error-text" role="alert">
+              {errorText(consentMutation.error)}
+            </p>
+          )}
+          {status.consent.accepted && (
+            <p className="settings-success-text">
+              <Check size={14} aria-hidden="true" />
+              已记录版本 {status.consent.version}，时间 {formatTime(status.consent.accepted_at)}
+            </p>
+          )}
+        </section>
+
+        <section className="settings-section" aria-labelledby="privacy-heading">
+          <div className="settings-section__heading">
+            <div>
+              <span className="settings-icon">
+                <Database size={18} aria-hidden="true" />
+              </span>
+              <h2 id="privacy-heading">日志与隐私</h2>
+              <p>只展示已实现且可核对的隐私边界；未验收能力不会提供假按钮。</p>
+            </div>
+          </div>
+          {privacyQuery.isLoading ? <LoadingBlock label="正在读取隐私说明" /> : null}
+          {privacyQuery.isError ? (
+            <FailBlock error={privacyQuery.error} onRetry={() => void privacyQuery.refetch()} />
+          ) : null}
+          {privacyQuery.data ? (
+            <ul className="settings-stat-list">
+              <li>
+                <span>日志清理</span>
+                <strong>{privacyQuery.data.log_retention.message}</strong>
+              </li>
+              <li>
+                <span>诊断导出</span>
+                <strong>{privacyQuery.data.diagnostics_export.message}</strong>
+              </li>
+              <li>
+                <span>存储迁移</span>
+                <strong>{privacyQuery.data.storage_migration.message}</strong>
+              </li>
+              <li>
+                <span>密钥策略</span>
+                <strong>{privacyQuery.data.secrets_policy.message}</strong>
+              </li>
+            </ul>
+          ) : null}
         </section>
 
         <section className="settings-section settings-section--probe" aria-labelledby="probe-heading">
           <div className="settings-section__heading">
             <div>
-              <span className="settings-icon"><Wifi size={18} aria-hidden="true" /></span>
+              <span className="settings-icon">
+                <Wifi size={18} aria-hidden="true" />
+              </span>
               <h2 id="probe-heading">连接探测</h2>
               <p>只在你主动点击并确认外发后发送固定短文本，不会带入文件或会话内容。</p>
             </div>
-            {status.probe && <span className={`settings-state ${status.probe.status === 'success' ? 'settings-state--ready' : 'settings-state--error'}`}>{status.probe.status === 'success' ? '成功' : '失败'}</span>}
+            {status.probe && (
+              <span
+                className={`settings-state ${status.probe.status === 'success' ? 'settings-state--ready' : 'settings-state--error'}`}
+              >
+                {status.probe.status === 'success' ? '成功' : '失败'}
+              </span>
+            )}
           </div>
           <label className="settings-checkline settings-checkline--probe">
-            <input type="checkbox" checked={confirmTransfer} onChange={(event) => setConfirmTransfer(event.target.checked)} />
+            <input
+              type="checkbox"
+              checked={confirmTransfer}
+              onChange={(event) => setConfirmTransfer(event.target.checked)}
+            />
             <span>我确认本次会向 DeepSeek 发送固定测试文本，并接受极小 API 用量。</span>
           </label>
-          <button className="primary-button" type="button" disabled={!canTest} onClick={() => testMutation.mutate()}><Wifi size={15} aria-hidden="true" />{testMutation.isPending ? '正在测试连接' : '测试连接'}</button>
-          {testMutation.isError && <p className="settings-error-text" role="alert">{errorText(testMutation.error)}</p>}
-          {status.probe && <div className={`settings-probe-result ${status.probe.status === 'success' ? 'settings-probe-result--success' : 'settings-probe-result--failure'}`}>
-            <div><span>最近检查</span><strong>{formatTime(status.probe.checked_at)}</strong></div>
-            <div><span>请求别名</span><strong>{status.probe.requested_model}</strong></div>
-            <div><span>实际模型</span><strong>{status.probe.resolved_model ?? '未返回'}</strong></div>
-            <div><span>流式能力</span><Capability value={status.probe.stream_supported} /></div>
-            <div><span>Usage 字段</span><Capability value={status.probe.usage_supported} /></div>
-            <div><span>本次 Token</span><strong>{status.probe.usage ? `输入 ${status.probe.usage.prompt_tokens ?? 0} · 输出 ${status.probe.usage.completion_tokens ?? 0}` : '未返回'}</strong></div>
-            {status.probe.error_detail && <p>{status.probe.error_detail}</p>}
-          </div>}
-          {status.probe?.status === 'success' && <p className="settings-hint">探测成功只说明这次请求可用，不代表账户余额充足，也不代表正式聊天已经开启。</p>}
+          <button className="primary-button" type="button" disabled={!canTest} onClick={() => testMutation.mutate()}>
+            <Wifi size={15} aria-hidden="true" />
+            {testMutation.isPending ? '正在测试连接' : '测试连接'}
+          </button>
+          {testMutation.isError && (
+            <p className="settings-error-text" role="alert">
+              {errorText(testMutation.error)}
+            </p>
+          )}
+          {status.probe && (
+            <div
+              className={`settings-probe-result ${status.probe.status === 'success' ? 'settings-probe-result--success' : 'settings-probe-result--failure'}`}
+            >
+              <div>
+                <span>最近检查</span>
+                <strong>{formatTime(status.probe.checked_at)}</strong>
+              </div>
+              <div>
+                <span>请求别名</span>
+                <strong>{status.probe.requested_model}</strong>
+              </div>
+              <div>
+                <span>实际模型</span>
+                <strong>{status.probe.resolved_model ?? '未返回'}</strong>
+              </div>
+              <div>
+                <span>流式能力</span>
+                <Capability value={status.probe.stream_supported} />
+              </div>
+              <div>
+                <span>Usage 字段</span>
+                <Capability value={status.probe.usage_supported} />
+              </div>
+              <div>
+                <span>本次 Token</span>
+                <strong>
+                  {status.probe.usage
+                    ? `输入 ${status.probe.usage.prompt_tokens ?? 0} · 输出 ${status.probe.usage.completion_tokens ?? 0}`
+                    : '未返回'}
+                </strong>
+              </div>
+              {status.probe.error_detail && <p>{status.probe.error_detail}</p>}
+            </div>
+          )}
+          {status.probe?.status === 'success' && (
+            <p className="settings-hint">
+              探测成功只说明这次请求可用，不代表账户余额充足，也不代表正式聊天已经开启。
+            </p>
+          )}
+        </section>
+
+        <section className="settings-section settings-section--probe" aria-labelledby="backup-heading">
+          <div className="settings-section__heading">
+            <div>
+              <span className="settings-icon">
+                <HardDrive size={18} aria-hidden="true" />
+              </span>
+              <h2 id="backup-heading">备份</h2>
+              <p>一致性本地备份：数据库快照、托管文件与必要解析产物；不含密钥、模型缓存与日志。</p>
+            </div>
+            <span
+              className={`settings-state${
+                backupsQuery.data?.items.some((item) => item.status === 'COMPLETED')
+                  ? ' settings-state--ready'
+                  : backupsQuery.data?.items.some((item) => item.status === 'FAILED')
+                    ? ' settings-state--error'
+                    : ''
+              }`}
+            >
+              {backupsQuery.isLoading
+                ? '读取中'
+                : backupsQuery.data?.items.some((item) => isBackupInProgress(item.status))
+                  ? '创建中'
+                  : backupsQuery.data?.items[0]
+                    ? backupStatusLabel(backupsQuery.data.items[0].status)
+                    : '尚未备份'}
+            </span>
+          </div>
+
+          <div className="settings-privacy-copy settings-backup-warning" role="note">
+            <p>
+              <strong>未加密警告：</strong>
+              {backupsQuery.data?.warning_message ||
+                '此备份包未加密，并包含用户文件与学习历史。请保存在受保护磁盘上，不要上传到云端或共享给他人。'}
+            </p>
+            <p>范围：SQLite 一致性快照、数据库引用的托管文件、必要解析产物、非秘密配置。向量/FTS/模型/日志/密钥默认排除，恢复后需重建索引。</p>
+          </div>
+
+          {backupsQuery.isLoading && <LoadingBlock label="正在读取备份记录…" />}
+          {backupsQuery.isError && <FailBlock error={backupsQuery.error} onRetry={() => void backupsQuery.refetch()} />}
+
+          {backupsQuery.data && backupsQuery.data.items.length > 0 && (
+            <ul className="settings-backup-list">
+              {backupsQuery.data.items.map((backup) => (
+                <li key={backup.backup_id} className="settings-backup-item">
+                  <div className="settings-backup-item__meta">
+                    <strong>{backupStatusLabel(backup.status)}</strong>
+                    <span>{formatTime(backup.created_at)}</span>
+                    <span>
+                      {backup.file_count} 个文件 · {formatBackupSize(backup.total_size)}
+                    </span>
+                    {backup.unencrypted_warning && <span className="settings-backup-flag">未加密 · 含用户资料</span>}
+                    {backup.error_summary && <span className="settings-error-text">{backup.error_summary}</span>}
+                  </div>
+                  <div className="settings-actions">
+                    <button
+                      className="quiet-button"
+                      type="button"
+                      disabled={!backup.download_available || downloadingId === backup.backup_id}
+                      onClick={() => void handleDownloadBackup(backup)}
+                    >
+                      {downloadingId === backup.backup_id ? '下载中…' : '下载备份包'}
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {backupMessage && (
+            <p className="settings-success-text">
+              <Check size={14} aria-hidden="true" />
+              {backupMessage}
+            </p>
+          )}
+          {backupError && (
+            <p className="settings-error-text" role="alert">
+              <CircleAlert size={14} aria-hidden="true" />
+              {backupError}
+            </p>
+          )}
+
+          <div className="settings-actions">
+            <button
+              className="primary-button"
+              type="button"
+              disabled={createBackupMutation.isPending || backupsQuery.data?.items.some((item) => isBackupInProgress(item.status))}
+              onClick={() => createBackupMutation.mutate()}
+            >
+              {createBackupMutation.isPending ? '正在创建备份…' : '创建备份'}
+            </button>
+            <button
+              className="quiet-button"
+              type="button"
+              disabled
+              title="恢复能力尚未独立验收，当前版本保持禁用"
+            >
+              恢复当前数据（未就绪）
+            </button>
+          </div>
+          <p className="settings-hint">
+            恢复入口保持禁用，直到恢复流程完成独立校验。创建过程使用 SQLite 在线备份 API 与显式清单，失败不会留下可误用的完整包。
+          </p>
         </section>
       </div>
     </section>

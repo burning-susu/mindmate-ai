@@ -161,8 +161,29 @@
         "tags": [
           "system"
         ],
-        "summary": "Storage",
-        "operationId": "storage_api_v1_system_storage_get",
+        "summary": "Get Storage Overview",
+        "operationId": "get_storage_overview_api_v1_system_storage_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageOverviewResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/system/ai-usage": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Get Ai Usage",
+        "operationId": "get_ai_usage_api_v1_system_ai_usage_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -171,7 +192,320 @@
                 "schema": {
                   "additionalProperties": true,
                   "type": "object",
-                  "title": "Response Storage Api V1 System Storage Get"
+                  "title": "Response Get Ai Usage Api V1 System Ai Usage Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/system/ai-budget": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Get Ai Budget",
+        "operationId": "get_ai_budget_api_v1_system_ai_budget_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Get Ai Budget Api V1 System Ai Budget Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Put Ai Budget",
+        "operationId": "put_ai_budget_api_v1_system_ai_budget_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BudgetUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Put Ai Budget Api V1 System Ai Budget Put"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/system/privacy": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Get Privacy Status",
+        "operationId": "get_privacy_status_api_v1_system_privacy_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Get Privacy Status Api V1 System Privacy Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/backups": {
+      "post": {
+        "tags": [
+          "backups"
+        ],
+        "summary": "Create Backup Endpoint",
+        "operationId": "create_backup_endpoint_api_v1_backups_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "backups"
+        ],
+        "summary": "List Backups Endpoint",
+        "operationId": "list_backups_endpoint_api_v1_backups_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/backups/{backup_id}": {
+      "get": {
+        "tags": [
+          "backups"
+        ],
+        "summary": "Get Backup Endpoint",
+        "operationId": "get_backup_endpoint_api_v1_backups__backup_id__get",
+        "parameters": [
+          {
+            "name": "backup_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Backup Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/backups/{backup_id}/verify": {
+      "post": {
+        "tags": [
+          "backups"
+        ],
+        "summary": "Verify Backup Endpoint",
+        "operationId": "verify_backup_endpoint_api_v1_backups__backup_id__verify_post",
+        "parameters": [
+          {
+            "name": "backup_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Backup Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupVerifyResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/backups/{backup_id}/download": {
+      "get": {
+        "tags": [
+          "backups"
+        ],
+        "summary": "Download Backup Endpoint",
+        "operationId": "download_backup_endpoint_api_v1_backups__backup_id__download_get",
+        "parameters": [
+          {
+            "name": "backup_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Backup Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/backups/{backup_id}/restore": {
+      "post": {
+        "tags": [
+          "backups"
+        ],
+        "summary": "Restore Backup Disabled",
+        "operationId": "restore_backup_disabled_api_v1_backups__backup_id__restore_post",
+        "parameters": [
+          {
+            "name": "backup_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Backup Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -1494,6 +1828,71 @@
         }
       }
     },
+    "/api/v1/conversations/{conversation_id}/permanent": {
+      "delete": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Permanently Delete Conversation",
+        "description": "Permanently remove one trashed conversation and its owned rows.",
+        "operationId": "permanently_delete_conversation_api_v1_conversations__conversation_id__permanent_delete",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "expected_version",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Expected Version"
+            }
+          },
+          {
+            "name": "confirmed",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Confirmed"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Permanently Delete Conversation Api V1 Conversations  Conversation Id  Permanent Delete"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/conversations/{conversation_id}/messages": {
       "post": {
         "tags": [
@@ -2230,6 +2629,74 @@
         }
       }
     },
+    "/api/v1/history/trash/purge-preview": {
+      "get": {
+        "tags": [
+          "history"
+        ],
+        "summary": "Preview History Trash Purge",
+        "description": "Read-only count of expired trash owners. Does not delete rows.",
+        "operationId": "preview_history_trash_purge_api_v1_history_trash_purge_preview_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryPurgePreviewResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/history/trash/purge-expired": {
+      "post": {
+        "tags": [
+          "history"
+        ],
+        "summary": "Run History Trash Purge",
+        "description": "Explicit bounded maintenance action for expired history trash.",
+        "operationId": "run_history_trash_purge_api_v1_history_trash_purge_expired_post",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "default": 10,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryPurgeRunResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/home/overview": {
       "get": {
         "tags": [
@@ -2258,6 +2725,68 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HomeOverviewResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/home/tasks/retention-preview": {
+      "get": {
+        "tags": [
+          "home"
+        ],
+        "summary": "Get Task Retention Preview",
+        "operationId": "get_task_retention_preview_api_v1_home_tasks_retention_preview_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskRetentionPreviewResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/home/tasks/retention-purge": {
+      "post": {
+        "tags": [
+          "home"
+        ],
+        "summary": "Run Task Retention Purge",
+        "operationId": "run_task_retention_purge_api_v1_home_tasks_retention_purge_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRetentionPurgeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskRetentionRunResponse"
                 }
               }
             }
@@ -2443,6 +2972,71 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/LearningLifecycleResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/learning-sessions/{learning_session_id}/permanent": {
+      "delete": {
+        "tags": [
+          "learning"
+        ],
+        "summary": "Permanently Delete Learning Session",
+        "description": "Permanently remove one trashed learning session and its owned rows.",
+        "operationId": "permanently_delete_learning_session_api_v1_learning_sessions__learning_session_id__permanent_delete",
+        "parameters": [
+          {
+            "name": "learning_session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Learning Session Id"
+            }
+          },
+          {
+            "name": "expected_version",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Expected Version"
+            }
+          },
+          {
+            "name": "confirmed",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Confirmed"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Permanently Delete Learning Session Api V1 Learning Sessions  Learning Session Id  Permanent Delete"
                 }
               }
             }
@@ -4704,6 +5298,262 @@
         ],
         "title": "BackgroundTaskResponse"
       },
+      "BackupListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BackupResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "restore_available": {
+            "type": "boolean",
+            "title": "Restore Available",
+            "default": false
+          },
+          "warning_message": {
+            "type": "string",
+            "title": "Warning Message",
+            "default": "此备份包未加密，并包含用户文件与学习历史。请保存在受保护磁盘上，不要上传到云端或共享给他人。"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "BackupListResponse"
+      },
+      "BackupResponse": {
+        "properties": {
+          "backup_id": {
+            "type": "string",
+            "title": "Backup Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "backup_format_version": {
+            "type": "string",
+            "title": "Backup Format Version"
+          },
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version"
+          },
+          "file_count": {
+            "type": "integer",
+            "title": "File Count"
+          },
+          "total_size": {
+            "type": "integer",
+            "title": "Total Size"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "error_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Summary"
+          },
+          "includes_vectors": {
+            "type": "boolean",
+            "title": "Includes Vectors",
+            "default": false
+          },
+          "includes_parsed": {
+            "type": "boolean",
+            "title": "Includes Parsed",
+            "default": false
+          },
+          "includes_secrets": {
+            "type": "boolean",
+            "title": "Includes Secrets",
+            "default": false
+          },
+          "encrypted": {
+            "type": "boolean",
+            "title": "Encrypted",
+            "default": false
+          },
+          "contains_user_files_and_history": {
+            "type": "boolean",
+            "title": "Contains User Files And History",
+            "default": true
+          },
+          "unencrypted_warning": {
+            "type": "boolean",
+            "title": "Unencrypted Warning",
+            "default": true
+          },
+          "warning_message": {
+            "type": "string",
+            "title": "Warning Message",
+            "default": "此备份包未加密，并包含用户文件与学习历史。请保存在受保护磁盘上，不要上传到云端或共享给他人。"
+          },
+          "download_available": {
+            "type": "boolean",
+            "title": "Download Available",
+            "default": false
+          },
+          "restore_available": {
+            "type": "boolean",
+            "title": "Restore Available",
+            "default": false
+          },
+          "scope": {
+            "$ref": "#/components/schemas/BackupScopeResponse"
+          }
+        },
+        "type": "object",
+        "required": [
+          "backup_id",
+          "status",
+          "backup_format_version",
+          "schema_version",
+          "file_count",
+          "total_size",
+          "created_at",
+          "scope"
+        ],
+        "title": "BackupResponse"
+      },
+      "BackupScopeResponse": {
+        "properties": {
+          "database_snapshot": {
+            "type": "boolean",
+            "title": "Database Snapshot"
+          },
+          "content_objects": {
+            "type": "boolean",
+            "title": "Content Objects"
+          },
+          "parsed_artifacts": {
+            "type": "boolean",
+            "title": "Parsed Artifacts"
+          },
+          "non_secret_config": {
+            "type": "boolean",
+            "title": "Non Secret Config"
+          },
+          "vectors": {
+            "type": "boolean",
+            "title": "Vectors"
+          },
+          "fts": {
+            "type": "boolean",
+            "title": "Fts"
+          },
+          "models": {
+            "type": "boolean",
+            "title": "Models"
+          },
+          "logs": {
+            "type": "boolean",
+            "title": "Logs"
+          },
+          "secrets": {
+            "type": "boolean",
+            "title": "Secrets"
+          }
+        },
+        "type": "object",
+        "required": [
+          "database_snapshot",
+          "content_objects",
+          "parsed_artifacts",
+          "non_secret_config",
+          "vectors",
+          "fts",
+          "models",
+          "logs",
+          "secrets"
+        ],
+        "title": "BackupScopeResponse"
+      },
+      "BackupVerifyResponse": {
+        "properties": {
+          "backup_id": {
+            "type": "string",
+            "title": "Backup Id"
+          },
+          "verified": {
+            "type": "boolean",
+            "title": "Verified"
+          },
+          "file_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Count"
+          },
+          "total_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Size"
+          },
+          "schema_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schema Version"
+          },
+          "includes_secrets": {
+            "type": "boolean",
+            "title": "Includes Secrets",
+            "default": false
+          },
+          "includes_vectors": {
+            "type": "boolean",
+            "title": "Includes Vectors",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "backup_id",
+          "verified"
+        ],
+        "title": "BackupVerifyResponse"
+      },
       "Body_create_file_import_api_v1_file_imports_post": {
         "properties": {
           "files": {
@@ -4753,6 +5603,59 @@
           "files"
         ],
         "title": "Body_create_file_import_api_v1_file_imports_post"
+      },
+      "BudgetUpdateRequest": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": false
+          },
+          "hard_stop_usd": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 32
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hard Stop Usd"
+          },
+          "soft_remind_usd": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 32
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Soft Remind Usd"
+          },
+          "period": {
+            "type": "string",
+            "enum": [
+              "30d",
+              "calendar_month"
+            ],
+            "title": "Period",
+            "default": "30d"
+          },
+          "unknown_usage_policy": {
+            "type": "string",
+            "enum": [
+              "deny",
+              "confirm"
+            ],
+            "title": "Unknown Usage Policy",
+            "default": "deny"
+          }
+        },
+        "type": "object",
+        "title": "BudgetUpdateRequest"
       },
       "CitationListResponse": {
         "properties": {
@@ -6319,6 +7222,92 @@
           "snippet"
         ],
         "title": "HistoryLocation"
+      },
+      "HistoryPurgePreviewResponse": {
+        "properties": {
+          "as_of": {
+            "type": "string",
+            "format": "date-time",
+            "title": "As Of"
+          },
+          "eligible_conversations": {
+            "type": "integer",
+            "title": "Eligible Conversations"
+          },
+          "eligible_learning_sessions": {
+            "type": "integer",
+            "title": "Eligible Learning Sessions"
+          },
+          "eligible_total": {
+            "type": "integer",
+            "title": "Eligible Total"
+          },
+          "trashed_missing_purge_after": {
+            "type": "integer",
+            "title": "Trashed Missing Purge After"
+          }
+        },
+        "type": "object",
+        "required": [
+          "as_of",
+          "eligible_conversations",
+          "eligible_learning_sessions",
+          "eligible_total",
+          "trashed_missing_purge_after"
+        ],
+        "title": "HistoryPurgePreviewResponse"
+      },
+      "HistoryPurgeRunResponse": {
+        "properties": {
+          "as_of": {
+            "type": "string",
+            "format": "date-time",
+            "title": "As Of"
+          },
+          "scanned": {
+            "type": "integer",
+            "title": "Scanned"
+          },
+          "purged_conversations": {
+            "type": "integer",
+            "title": "Purged Conversations"
+          },
+          "purged_learning_sessions": {
+            "type": "integer",
+            "title": "Purged Learning Sessions"
+          },
+          "skipped_restored": {
+            "type": "integer",
+            "title": "Skipped Restored"
+          },
+          "skipped_not_due": {
+            "type": "integer",
+            "title": "Skipped Not Due"
+          },
+          "errors": {
+            "type": "integer",
+            "title": "Errors"
+          },
+          "error_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Error Codes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "as_of",
+          "scanned",
+          "purged_conversations",
+          "purged_learning_sessions",
+          "skipped_restored",
+          "skipped_not_due",
+          "errors",
+          "error_codes"
+        ],
+        "title": "HistoryPurgeRunResponse"
       },
       "HistoryTrashItem": {
         "properties": {
@@ -8999,6 +9988,114 @@
         ],
         "title": "ServiceStatus"
       },
+      "StorageCategoryResponse": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "byte_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Byte Size"
+          },
+          "available": {
+            "type": "boolean",
+            "title": "Available"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "label",
+          "available"
+        ],
+        "title": "StorageCategoryResponse"
+      },
+      "StorageOverviewResponse": {
+        "properties": {
+          "data_dir_configured": {
+            "type": "boolean",
+            "title": "Data Dir Configured"
+          },
+          "data_dir_display": {
+            "type": "string",
+            "title": "Data Dir Display"
+          },
+          "database": {
+            "type": "string",
+            "title": "Database"
+          },
+          "writable": {
+            "type": "boolean",
+            "title": "Writable"
+          },
+          "categories": {
+            "items": {
+              "$ref": "#/components/schemas/StorageCategoryResponse"
+            },
+            "type": "array",
+            "title": "Categories"
+          },
+          "total_byte_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Byte Size"
+          },
+          "readable": {
+            "type": "boolean",
+            "title": "Readable"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data_dir_configured",
+          "data_dir_display",
+          "database",
+          "writable",
+          "categories",
+          "readable"
+        ],
+        "title": "StorageOverviewResponse"
+      },
       "TagCreate": {
         "properties": {
           "name": {
@@ -9126,6 +10223,135 @@
           "updated_at"
         ],
         "title": "TagResponse"
+      },
+      "TaskRetentionPreviewResponse": {
+        "properties": {
+          "as_of": {
+            "type": "string",
+            "format": "date-time",
+            "title": "As Of"
+          },
+          "eligible_total": {
+            "type": "integer",
+            "title": "Eligible Total"
+          },
+          "skipped_referenced": {
+            "type": "integer",
+            "title": "Skipped Referenced"
+          },
+          "success_or_cancelled": {
+            "type": "integer",
+            "title": "Success Or Cancelled"
+          },
+          "failed_partial_interrupted": {
+            "type": "integer",
+            "title": "Failed Partial Interrupted"
+          },
+          "active_not_eligible": {
+            "type": "integer",
+            "title": "Active Not Eligible"
+          },
+          "missing_completed_at": {
+            "type": "integer",
+            "title": "Missing Completed At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "as_of",
+          "eligible_total",
+          "skipped_referenced",
+          "success_or_cancelled",
+          "failed_partial_interrupted",
+          "active_not_eligible",
+          "missing_completed_at"
+        ],
+        "title": "TaskRetentionPreviewResponse"
+      },
+      "TaskRetentionPurgeRequest": {
+        "properties": {
+          "confirmed": {
+            "type": "boolean",
+            "title": "Confirmed",
+            "default": false
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "default": 20
+          },
+          "clear_success": {
+            "type": "boolean",
+            "title": "Clear Success",
+            "default": true
+          },
+          "clear_cancelled": {
+            "type": "boolean",
+            "title": "Clear Cancelled",
+            "default": true
+          },
+          "clear_failed": {
+            "type": "boolean",
+            "title": "Clear Failed",
+            "default": true
+          }
+        },
+        "type": "object",
+        "title": "TaskRetentionPurgeRequest"
+      },
+      "TaskRetentionRunResponse": {
+        "properties": {
+          "as_of": {
+            "type": "string",
+            "format": "date-time",
+            "title": "As Of"
+          },
+          "scanned": {
+            "type": "integer",
+            "title": "Scanned"
+          },
+          "purged": {
+            "type": "integer",
+            "title": "Purged"
+          },
+          "skipped_referenced": {
+            "type": "integer",
+            "title": "Skipped Referenced"
+          },
+          "skipped_not_due": {
+            "type": "integer",
+            "title": "Skipped Not Due"
+          },
+          "skipped_active": {
+            "type": "integer",
+            "title": "Skipped Active"
+          },
+          "errors": {
+            "type": "integer",
+            "title": "Errors"
+          },
+          "error_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Error Codes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "as_of",
+          "scanned",
+          "purged",
+          "skipped_referenced",
+          "skipped_not_due",
+          "skipped_active",
+          "errors",
+          "error_codes"
+        ],
+        "title": "TaskRetentionRunResponse"
       },
       "TrashFolderResponse": {
         "properties": {

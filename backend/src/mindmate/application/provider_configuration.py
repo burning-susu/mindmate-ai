@@ -56,14 +56,14 @@ def _ensure_profile(session: Session) -> ProviderProfile:
     return profile
 
 
-def _setting(session: Session, key: str) -> dict[str, Any] | None:
+def read_setting(session: Session, key: str) -> dict[str, Any] | None:
     row = session.get(AppSetting, key)
     if row is None or not isinstance(row.setting_value_json, dict):
         return None
     return row.setting_value_json
 
 
-def _set_setting(session: Session, key: str, value: dict[str, Any]) -> None:
+def write_setting(session: Session, key: str, value: dict[str, Any]) -> None:
     row = session.get(AppSetting, key)
     now = utc_now()
     if row is None:
@@ -79,6 +79,11 @@ def _set_setting(session: Session, key: str, value: dict[str, Any]) -> None:
         row.setting_value_json = value
         row.setting_schema_version = 1
         row.updated_at = now
+
+
+# Compatibility aliases used by existing modules.
+_setting = read_setting
+_set_setting = write_setting
 
 
 def public_cost_estimate() -> dict[str, Any]:
@@ -297,9 +302,11 @@ __all__ = [
     "read_consent",
     "read_generation_mode",
     "read_probe",
+    "read_setting",
     "record_consent",
     "save_api_key",
     "save_probe_failure",
     "save_probe_success",
     "set_generation_mode",
+    "write_setting",
 ]

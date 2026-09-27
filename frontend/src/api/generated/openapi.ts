@@ -76,11 +76,64 @@ export interface components {
     "summary"?: Record<string, unknown> | null;
     "error"?: string | null
   };
+  "BackupListResponse": {
+    "items": Array<components["BackupResponse"]>;
+    "restore_available"?: boolean;
+    "warning_message"?: string
+  };
+  "BackupResponse": {
+    "backup_id": string;
+    "status": string;
+    "backup_format_version": string;
+    "schema_version": string;
+    "file_count": number;
+    "total_size": number;
+    "created_at": string;
+    "completed_at"?: string | null;
+    "error_summary"?: string | null;
+    "includes_vectors"?: boolean;
+    "includes_parsed"?: boolean;
+    "includes_secrets"?: boolean;
+    "encrypted"?: boolean;
+    "contains_user_files_and_history"?: boolean;
+    "unencrypted_warning"?: boolean;
+    "warning_message"?: string;
+    "download_available"?: boolean;
+    "restore_available"?: boolean;
+    "scope": components["BackupScopeResponse"]
+  };
+  "BackupScopeResponse": {
+    "database_snapshot": boolean;
+    "content_objects": boolean;
+    "parsed_artifacts": boolean;
+    "non_secret_config": boolean;
+    "vectors": boolean;
+    "fts": boolean;
+    "models": boolean;
+    "logs": boolean;
+    "secrets": boolean
+  };
+  "BackupVerifyResponse": {
+    "backup_id": string;
+    "verified": boolean;
+    "file_count"?: number | null;
+    "total_size"?: number | null;
+    "schema_version"?: string | null;
+    "includes_secrets"?: boolean;
+    "includes_vectors"?: boolean
+  };
   "Body_create_file_import_api_v1_file_imports_post": {
     "files": Array<string>;
     "folder_id"?: string | null;
     "tag_ids"?: string | null;
     "knowledge_base_id"?: string | null
+  };
+  "BudgetUpdateRequest": {
+    "enabled"?: boolean;
+    "hard_stop_usd"?: string | null;
+    "soft_remind_usd"?: string | null;
+    "period"?: "30d" | "calendar_month";
+    "unknown_usage_policy"?: "deny" | "confirm"
   };
   "CitationListResponse": {
     "items": Array<components["CitationResponse"]>
@@ -322,6 +375,23 @@ export interface components {
     "section": string;
     "snippet": string;
     "record_id"?: string | null
+  };
+  "HistoryPurgePreviewResponse": {
+    "as_of": string;
+    "eligible_conversations": number;
+    "eligible_learning_sessions": number;
+    "eligible_total": number;
+    "trashed_missing_purge_after": number
+  };
+  "HistoryPurgeRunResponse": {
+    "as_of": string;
+    "scanned": number;
+    "purged_conversations": number;
+    "purged_learning_sessions": number;
+    "skipped_restored": number;
+    "skipped_not_due": number;
+    "errors": number;
+    "error_codes": Array<string>
   };
   "HistoryTrashItem": {
     "object_type": string;
@@ -720,6 +790,23 @@ export interface components {
     "timestamp": string;
     "request_id": string
   };
+  "StorageCategoryResponse": {
+    "key": string;
+    "label": string;
+    "byte_size"?: number | null;
+    "available": boolean;
+    "message"?: string | null
+  };
+  "StorageOverviewResponse": {
+    "data_dir_configured": boolean;
+    "data_dir_display": string;
+    "database": string;
+    "writable": boolean;
+    "categories": Array<components["StorageCategoryResponse"]>;
+    "total_byte_size"?: number | null;
+    "readable": boolean;
+    "message"?: string | null
+  };
   "TagCreate": {
     "name": string;
     "color"?: string | null
@@ -739,6 +826,32 @@ export interface components {
     "row_version": number;
     "created_at": string;
     "updated_at": string
+  };
+  "TaskRetentionPreviewResponse": {
+    "as_of": string;
+    "eligible_total": number;
+    "skipped_referenced": number;
+    "success_or_cancelled": number;
+    "failed_partial_interrupted": number;
+    "active_not_eligible": number;
+    "missing_completed_at": number
+  };
+  "TaskRetentionPurgeRequest": {
+    "confirmed"?: boolean;
+    "limit"?: number;
+    "clear_success"?: boolean;
+    "clear_cancelled"?: boolean;
+    "clear_failed"?: boolean
+  };
+  "TaskRetentionRunResponse": {
+    "as_of": string;
+    "scanned": number;
+    "purged": number;
+    "skipped_referenced": number;
+    "skipped_not_due": number;
+    "skipped_active": number;
+    "errors": number;
+    "error_codes": Array<string>
   };
   "TrashFolderResponse": {
     "folder_id": string;
@@ -783,7 +896,37 @@ export interface operations {
     operationId: "capabilities_api_v1_system_capabilities_get"
   };
   "GET /api/v1/system/storage": {
-    operationId: "storage_api_v1_system_storage_get"
+    operationId: "get_storage_overview_api_v1_system_storage_get"
+  };
+  "GET /api/v1/system/ai-usage": {
+    operationId: "get_ai_usage_api_v1_system_ai_usage_get"
+  };
+  "GET /api/v1/system/ai-budget": {
+    operationId: "get_ai_budget_api_v1_system_ai_budget_get"
+  };
+  "PUT /api/v1/system/ai-budget": {
+    operationId: "put_ai_budget_api_v1_system_ai_budget_put"
+  };
+  "GET /api/v1/system/privacy": {
+    operationId: "get_privacy_status_api_v1_system_privacy_get"
+  };
+  "POST /api/v1/backups": {
+    operationId: "create_backup_endpoint_api_v1_backups_post"
+  };
+  "GET /api/v1/backups": {
+    operationId: "list_backups_endpoint_api_v1_backups_get"
+  };
+  "GET /api/v1/backups/{backup_id}": {
+    operationId: "get_backup_endpoint_api_v1_backups__backup_id__get"
+  };
+  "POST /api/v1/backups/{backup_id}/verify": {
+    operationId: "verify_backup_endpoint_api_v1_backups__backup_id__verify_post"
+  };
+  "GET /api/v1/backups/{backup_id}/download": {
+    operationId: "download_backup_endpoint_api_v1_backups__backup_id__download_get"
+  };
+  "POST /api/v1/backups/{backup_id}/restore": {
+    operationId: "restore_backup_disabled_api_v1_backups__backup_id__restore_post"
   };
   "GET /api/v1/knowledge-bases": {
     operationId: "list_knowledge_bases_api_v1_knowledge_bases_get"
@@ -878,6 +1021,9 @@ export interface operations {
   "POST /api/v1/conversations/{conversation_id}/restore": {
     operationId: "restore_deleted_conversation_api_v1_conversations__conversation_id__restore_post"
   };
+  "DELETE /api/v1/conversations/{conversation_id}/permanent": {
+    operationId: "permanently_delete_conversation_api_v1_conversations__conversation_id__permanent_delete"
+  };
   "POST /api/v1/conversations/{conversation_id}/messages": {
     operationId: "create_message_api_v1_conversations__conversation_id__messages_post"
   };
@@ -908,8 +1054,20 @@ export interface operations {
   "GET /api/v1/history/trash": {
     operationId: "list_history_trash_api_v1_history_trash_get"
   };
+  "GET /api/v1/history/trash/purge-preview": {
+    operationId: "preview_history_trash_purge_api_v1_history_trash_purge_preview_get"
+  };
+  "POST /api/v1/history/trash/purge-expired": {
+    operationId: "run_history_trash_purge_api_v1_history_trash_purge_expired_post"
+  };
   "GET /api/v1/home/overview": {
     operationId: "get_home_overview_api_v1_home_overview_get"
+  };
+  "GET /api/v1/home/tasks/retention-preview": {
+    operationId: "get_task_retention_preview_api_v1_home_tasks_retention_preview_get"
+  };
+  "POST /api/v1/home/tasks/retention-purge": {
+    operationId: "run_task_retention_purge_api_v1_home_tasks_retention_purge_post"
   };
   "POST /api/v1/learning-sessions": {
     operationId: "create_session_api_v1_learning_sessions_post"
@@ -922,6 +1080,9 @@ export interface operations {
   };
   "POST /api/v1/learning-sessions/{learning_session_id}/restore": {
     operationId: "restore_deleted_learning_session_api_v1_learning_sessions__learning_session_id__restore_post"
+  };
+  "DELETE /api/v1/learning-sessions/{learning_session_id}/permanent": {
+    operationId: "permanently_delete_learning_session_api_v1_learning_sessions__learning_session_id__permanent_delete"
   };
   "GET /api/v1/learning-sessions/{learning_session_id}/current-question": {
     operationId: "read_current_question_api_v1_learning_sessions__learning_session_id__current_question_get"

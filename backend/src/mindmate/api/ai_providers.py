@@ -24,6 +24,7 @@ from mindmate.application.provider_configuration import (
     save_probe_success,
     set_generation_mode,
 )
+from mindmate.application.usage_budget import BudgetRejected, assert_external_budget_allows
 from mindmate.security.credentials import (
     CredentialStoreError,
     CredentialStorePort,
@@ -222,6 +223,10 @@ def test_ai_provider_connection(
             "连接测试前必须确认会向 DeepSeek 发送固定测试文本并产生极小 API 用量。",
             400,
         )
+    try:
+        assert_external_budget_allows(session)
+    except BudgetRejected as exc:
+        raise AiProviderApiError(exc.code, exc.detail, 409) from exc
     store = _credential_store(request)
     provider = _provider(request)
     with provider_lock():

@@ -40,6 +40,7 @@ from mindmate.application.source_snapshots import (
     create_source_snapshots,
 )
 from mindmate.application.tasks import add_event, claim_task, finish_attempt
+from mindmate.application.usage_budget import BudgetRejected, assert_external_budget_allows
 from mindmate.config import Settings
 from mindmate.infrastructure.models import (
     AiOperation,
@@ -1350,6 +1351,10 @@ class ChatGenerationWorker:
             if getattr(provider, "requires_external_transfer", True):
                 with self._session_factory() as gate_session:
                     consent = read_consent(gate_session)
+                    try:
+                        assert_external_budget_allows(gate_session)
+                    except BudgetRejected as exc:
+                        raise ProviderRequestError(exc.code, exc.detail, 409) from exc
                 if not consent.get("accepted"):
                     raise ProviderRequestError(
                         "EXTERNAL_AI_CONSENT_REQUIRED",
