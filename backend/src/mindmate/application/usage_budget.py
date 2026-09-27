@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from mindmate.application.provider_configuration import (
+    openai_public_cost_estimate,
     public_cost_estimate,
     read_setting,
     write_setting,
@@ -45,9 +46,18 @@ def _estimate_usd(input_tokens: int, output_tokens: int, rates: dict[str, Any]) 
     )
 
 
-def _channel(provider: str) -> str:
+def _rates_for_provider(provider: str) -> dict[str, Any] | None:
     normalized = (provider or "").strip().upper()
     if normalized in {"DEEPSEEK", "ONLINE"}:
+        return public_cost_estimate()
+    if normalized == "OPENAI":
+        return openai_public_cost_estimate()
+    return None
+
+
+def _channel(provider: str) -> str:
+    normalized = (provider or "").strip().upper()
+    if normalized in {"DEEPSEEK", "OPENAI", "ONLINE"}:
         return "online"
     return "mock"
 
@@ -63,11 +73,13 @@ def summarize_usage(session: Session, *, days: int = 30) -> dict[str, Any]:
         "mock": _empty_bucket(),
         "online": _empty_bucket(),
     }
-    rates = public_cost_estimate()
+    by_provider: dict[str, dict[str, Any]] = {}
+    deepseek_rates = public_cost_estimate()
     unknown_usage_ops = 0
 
     for row in rows:
         channel = _channel(row.provider)
+        provider_name = (row.provider or "UNKNOWN").strip().upper() or "UNKNOWN"
         day = row.created_at.astimezone(UTC).date().isoformat()
         model = row.resolved_model or row.requested_model or "unknown"
         day_bucket = daily.setdefault(
@@ -75,21 +87,26 @@ def summarize_usage(session: Session, *, days: int = 30) -> dict[str, Any]:
             {"date": day, "mock": _empty_bucket(), "online": _empty_bucket()},
         )
         model_bucket = by_model.setdefault(
-            f"{channel}:{model}",
-            {"channel": channel, "model": model, **_empty_bucket()},
+            f"{channel}:{provider_name}:{model}",
+            {"channel": channel, "provider": provider_name, "model": model, **_empty_bucket()},
         )
+        provider_bucket = by_provider.setdefault(
+            provider_name, {"provider": provider_name, **_empty_bucket()}
+        )
+        row_rates = _rates_for_provider(row.provider)
         input_tokens = row.usage_input_tokens
         output_tokens = row.usage_output_tokens
-        if input_tokens is None or output_tokens is None:
+        tracked = (totals[channel], day_bucket[channel], model_bucket, provider_bucket)
+        if input_tokens is None or output_tokens is None or (channel == "online" and row_rates is None):
             unknown_usage_ops += 1
-            for bucket in (totals[channel], day_bucket[channel], model_bucket):
+            for bucket in tracked:
                 bucket["operations"] += 1
                 bucket["unknown_usage_operations"] += 1
             continue
         measured_input = input_tokens
         measured_output = output_tokens
-        estimated = _estimate_usd(measured_input, measured_output, rates)
-        for bucket in (totals[channel], day_bucket[channel], model_bucket):
+        estimated = _estimate_usd(measured_input, measured_output, row_rates or deepseek_rates)
+        for bucket in tracked:
             bucket["operations"] += 1
             bucket["input_tokens"] += measured_input
             bucket["output_tokens"] += measured_output
@@ -97,7 +114,7 @@ def summarize_usage(session: Session, *, days: int = 30) -> dict[str, Any]:
                 bucket["total_tokens"] += int(row.usage_total_tokens)
             else:
                 bucket["total_tokens"] += measured_input + measured_output
-            if channel == "online":
+            if channel == "online" and row_rates is not None:
                 bucket["estimated_usd"] = str(
                     (Decimal(bucket["estimated_usd"]) + estimated).quantize(Decimal("0.000001"))
                 )
@@ -110,7 +127,18 @@ def summarize_usage(session: Session, *, days: int = 30) -> dict[str, Any]:
         "since": since.isoformat(),
         "until": utc_now().isoformat(),
         "currency": BUDGET_CURRENCY,
-        "cost_estimate": rates,
+        "cost_estimate": deepseek_rates,
+        "cost_estimates": {
+            "deepseek": deepseek_rates,
+            "openai": openai_public_cost_estimate(),
+        },
+        "by_provider": [
+            {
+                "provider": item["provider"],
+                **_public_bucket(item, estimated=item["provider"] in {"DEEPSEEK", "OPENAI", "ONLINE"}),
+            }
+            for item in sorted(by_provider.values(), key=lambda value: value["provider"])
+        ],
         "totals": {
             "mock": _public_bucket(totals["mock"], estimated=False),
             "online": _public_bucket(totals["online"], estimated=True),
@@ -136,11 +164,11 @@ def summarize_usage(session: Session, *, days: int = 30) -> dict[str, Any]:
         "online_actual_usage_message": (
             None
             if totals["online"]["operations"] > 0
-            else "在线实际用量暂无记录（当前未产生真实 DeepSeek 调用，或仅使用 Mock）。"
+            else "在线实际用量暂无记录（当前未产生 DeepSeek 或 OpenAI 调用，或仅使用 Mock）。"
         ),
         "unknown_usage_operations": unknown_usage_ops,
         "estimated_online_usd": online_estimated,
-        "estimate_disclaimer": rates["disclaimer"],
+        "estimate_disclaimer": deepseek_rates["disclaimer"],
     }
 
 

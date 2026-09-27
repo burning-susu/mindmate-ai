@@ -183,7 +183,7 @@ describe.sequential('stage 7 learning demo', () => {
 
     renderAt('/learning/new?knowledge_base_id=kb-1')
     expect(await screen.findByRole('heading', { name: '基于知识库的一题演示' })).toBeInTheDocument()
-    expect(screen.getByText('本地规则模拟演示，未调用真实 DeepSeek。学习出题不读取聊天设置里的在线模式。')).toBeInTheDocument()
+    expect(screen.getByText('模型选择目前适用于 AI 对话；学习出题仍是本地演示规则。')).toBeInTheDocument()
     expect(await screen.findByText('服务超时策略.txt')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '创建并开始' })).toBeDisabled()
     fireEvent.change(screen.getByRole('textbox', { name: '学习主题' }), { target: { value: '   ' } })

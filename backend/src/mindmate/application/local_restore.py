@@ -40,6 +40,8 @@ from mindmate.application.local_backup import (
 from mindmate.application.provider_configuration import (
     CONSENT_SETTING_KEY,
     GENERATION_MODE_SETTING_KEY,
+    OPENAI_CONSENT_SETTING_KEY,
+    OPENAI_PROBE_SETTING_KEY,
     PROBE_SETTING_KEY,
     read_setting,
     write_setting,
@@ -998,6 +1000,7 @@ def _reconcile_database(database_path: Path) -> None:
             (RESTORE_RECONFIRM_KEY, reconfirm),
             (GENERATION_MODE_SETTING_KEY, mode),
             (CONSENT_SETTING_KEY, consent),
+            (OPENAI_CONSENT_SETTING_KEY, consent),
         ):
             conn.execute(
                 """
@@ -1011,6 +1014,7 @@ def _reconcile_database(database_path: Path) -> None:
                 (key, payload, now),
             )
         conn.execute("DELETE FROM app_settings WHERE setting_key = ?", (PROBE_SETTING_KEY,))
+        conn.execute("DELETE FROM app_settings WHERE setting_key = ?", (OPENAI_PROBE_SETTING_KEY,))
         conn.commit()
     finally:
         conn.close()

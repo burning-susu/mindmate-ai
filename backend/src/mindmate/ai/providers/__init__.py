@@ -8,6 +8,7 @@ from mindmate.ai.providers.base import (
 )
 from mindmate.ai.providers.deepseek import DeepSeekChatProvider
 from mindmate.ai.providers.mock import MockChatProvider
+from mindmate.ai.providers.openai import OpenAIChatProvider
 
 __all__ = [
     "ChatProviderPort",
@@ -16,6 +17,7 @@ __all__ = [
     "ChatStreamChunk",
     "DeepSeekChatProvider",
     "MockChatProvider",
+    "OpenAIChatProvider",
     "ProviderProbeResult",
     "ProviderRequestError",
 ]

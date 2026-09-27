@@ -25,6 +25,7 @@ from mindmate.ai.providers.base import (
     ProviderRequestError,
 )
 from mindmate.ai.providers.deepseek import DEEPSEEK_MODEL
+from mindmate.ai.providers.openai import OPENAI_MODEL
 from mindmate.application.citations import CitationBindingError, bind_answer_citations
 from mindmate.application.evidence_gate import INSUFFICIENT_MESSAGE
 from mindmate.application.hybrid_search import (
@@ -33,7 +34,14 @@ from mindmate.application.hybrid_search import (
     HybridCandidateQuery,
 )
 from mindmate.application.local_restore import restore_provider_reconfirm_required
-from mindmate.application.provider_configuration import read_consent, read_generation_mode
+from mindmate.application.provider_configuration import (
+    DEEPSEEK_SECRET_REFERENCE,
+    GENERATION_MODES,
+    OPENAI_PROVIDER_ID,
+    OPENAI_SECRET_REFERENCE,
+    read_consent,
+    read_generation_mode,
+)
 from mindmate.application.retrieval_test_queries import RetrievalQueryEncoderError
 from mindmate.application.source_snapshots import (
     SourceSnapshotCreated,
@@ -145,6 +153,30 @@ def _provider_name(provider: ChatProviderPort) -> str:
 def _provider_model(provider: ChatProviderPort, settings: Settings) -> str:
     value = getattr(provider, "model", None) or getattr(settings, "provider_model", DEEPSEEK_MODEL)
     return str(value)[:100]
+
+
+def _frozen_identity(
+    generation_mode: str, provider: ChatProviderPort, settings: Settings
+) -> tuple[str, str]:
+    if generation_mode == "deepseek":
+        return "DEEPSEEK", DEEPSEEK_MODEL
+    if generation_mode == OPENAI_PROVIDER_ID:
+        return "OPENAI", OPENAI_MODEL
+    return _provider_name(provider), _provider_model(provider, settings)
+
+
+def _require_charge_confirmation(
+    session: Session, settings: Settings, body: dict[str, Any]
+) -> tuple[str, bool]:
+    mode = read_generation_mode(session, fallback=settings.provider_mode)
+    confirmed = bool(body.get("confirm_provider_charge"))
+    if mode in {"deepseek", OPENAI_PROVIDER_ID} and not confirmed:
+        raise ChatCommandError(
+            "PROVIDER_CHARGE_CONFIRMATION_REQUIRED",
+            "发送到所选在线服务前，必须确认本次外发和费用估算。未发起外部请求。",
+            409,
+        )
+    return mode, confirmed
 
 
 def _task_idempotency_key(idempotency_key: str) -> str:
@@ -285,8 +317,11 @@ def _new_operation_graph(
     body_hash: str,
     provider: ChatProviderPort,
     settings: Settings,
+    generation_mode: str = "mock",
+    charge_confirmed: bool = False,
 ) -> AiOperation:
     now = utc_now()
+    provider_label, model_label = _frozen_identity(generation_mode, provider, settings)
     user_message = Message(
         message_id=new_id(),
         conversation_id=conversation.conversation_id,
@@ -341,6 +376,10 @@ def _new_operation_graph(
             "stream_sequence": 0,
             "event_sequence": 0,
             "stop_requested": False,
+            "frozen_generation_mode": generation_mode,
+            "frozen_provider": provider_label,
+            "frozen_requested_model": model_label,
+            "provider_charge_confirmed": charge_confirmed,
         },
         created_at=now,
         updated_at=now,
@@ -360,8 +399,8 @@ def _new_operation_graph(
         request_hash=body_hash,
         request_id=request_id,
         status="QUEUED",
-        provider=_provider_name(provider),
-        requested_model=_provider_model(provider, settings),
+        provider=provider_label,
+        requested_model=model_label,
         prompt_template_version=(
             RAG_PROMPT_TEMPLATE_VERSION
             if scope.mode == KNOWLEDGE_CHAT_MODE
@@ -377,8 +416,8 @@ def _new_operation_graph(
         version_number=1,
         content="",
         status="PENDING",
-        provider=_provider_name(provider),
-        model=_provider_model(provider, settings),
+        provider=provider_label,
+        model=model_label,
         prompt_template_version=(
             RAG_PROMPT_TEMPLATE_VERSION
             if scope.mode == KNOWLEDGE_CHAT_MODE
@@ -439,6 +478,7 @@ def create_first_chat(
         existing = _existing_by_client_request(session, client_request_id, idempotency_key)
         if existing is not None:
             return _validate_existing_operation(existing, body_hash)
+        generation_mode, charge_confirmed = _require_charge_confirmation(session, settings, body)
         now = utc_now()
         conversation = Conversation(
             conversation_id=new_id(),
@@ -481,6 +521,8 @@ def create_first_chat(
             body_hash=body_hash,
             provider=provider,
             settings=settings,
+            generation_mode=generation_mode,
+            charge_confirmed=charge_confirmed,
         )
         return _commit_or_recover(session, operation, body_hash)
 
@@ -509,6 +551,7 @@ def create_chat_message(
         existing = _existing_by_client_request(session, client_request_id, idempotency_key)
         if existing is not None:
             return _validate_existing_operation(existing, body_hash)
+        generation_mode, charge_confirmed = _require_charge_confirmation(session, settings, body)
         conversation = session.get(Conversation, conversation_id)
         if conversation is None or conversation.deleted_at is not None:
             raise ChatCommandError("CONVERSATION_NOT_FOUND", "会话不存在。", 404)
@@ -576,6 +619,8 @@ def create_chat_message(
             body_hash=body_hash,
             provider=provider,
             settings=settings,
+            generation_mode=generation_mode,
+            charge_confirmed=charge_confirmed,
         )
         return _commit_or_recover(session, operation, body_hash)
 
@@ -922,6 +967,7 @@ class ChatGenerationWorker:
         credential_store_getter: Callable[[], CredentialStorePort],
         *,
         deepseek_provider_getter: Callable[[], ChatProviderPort] | None = None,
+        openai_provider_getter: Callable[[], ChatProviderPort] | None = None,
         retrieval_query_encoder_getter: Callable[[], Any] | None = None,
         retrieval_query_getter: Callable[[Settings], Any] | None = None,
         worker_id: str | None = None,
@@ -930,6 +976,7 @@ class ChatGenerationWorker:
         self._settings = settings
         self._provider_getter = provider_getter
         self._deepseek_provider_getter = deepseek_provider_getter
+        self._openai_provider_getter = openai_provider_getter
         self._credential_store_getter = credential_store_getter
         self._retrieval_query_encoder_getter = retrieval_query_encoder_getter
         self._retrieval_query_getter = retrieval_query_getter
@@ -1343,34 +1390,52 @@ class ChatGenerationWorker:
                 return
             request = _chat_request(request_session, operation_for_request, grounding)
 
-        provider, generation_mode = self._active_provider()
         api_key: str | None = None
         stream: Any = None
         content = ""
         final_chunk: ChatStreamChunk | None = None
+        provider: ChatProviderPort | None = None
+        generation_mode = "mock"
         try:
+            provider, generation_mode = self._active_provider(
+                str(checkpoint.get("frozen_generation_mode") or "")
+            )
             if getattr(provider, "requires_external_transfer", True):
+                provider_id = OPENAI_PROVIDER_ID if generation_mode == OPENAI_PROVIDER_ID else "deepseek"
+                secret_reference = (
+                    OPENAI_SECRET_REFERENCE
+                    if provider_id == OPENAI_PROVIDER_ID
+                    else DEEPSEEK_SECRET_REFERENCE
+                )
+                if generation_mode in {"deepseek", OPENAI_PROVIDER_ID} and not checkpoint.get(
+                    "provider_charge_confirmed"
+                ):
+                    raise ProviderRequestError(
+                        "PROVIDER_CHARGE_CONFIRMATION_REQUIRED",
+                        "这条任务没有本次费用确认，未向所选服务外发。",
+                        409,
+                    )
                 with self._session_factory() as gate_session:
                     reconfirm_required = restore_provider_reconfirm_required(gate_session)
-                    consent = read_consent(gate_session)
+                    consent = read_consent(gate_session, provider_id)
+                    if reconfirm_required:
+                        raise ProviderRequestError(
+                            "RESTORE_PROVIDER_RECONFIRM_REQUIRED",
+                            "数据已恢复。请先确认重新配置，当前不会读取密钥或自动外发。",
+                            409,
+                        )
+                    if not consent.get("accepted"):
+                        raise ProviderRequestError(
+                            "EXTERNAL_AI_CONSENT_REQUIRED",
+                            "发送到所选外部服务前必须先确认该服务当前版本的数据外发说明。",
+                            409,
+                        )
                     try:
                         assert_external_budget_allows(gate_session)
                     except BudgetRejected as exc:
                         raise ProviderRequestError(exc.code, exc.detail, 409) from exc
-                if reconfirm_required:
-                    raise ProviderRequestError(
-                        "RESTORE_PROVIDER_RECONFIRM_REQUIRED",
-                        "数据已恢复。请先确认重新配置，当前不会读取密钥或自动外发。",
-                        409,
-                    )
-                if not consent.get("accepted"):
-                    raise ProviderRequestError(
-                        "EXTERNAL_AI_CONSENT_REQUIRED",
-                        "发送到外部 AI Provider 前必须先确认当前版本的数据外发说明。",
-                        409,
-                    )
                 try:
-                    api_key = self._credential_store_getter().get_secret("provider/deepseek/api-key")
+                    api_key = self._credential_store_getter().get_secret(secret_reference)
                 except CredentialStoreError as exc:
                     raise ProviderRequestError(
                         exc.code,
@@ -1379,9 +1444,10 @@ class ChatGenerationWorker:
                         True,
                     ) from exc
                 if not api_key:
+                    missing = "OpenAI" if provider_id == OPENAI_PROVIDER_ID else "DeepSeek"
                     raise ProviderRequestError(
                         "PROVIDER_NOT_CONFIGURED",
-                        "尚未配置可用的 DeepSeek API Key。",
+                        f"尚未配置可用的 {missing} API Key。未改用其他服务。",
                         409,
                     )
                 request = constrain_external_chat_request(request)
@@ -1459,6 +1525,8 @@ class ChatGenerationWorker:
             if stream is not None and hasattr(stream, "close"):
                 stream.close()
             api_key = None
+        if provider is None:
+            return
         if final_chunk is None:
             final_chunk = ChatStreamChunk(
                 request_id=request.request_id,
@@ -1467,6 +1535,18 @@ class ChatGenerationWorker:
                 resolved_model=getattr(provider, "model", None),
                 done=True,
             )
+        frozen_provider = str(checkpoint.get("frozen_provider") or "")
+        if frozen_provider and final_chunk.provider and final_chunk.provider != frozen_provider:
+            self._fail_after_provider_error(
+                task_id,
+                ProviderRequestError(
+                    "PROVIDER_IDENTITY_MISMATCH",
+                    "回答来自与任务冻结时不同的服务，未标记为成功。",
+                    502,
+                ),
+                content,
+            )
+            return
         sent_citation_numbers = None
         if getattr(provider, "requires_external_transfer", False) and grounding is not None:
             sent_citation_numbers = tuple(
@@ -1536,12 +1616,24 @@ class ChatGenerationWorker:
             session.commit()
             return True
 
-    def _active_provider(self) -> tuple[ChatProviderPort, str]:
-        with self._session_factory() as session:
-            mode = read_generation_mode(session, fallback=self._settings.provider_mode)
-        if mode == "deepseek" and self._deepseek_provider_getter is not None:
+    def _active_provider(self, frozen_mode: str = "") -> tuple[ChatProviderPort, str]:
+        mode = frozen_mode if frozen_mode in GENERATION_MODES else ""
+        if not mode:
+            with self._session_factory() as session:
+                mode = read_generation_mode(session, fallback=self._settings.provider_mode)
+        if mode == "deepseek":
+            if self._deepseek_provider_getter is None:
+                raise ProviderRequestError(
+                    "PROVIDER_UNAVAILABLE", "DeepSeek 适配器不可用，未改用其他服务。", 503
+                )
             return self._deepseek_provider_getter(), mode
-        return self._provider_getter(), mode
+        if mode == OPENAI_PROVIDER_ID:
+            if self._openai_provider_getter is None:
+                raise ProviderRequestError(
+                    "PROVIDER_UNAVAILABLE", "OpenAI 适配器不可用，未改用其他服务。", 503
+                )
+            return self._openai_provider_getter(), mode
+        return self._provider_getter(), "mock"
 
     def _complete_operation(
         self,

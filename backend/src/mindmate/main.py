@@ -20,6 +20,7 @@ from mindmate.ai.embeddings.model_manager import ModelManager
 from mindmate.ai.providers.base import ProviderRequestError
 from mindmate.ai.providers.deepseek import DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, DeepSeekChatProvider
 from mindmate.ai.providers.mock import MockChatProvider
+from mindmate.ai.providers.openai import OpenAIChatProvider
 from mindmate.api.ai_providers import AiProviderApiError
 from mindmate.api.ai_providers import router as ai_provider_router
 from mindmate.api.backups import BackupApiError
@@ -123,6 +124,7 @@ async def lifespan(app: FastAPI):
             lambda: app.state.chat_provider,
             lambda: app.state.credential_store,
             deepseek_provider_getter=lambda: app.state.deepseek_provider,
+            openai_provider_getter=lambda: app.state.openai_provider,
             retrieval_query_encoder_getter=lambda: app.state.retrieval_query_encoder,
         )
         app.state.chat_worker.start()
@@ -233,6 +235,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.deepseek_provider = DeepSeekChatProvider(
         base_url=DEEPSEEK_BASE_URL,
         model=DEEPSEEK_MODEL,
+        timeout_seconds=app_settings.provider_timeout_seconds,
+    )
+    app.state.openai_provider = OpenAIChatProvider(
         timeout_seconds=app_settings.provider_timeout_seconds,
     )
     app.state.chat_provider = (

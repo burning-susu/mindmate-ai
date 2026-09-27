@@ -30,11 +30,15 @@ import {
 } from '../api/backups'
 import {
   acceptExternalAiConsent,
+  acceptOpenAiConsent,
   deleteAiProviderKey,
+  deleteOpenAiProviderKey,
   getAiProviderStatus,
   saveAiProviderKey,
+  saveOpenAiProviderKey,
   setAiGenerationMode,
   testAiProviderConnection,
+  testOpenAiProviderConnection,
   type GenerationMode,
 } from '../api/aiProvider'
 import { getEmbeddingModelStatus } from '../api/knowledgeBases'
@@ -87,8 +91,12 @@ export default function SettingsPage() {
   const queryClient = useQueryClient()
   const [apiKey, setApiKey] = useState('')
   const [showKey, setShowKey] = useState(false)
+  const [openAiKey, setOpenAiKey] = useState('')
+  const [showOpenAiKey, setShowOpenAiKey] = useState(false)
   const [confirmTransfer, setConfirmTransfer] = useState(false)
+  const [confirmOpenAiTransfer, setConfirmOpenAiTransfer] = useState(false)
   const [consentChecked, setConsentChecked] = useState(false)
+  const [openAiConsentChecked, setOpenAiConsentChecked] = useState(false)
   const [budgetEnabled, setBudgetEnabled] = useState<boolean | null>(null)
   const [hardStop, setHardStop] = useState<string | null>(null)
   const [softRemind, setSoftRemind] = useState<string | null>(null)
@@ -155,6 +163,33 @@ export default function SettingsPage() {
     mutationFn: (mode: GenerationMode) => setAiGenerationMode(mode),
     onSuccess: () => void refresh(),
   })
+  const saveOpenAiMutation = useMutation({
+    mutationFn: saveOpenAiProviderKey,
+    onSettled: () => {
+      setOpenAiKey('')
+      setShowOpenAiKey(false)
+      void refresh()
+    },
+  })
+  const deleteOpenAiMutation = useMutation({
+    mutationFn: deleteOpenAiProviderKey,
+    onSuccess: () => {
+      setConfirmOpenAiTransfer(false)
+      void refresh()
+    },
+  })
+  const testOpenAiMutation = useMutation({
+    mutationFn: () => testOpenAiProviderConnection(true),
+    onSuccess: () => void refresh(),
+    onError: () => void refresh(),
+  })
+  const openAiConsentMutation = useMutation({
+    mutationFn: (version: string) => acceptOpenAiConsent(version),
+    onSuccess: () => {
+      setOpenAiConsentChecked(false)
+      void refresh()
+    },
+  })
   const budgetMutation = useMutation({
     mutationFn: () =>
       updateAiBudget({
@@ -217,9 +252,20 @@ export default function SettingsPage() {
     testMutation.isPending ||
     consentMutation.isPending ||
     modeMutation.isPending ||
-    budgetMutation.isPending
+    budgetMutation.isPending ||
+    saveOpenAiMutation.isPending ||
+    deleteOpenAiMutation.isPending ||
+    testOpenAiMutation.isPending ||
+    openAiConsentMutation.isPending
   const generationMode = status?.generation_mode ?? 'mock'
+  const openAi = status?.providers?.find((item) => item.provider_id === 'openai_gpt6_sol')
   const canTest = Boolean(status?.configured && status.credential_store.available && confirmTransfer && !busy)
+  const canTestOpenAi = Boolean(openAi?.configured && openAi.credential_store.available && confirmOpenAiTransfer && !busy)
+  const modeLabel = generationMode === 'deepseek'
+    ? 'DeepSeek 在线'
+    : generationMode === 'openai_gpt6_sol'
+      ? 'OpenAI GPT-6 Sol 在线'
+      : 'Mock'
 
   if (query.isLoading) {
     return (
@@ -337,7 +383,8 @@ export default function SettingsPage() {
               </span>
               <h2 id="ai-provider-heading">AI 服务配置</h2>
               <p>
-                当前固定使用 DeepSeek，模型别名为 <code>{status.requested_model}</code>。
+                手动选择 Mock、DeepSeek <code>{status.requested_model}</code> 或 OpenAI <code>gpt-6-sol</code>。
+                切换按钮本身不联网。
               </p>
             </div>
             <span className={`settings-state ${status.configured ? 'settings-state--ready' : ''}`}>
@@ -349,7 +396,7 @@ export default function SettingsPage() {
           <div className="settings-provider-meta">
             <span>Provider：{status.display_name}</span>
             <span>存储：{status.credential_store.available ? 'Windows Credential Manager' : '不可用'}</span>
-            <span>生成模式：{generationMode === 'deepseek' ? 'DeepSeek 在线' : 'Mock'}</span>
+            <span>生成模式：{modeLabel}</span>
           </div>
           <div className="settings-mode-actions">
             <button
@@ -368,7 +415,20 @@ export default function SettingsPage() {
             >
               使用 DeepSeek 在线生成
             </button>
+            <button
+              className="quiet-button"
+              type="button"
+              disabled={busy || generationMode === 'openai_gpt6_sol'}
+              onClick={() => modeMutation.mutate('openai_gpt6_sol')}
+            >
+              使用 OpenAI GPT-6 Sol
+            </button>
           </div>
+          <p className="settings-hint">
+            {status.account_notice ?? 'OpenAI 和 DeepSeek 是两套不同账户、API Key 和账单。'}
+            {' '}
+            {status.learning_notice ?? '模型选择目前适用于 AI 对话；学习出题仍是本地演示规则。'}
+          </p>
           {generationMode === 'deepseek' ? (
             <div className="settings-privacy-copy">
               <p>DeepSeek 在线生成、会外发当前问题与必要的少量证据。</p>
@@ -380,8 +440,14 @@ export default function SettingsPage() {
                 </p>
               ) : null}
             </div>
+          ) : generationMode === 'openai_gpt6_sol' ? (
+            <div className="settings-privacy-copy">
+              <p>OpenAI GPT-6 Sol 在线生成、会外发当前问题与必要的少量证据。API 费用由 OpenAI Platform 单独结算。</p>
+              <p>{openAi?.cost_estimate?.disclaimer ?? '价格是带日期的估算，不是 OpenAI 账单。'}</p>
+              {openAi?.configured ? null : <p>OpenAI 未配置 / 不可用。需要官方 Platform Key，不能借用其他产品额度。</p>}
+            </div>
           ) : (
-            <p className="settings-hint">当前是 Mock。启动、刷新和发送都不会调用 DeepSeek，也不会产生费用。</p>
+            <p className="settings-hint">当前是 Mock。启动、刷新和发送都不会调用 DeepSeek 或 OpenAI，也不会产生费用。</p>
           )}
           {modeMutation.isError && (
             <p className="settings-error-text" role="alert">
@@ -450,6 +516,65 @@ export default function SettingsPage() {
               查看官方价格
             </a>
           </div>
+
+          <form
+            className="settings-key-form"
+            onSubmit={(event) => {
+              event.preventDefault()
+              if (openAiKey.trim()) saveOpenAiMutation.mutate(openAiKey.trim())
+            }}
+          >
+            <label htmlFor="openai-api-key">OpenAI API Key</label>
+            <p className="settings-hint">
+              {openAi?.configured ? 'OpenAI Key 已配置' : 'OpenAI 未配置 / 不可用'}。删除或覆盖这一家不会影响 DeepSeek。
+              {openAi?.billing_note ? ` ${openAi.billing_note}` : ' API 费用由 OpenAI Platform 单独结算。'}
+            </p>
+            <div className="settings-key-input">
+              <input
+                id="openai-api-key"
+                type={showOpenAiKey ? 'text' : 'password'}
+                autoComplete="off"
+                value={openAiKey}
+                onChange={(event) => setOpenAiKey(event.target.value)}
+                placeholder={openAi?.configured ? '已配置；输入新 Key 可覆盖' : '粘贴 OpenAI Platform API Key'}
+                spellCheck={false}
+              />
+              <button
+                className="icon-button icon-button--small"
+                type="button"
+                onClick={() => setShowOpenAiKey((value) => !value)}
+                aria-label={showOpenAiKey ? '隐藏 OpenAI API Key' : '显示 OpenAI API Key'}
+              >
+                {showOpenAiKey ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
+              </button>
+            </div>
+            {saveOpenAiMutation.isError ? (
+              <p className="settings-error-text" role="alert">{errorText(saveOpenAiMutation.error)}</p>
+            ) : null}
+            <div className="settings-actions">
+              <button className="primary-button" type="submit" disabled={!openAiKey.trim() || busy}>
+                {saveOpenAiMutation.isPending ? '正在保存 OpenAI Key' : '保存 OpenAI Key'}
+              </button>
+              <button
+                className="danger-button"
+                type="button"
+                disabled={!openAi?.configured || busy}
+                onClick={() => deleteOpenAiMutation.mutate()}
+              >
+                {deleteOpenAiMutation.isPending ? '正在删除 OpenAI Key' : '删除 OpenAI Key'}
+              </button>
+            </div>
+          </form>
+          <div className="settings-links">
+            <a href={openAi?.source_url ?? 'https://platform.openai.com/api-keys'} target="_blank" rel="noreferrer">
+              <ExternalLink size={14} aria-hidden="true" />
+              获取 OpenAI API Key
+            </a>
+            <a href={openAi?.pricing_url ?? 'https://developers.openai.com/api/docs/models/gpt-6-sol'} target="_blank" rel="noreferrer">
+              <ExternalLink size={14} aria-hidden="true" />
+              查看 OpenAI 价格（{openAi?.cost_estimate.checked_on ?? '2026-09-27'}）
+            </a>
+          </div>
         </section>
 
         <section className="settings-section" aria-labelledby="usage-heading">
@@ -478,6 +603,14 @@ export default function SettingsPage() {
                   {usageQuery.data.totals.mock.output_tokens}
                 </span>
                 <span>在线操作：{usageQuery.data.totals.online.operations}</span>
+                {(usageQuery.data.by_provider ?? [])
+                  .filter((item) => item.provider === 'DEEPSEEK' || item.provider === 'OPENAI')
+                  .map((item) => (
+                    <span key={item.provider}>
+                      {item.provider === 'OPENAI' ? 'OpenAI' : 'DeepSeek'}：{item.operations} 次，估算{' '}
+                      {item.usage_complete ? item.estimated_usd ?? '未知' : '含未知 usage，未当作已结算 0'}
+                    </span>
+                  ))}
                 <span>
                   在线估算：
                   {usageQuery.data.estimated_online_usd == null
@@ -613,6 +746,42 @@ export default function SettingsPage() {
               已记录版本 {status.consent.version}，时间 {formatTime(status.consent.accepted_at)}
             </p>
           )}
+          <div className="settings-privacy-copy">
+            <p>OpenAI 需要单独同意。DeepSeek 的同意不能代替向 OpenAI 发送资料。</p>
+            <p>
+              第一次向 OpenAI 外发前：当前问题、必要上下文，以及知识库模式下至多两段受限证据，可能发送到 OpenAI。
+              模型选择目前适用于 AI 对话；学习出题仍是本地演示规则。
+            </p>
+          </div>
+          {openAi?.consent.accepted ? (
+            <p className="settings-success-text">
+              <Check size={14} aria-hidden="true" />
+              OpenAI 已记录版本 {openAi.consent.version}
+            </p>
+          ) : (
+            <>
+              <p>OpenAI 同意未记录</p>
+              <label className="settings-checkline">
+                <input
+                  type="checkbox"
+                  checked={openAiConsentChecked}
+                  onChange={(event) => setOpenAiConsentChecked(event.target.checked)}
+                />
+                <span>我已阅读 OpenAI 外发说明，并同意只向 OpenAI 发送上述必要文本。</span>
+              </label>
+              <button
+                className="quiet-button"
+                type="button"
+                disabled={!openAiConsentChecked || busy || !openAi}
+                onClick={() => openAi && openAiConsentMutation.mutate(openAi.consent.current_version)}
+              >
+                {openAiConsentMutation.isPending ? '正在记录 OpenAI 同意' : '确认 OpenAI 外发说明'}
+              </button>
+            </>
+          )}
+          {openAiConsentMutation.isError ? (
+            <p className="settings-error-text" role="alert">{errorText(openAiConsentMutation.error)}</p>
+          ) : null}
         </section>
 
         <section className="settings-section" aria-labelledby="privacy-heading">
@@ -724,6 +893,41 @@ export default function SettingsPage() {
             <p className="settings-hint">
               探测成功只说明这次请求可用，不代表账户余额充足，也不代表正式聊天已经开启。
             </p>
+          )}
+          <h3>OpenAI 连接探测</h3>
+          <p className="settings-hint">只在你主动点击并确认费用后发送一条测试请求。不会自动探测，也不会改用 DeepSeek。</p>
+          <label className="settings-checkline settings-checkline--probe">
+            <input
+              type="checkbox"
+              checked={confirmOpenAiTransfer}
+              onChange={(event) => setConfirmOpenAiTransfer(event.target.checked)}
+            />
+            <span>我确认本次会向 OpenAI 发送一条测试请求，并接受可能产生的 API 费用。</span>
+          </label>
+          <button className="primary-button" type="button" disabled={!canTestOpenAi} onClick={() => testOpenAiMutation.mutate()}>
+            {testOpenAiMutation.isPending ? '正在测试 OpenAI' : '测试 OpenAI 连接'}
+          </button>
+          {testOpenAiMutation.isError ? (
+            <p className="settings-error-text" role="alert">{errorText(testOpenAiMutation.error)}</p>
+          ) : null}
+          {openAi?.probe ? (
+            <div className={`settings-probe-result ${openAi.probe.status === 'success' ? 'settings-probe-result--success' : 'settings-probe-result--failure'}`}>
+              <div>
+                <span>OpenAI 最近检查</span>
+                <strong>{formatTime(openAi.probe.checked_at)}</strong>
+              </div>
+              <div>
+                <span>请求别名</span>
+                <strong>{openAi.probe.requested_model}</strong>
+              </div>
+              <div>
+                <span>实际模型</span>
+                <strong>{openAi.probe.resolved_model ?? '未返回'}</strong>
+              </div>
+              {openAi.probe.error_detail ? <p>{openAi.probe.error_detail}</p> : null}
+            </div>
+          ) : (
+            <p className="settings-hint">OpenAI 最近探测：尚未测试。未配置时显示不可用。</p>
           )}
         </section>
 

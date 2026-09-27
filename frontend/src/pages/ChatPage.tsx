@@ -97,12 +97,16 @@ export default function ChatPage() {
     staleTime: 5_000,
   })
   const generationMode = providerQuery.data?.generation_mode ?? 'mock'
-  const onlineGeneration = generationMode === 'deepseek'
-  const onlineReady = Boolean(
-    providerQuery.data?.configured
-    && providerQuery.data.consent.accepted
-    && providerQuery.data.credential_store.available,
-  )
+  const onlineGeneration = generationMode === 'deepseek' || generationMode === 'openai_gpt6_sol'
+  const openAiCard = providerQuery.data?.providers?.find((item) => item.provider_id === 'openai_gpt6_sol')
+  const selectedOnline = generationMode === 'openai_gpt6_sol' ? openAiCard : undefined
+  const onlineReady = generationMode === 'openai_gpt6_sol'
+    ? Boolean(openAiCard?.configured && openAiCard.consent.accepted && openAiCard.credential_store.available)
+    : Boolean(
+      providerQuery.data?.configured
+      && providerQuery.data.consent.accepted
+      && providerQuery.data.credential_store.available,
+    )
   const onlineBlocked = onlineGeneration && (!onlineReady || !confirmOnlineSend)
 
   const conversationsQuery = useQuery({
@@ -260,10 +264,11 @@ export default function ChatPage() {
     setDraft('')
     try {
       const result = selectedConversationId && selectedConversation
-        ? await createMessage(selectedConversationId, content, selectedConversation.row_version)
+        ? await createMessage(selectedConversationId, content, selectedConversation.row_version, undefined, onlineGeneration && confirmOnlineSend)
         : await createConversation(content, {
           mode: chatMode === 'KNOWLEDGE_CHAT' ? 'KNOWLEDGE_CHAT' : 'GENERAL_CHAT',
           knowledgeBaseId: pendingKnowledgeBaseId || undefined,
+          confirmProviderCharge: onlineGeneration && confirmOnlineSend,
         })
       operationRef.current = result.operation
       setOperation(result.operation)
@@ -344,7 +349,7 @@ export default function ChatPage() {
         <div className="chat-main">
           <div className="chat-mode-bar">
             <span className="chat-mode-badge">{chatMode === 'KNOWLEDGE_CHAT' ? <BookOpen size={14} aria-hidden="true" /> : <MessageSquare size={14} aria-hidden="true" />} {chatMode === 'KNOWLEDGE_CHAT' ? '知识库模式' : '普通聊天'}</span>
-            <span className="chat-provider-banner">{onlineGeneration ? 'DeepSeek 在线生成、会外发当前问题与必要的少量证据。' : 'Mock 生成，不会外发，也不会产生 DeepSeek 费用。'}</span>
+            <span className="chat-provider-banner">{generationMode === 'openai_gpt6_sol' ? 'OpenAI GPT-6 Sol 在线生成、会外发当前问题与必要的少量证据。API 费用由 OpenAI Platform 单独结算。' : onlineGeneration ? 'DeepSeek 在线生成、会外发当前问题与必要的少量证据。' : 'Mock 生成，不会外发，也不会产生 DeepSeek 费用。'}</span>
             {chatMode === 'KNOWLEDGE_CHAT' ? <span className="chat-mode-note">范围：{scopeName}</span> : <span className="chat-mode-note">回答不使用知识库资料</span>}
             {operation ? <span className={`chat-operation-status chat-operation-status--${operation.status.toLowerCase()}`}>{statusLabel(operation.status)}</span> : null}
           </div>
@@ -405,7 +410,7 @@ export default function ChatPage() {
             <form className="chat-composer" onSubmit={submit}>
               {onlineGeneration ? (
                 <div className="chat-online-gate">
-                  <p>{providerQuery.data?.cost_estimate?.disclaimer ?? '费用估算不是严格美元限额。'} 知识库问题用满本地上限时粗估不超过 {providerQuery.data?.cost_estimate?.knowledge_question_estimated_usd_ceiling ?? '0.001'} 美元。</p>
+                  <p>{(selectedOnline?.cost_estimate ?? providerQuery.data?.cost_estimate)?.disclaimer ?? '费用估算不是严格美元限额。'} 知识库问题用满本地上限时粗估不超过 {(selectedOnline?.cost_estimate ?? providerQuery.data?.cost_estimate)?.knowledge_question_estimated_usd_ceiling ?? '0.001'} 美元。</p>
                   {!onlineReady ? <p>需要先在设置页保存系统凭据中的 Key，并确认当前版本的外发说明。页面不会接收或保存 Key。</p> : null}
                   <label className="settings-checkline">
                     <input type="checkbox" checked={confirmOnlineSend} onChange={(event) => setConfirmOnlineSend(event.target.checked)} />

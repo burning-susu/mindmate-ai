@@ -169,7 +169,7 @@ def test_purge_boundaries_restore_race_and_idempotency(tmp_path: Path) -> None:
             missing_row.purge_after = None
             raced_row.purge_after = now - timedelta(days=1)
             session.commit()
-            raced_version = raced_row.row_version
+            _raced_version = raced_row.row_version
 
         with factory() as session:
             first = purge_expired_history(session, now=now, limit=20)

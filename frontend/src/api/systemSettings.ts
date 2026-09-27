@@ -37,6 +37,7 @@ export type AiUsageSummary = {
   totals: { mock: UsageBucket; online: UsageBucket }
   daily: Array<{ date: string; mock: UsageBucket; online: UsageBucket }>
   by_model: Array<{ channel: string; model: string } & UsageBucket>
+  by_provider?: Array<{ provider: string } & UsageBucket>
   online_actual_usage_available: boolean
   online_actual_usage_message: string | null
   unknown_usage_operations: number

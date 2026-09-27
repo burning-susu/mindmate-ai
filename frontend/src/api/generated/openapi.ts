@@ -38,8 +38,11 @@ export interface components {
     "probe"?: components["ConnectionProbeResponse"] | null;
     "source_url": string;
     "pricing_url": string;
-    "generation_mode"?: "mock" | "deepseek";
-    "cost_estimate": components["CostEstimateResponse"]
+    "generation_mode"?: "mock" | "deepseek" | "openai_gpt6_sol";
+    "cost_estimate": components["CostEstimateResponse"];
+    "providers"?: Array<components["OnlineProviderCard"]>;
+    "learning_notice"?: string;
+    "account_notice"?: string
   };
   "AnswerVersionResponse": {
     "answer_version_id": string;
@@ -342,7 +345,8 @@ export interface components {
     "mode"?: string;
     "source_scope"?: Record<string, unknown> | null;
     "first_message": string;
-    "client_request_id"?: string | null
+    "client_request_id"?: string | null;
+    "confirm_provider_charge"?: boolean
   };
   "FolderCreate": {
     "name": string;
@@ -369,7 +373,7 @@ export interface components {
     "updated_at": string
   };
   "GenerationModeRequest": {
-    "mode": "mock" | "deepseek"
+    "mode": "mock" | "deepseek" | "openai_gpt6_sol"
   };
   "HTTPValidationError": {
     "detail"?: Array<components["ValidationError"]>
@@ -693,6 +697,7 @@ export interface components {
   "MessageCreateRequest": {
     "content": string;
     "client_request_id"?: string | null;
+    "confirm_provider_charge"?: boolean;
     "expected_conversation_version"?: number | null
   };
   "MessageListResponse": {
@@ -716,6 +721,20 @@ export interface components {
     "updated_at": string;
     "completed_at": string | null;
     "citations"?: Array<components["CitationResponse"]>
+  };
+  "OnlineProviderCard": {
+    "provider_id": string;
+    "provider": string;
+    "display_name": string;
+    "configured": boolean;
+    "credential_store": components["CredentialStoreResponse"];
+    "requested_model": string;
+    "consent": components["ConsentResponse"];
+    "probe"?: components["ConnectionProbeResponse"] | null;
+    "source_url": string;
+    "pricing_url": string;
+    "cost_estimate": components["CostEstimateResponse"];
+    "billing_note": string
   };
   "ProblemDetail": {
     "type": string;
@@ -1045,6 +1064,21 @@ export interface operations {
   };
   "POST /api/v1/ai/consent": {
     operationId: "accept_external_ai_consent_api_v1_ai_consent_post"
+  };
+  "POST /api/v1/ai/provider/openai/key": {
+    operationId: "save_openai_provider_key_api_v1_ai_provider_openai_key_post"
+  };
+  "DELETE /api/v1/ai/provider/openai/key": {
+    operationId: "delete_openai_provider_key_api_v1_ai_provider_openai_key_delete"
+  };
+  "POST /api/v1/ai/provider/openai/test": {
+    operationId: "test_openai_provider_connection_api_v1_ai_provider_openai_test_post"
+  };
+  "GET /api/v1/ai/provider/openai/consent": {
+    operationId: "get_openai_consent_api_v1_ai_provider_openai_consent_get"
+  };
+  "POST /api/v1/ai/provider/openai/consent": {
+    operationId: "accept_openai_consent_api_v1_ai_provider_openai_consent_post"
   };
   "GET /api/v1/conversations": {
     operationId: "list_conversations_api_v1_conversations_get"

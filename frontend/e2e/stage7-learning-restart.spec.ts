@@ -91,7 +91,7 @@ test('同一学习会话在后端进程重启后保持题目、作答和引用',
   await page.goto(`/knowledge-bases/${knowledgeBaseId}`)
   await expect(page.getByText('索引就绪').first()).toBeVisible()
   await page.getByRole('button', { name: '基于此知识库学习' }).click()
-  await expect(page.getByText('本地规则模拟演示，未调用真实 DeepSeek。学习出题不读取聊天设置里的在线模式。')).toBeVisible()
+  await expect(page.getByText('模型选择目前适用于 AI 对话；学习出题仍是本地演示规则。')).toBeVisible()
   await page.getByRole('textbox', { name: '学习主题' }).fill(topic)
   await page.getByRole('textbox', { name: '学习目标' }).fill(goal)
   const createResponsePromise = page.waitForResponse((response) =>
@@ -204,7 +204,7 @@ test('演示入口再次打开同一学习会话', async ({ page }) => {
   test.skip(!sessionId || !knowledgeBaseId, '请先完成一题并记下会话 ID。')
   test.setTimeout(120_000)
   await page.goto(`/learning/session/${sessionId}`)
-  await expect(page.getByText('本地规则模拟演示，未调用真实 DeepSeek。学习出题不读取聊天设置里的在线模式。')).toBeVisible()
+  await expect(page.getByText('模型选择目前适用于 AI 对话；学习出题仍是本地演示规则。')).toBeVisible()
   await expect(page.getByText(topic)).toBeVisible()
   await expect(page.getByLabel('作答反馈')).toContainText('结果：不正确')
   await expect(page.getByRole('button', { name: '[1] 服务超时策略.txt' })).toBeVisible()

@@ -25,7 +25,22 @@ export type ConnectionProbe = {
   retryable: boolean | null
 }
 
-export type GenerationMode = 'mock' | 'deepseek'
+export type GenerationMode = 'mock' | 'deepseek' | 'openai_gpt6_sol'
+
+export type OnlineProviderCard = {
+  provider_id: string
+  provider: string
+  display_name: string
+  configured: boolean
+  credential_store: AiProviderStatus['credential_store']
+  requested_model: string
+  consent: ConsentStatus
+  probe: ConnectionProbe | null
+  source_url: string
+  pricing_url: string
+  cost_estimate: CostEstimate
+  billing_note: string
+}
 
 export type CostEstimate = {
   checked_on: string
@@ -58,6 +73,9 @@ export type AiProviderStatus = {
   pricing_url: string
   generation_mode?: GenerationMode
   cost_estimate?: CostEstimate
+  providers?: OnlineProviderCard[]
+  learning_notice?: string
+  account_notice?: string
 }
 
 export function getAiProviderStatus(signal?: AbortSignal) {
@@ -91,6 +109,31 @@ export function setAiGenerationMode(mode: GenerationMode) {
 
 export function acceptExternalAiConsent(version: string) {
   return apiRequest<ConsentStatus>('/api/v1/ai/consent', {
+    method: 'POST',
+    body: JSON.stringify({ version }),
+  })
+}
+
+export function saveOpenAiProviderKey(apiKey: string) {
+  return apiRequest<AiProviderStatus>('/api/v1/ai/provider/openai/key', {
+    method: 'POST',
+    body: JSON.stringify({ api_key: apiKey }),
+  })
+}
+
+export function deleteOpenAiProviderKey() {
+  return apiRequest<AiProviderStatus>('/api/v1/ai/provider/openai/key', { method: 'DELETE' })
+}
+
+export function testOpenAiProviderConnection(confirmExternalTransfer: boolean) {
+  return apiRequest<AiProviderStatus>('/api/v1/ai/provider/openai/test', {
+    method: 'POST',
+    body: JSON.stringify({ confirm_external_transfer: confirmExternalTransfer }),
+  })
+}
+
+export function acceptOpenAiConsent(version: string) {
+  return apiRequest<ConsentStatus>('/api/v1/ai/provider/openai/consent', {
     method: 'POST',
     body: JSON.stringify({ version }),
   })

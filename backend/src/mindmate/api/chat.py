@@ -64,11 +64,13 @@ class FirstConversationRequest(BaseModel):
     source_scope: dict[str, Any] | None = None
     first_message: str = Field(min_length=1, max_length=10_000)
     client_request_id: str | None = Field(default=None, min_length=1, max_length=128)
+    confirm_provider_charge: bool = False
 
 
 class MessageCreateRequest(BaseModel):
     content: str = Field(min_length=1, max_length=10_000)
     client_request_id: str | None = Field(default=None, min_length=1, max_length=128)
+    confirm_provider_charge: bool = False
     expected_conversation_version: int | None = Field(default=None, ge=1)
 
 

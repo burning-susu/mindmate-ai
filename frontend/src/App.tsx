@@ -111,7 +111,7 @@ function AppShell() {
         <div className="content-area">
           <Routes>
             <Route path="/" element={<HomePage />} />
-            <Route path="/learning" element={<Placeholder title="学习" description="最小演示从已索引就绪的知识库进入，一次只做一题。打开本页不会创建学习会话。本地规则模拟演示，未调用真实 DeepSeek。" action={{ to: '/history?tab=learning', label: '学习历史' }} />} />
+            <Route path="/learning" element={<Placeholder title="学习" description="最小演示从已索引就绪的知识库进入，一次只做一题。打开本页不会创建学习会话。模型选择目前适用于 AI 对话；学习出题仍是本地演示规则。" action={{ to: '/history?tab=learning', label: '学习历史' }} />} />
             <Route path="/learning/new" element={<LearningNewPage />} />
             <Route path="/learning/session/:sessionId" element={<LearningSessionPage />} />
             <Route path="/chat" element={<ChatPage />} />

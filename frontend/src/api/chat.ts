@@ -47,6 +47,7 @@ export async function createConversation(
     mode?: ChatMode
     knowledgeBaseId?: string
     idempotencyKey?: string
+    confirmProviderCharge?: boolean
   } = {},
 ): Promise<Submission> {
   const idempotencyKey = options.idempotencyKey ?? uuidv7()
@@ -61,6 +62,7 @@ export async function createConversation(
       source_scope: mode === 'KNOWLEDGE_CHAT' && options.knowledgeBaseId
         ? { scope_type: 'KNOWLEDGE_BASE', knowledge_base_id: options.knowledgeBaseId }
         : null,
+      confirm_provider_charge: Boolean(options.confirmProviderCharge),
     }),
   })
 }
@@ -70,6 +72,7 @@ export async function createMessage(
   content: string,
   expectedConversationVersion: number,
   idempotencyKey = uuidv7(),
+  confirmProviderCharge = false,
 ): Promise<Submission> {
   return apiRequest(`/api/v1/conversations/${conversationId}/messages`, {
     method: 'POST',
@@ -78,6 +81,7 @@ export async function createMessage(
       content,
       expected_conversation_version: expectedConversationVersion,
       client_request_id: idempotencyKey,
+      confirm_provider_charge: confirmProviderCharge,
     }),
   })
 }

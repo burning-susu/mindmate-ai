@@ -1839,6 +1839,167 @@
         }
       }
     },
+    "/api/v1/ai/provider/openai/key": {
+      "post": {
+        "tags": [
+          "ai-provider"
+        ],
+        "summary": "Save Openai Provider Key",
+        "operationId": "save_openai_provider_key_api_v1_ai_provider_openai_key_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApiKeyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiProviderStatusResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "ai-provider"
+        ],
+        "summary": "Delete Openai Provider Key",
+        "operationId": "delete_openai_provider_key_api_v1_ai_provider_openai_key_delete",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiProviderStatusResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ai/provider/openai/test": {
+      "post": {
+        "tags": [
+          "ai-provider"
+        ],
+        "summary": "Test Openai Provider Connection",
+        "operationId": "test_openai_provider_connection_api_v1_ai_provider_openai_test_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectionTestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiProviderStatusResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ai/provider/openai/consent": {
+      "get": {
+        "tags": [
+          "ai-provider"
+        ],
+        "summary": "Get Openai Consent",
+        "operationId": "get_openai_consent_api_v1_ai_provider_openai_consent_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsentResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "ai-provider"
+        ],
+        "summary": "Accept Openai Consent",
+        "operationId": "accept_openai_consent_api_v1_ai_provider_openai_consent_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConsentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsentResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/conversations": {
       "get": {
         "tags": [
@@ -5257,13 +5418,31 @@
             "type": "string",
             "enum": [
               "mock",
-              "deepseek"
+              "deepseek",
+              "openai_gpt6_sol"
             ],
             "title": "Generation Mode",
             "default": "mock"
           },
           "cost_estimate": {
             "$ref": "#/components/schemas/CostEstimateResponse"
+          },
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/OnlineProviderCard"
+            },
+            "type": "array",
+            "title": "Providers"
+          },
+          "learning_notice": {
+            "type": "string",
+            "title": "Learning Notice",
+            "default": ""
+          },
+          "account_notice": {
+            "type": "string",
+            "title": "Account Notice",
+            "default": ""
           }
         },
         "type": "object",
@@ -7266,6 +7445,11 @@
               }
             ],
             "title": "Client Request Id"
+          },
+          "confirm_provider_charge": {
+            "type": "boolean",
+            "title": "Confirm Provider Charge",
+            "default": false
           }
         },
         "type": "object",
@@ -7423,7 +7607,8 @@
             "type": "string",
             "enum": [
               "mock",
-              "deepseek"
+              "deepseek",
+              "openai_gpt6_sol"
             ],
             "title": "Mode"
           }
@@ -9532,6 +9717,11 @@
             ],
             "title": "Client Request Id"
           },
+          "confirm_provider_charge": {
+            "type": "boolean",
+            "title": "Confirm Provider Charge",
+            "default": false
+          },
           "expected_conversation_version": {
             "anyOf": [
               {
@@ -9706,6 +9896,76 @@
           "completed_at"
         ],
         "title": "MessageResponse"
+      },
+      "OnlineProviderCard": {
+        "properties": {
+          "provider_id": {
+            "type": "string",
+            "title": "Provider Id"
+          },
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "configured": {
+            "type": "boolean",
+            "title": "Configured"
+          },
+          "credential_store": {
+            "$ref": "#/components/schemas/CredentialStoreResponse"
+          },
+          "requested_model": {
+            "type": "string",
+            "title": "Requested Model"
+          },
+          "consent": {
+            "$ref": "#/components/schemas/ConsentResponse"
+          },
+          "probe": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConnectionProbeResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_url": {
+            "type": "string",
+            "title": "Source Url"
+          },
+          "pricing_url": {
+            "type": "string",
+            "title": "Pricing Url"
+          },
+          "cost_estimate": {
+            "$ref": "#/components/schemas/CostEstimateResponse"
+          },
+          "billing_note": {
+            "type": "string",
+            "title": "Billing Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "provider_id",
+          "provider",
+          "display_name",
+          "configured",
+          "credential_store",
+          "requested_model",
+          "consent",
+          "source_url",
+          "pricing_url",
+          "cost_estimate",
+          "billing_note"
+        ],
+        "title": "OnlineProviderCard"
       },
       "ProblemDetail": {
         "properties": {

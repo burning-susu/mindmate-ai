@@ -10,11 +10,15 @@ from sqlalchemy.orm import Session
 
 from mindmate.ai.providers.base import ProviderRequestError
 from mindmate.ai.providers.deepseek import DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, DeepSeekChatProvider
+from mindmate.ai.providers.openai import OPENAI_MODEL, OpenAIChatProvider
 from mindmate.api.files import get_session
 from mindmate.application.local_restore import restore_provider_reconfirm_required
 from mindmate.application.provider_configuration import (
     DEEPSEEK_SECRET_REFERENCE,
     EXTERNAL_AI_CONSENT_VERSION,
+    OPENAI_CONSENT_VERSION,
+    OPENAI_PROVIDER_ID,
+    OPENAI_SECRET_REFERENCE,
     delete_api_key,
     provider_lock,
     provider_status,
@@ -76,6 +80,21 @@ class ConnectionProbeResponse(BaseModel):
     retryable: bool | None = None
 
 
+class OnlineProviderCard(BaseModel):
+    provider_id: str
+    provider: str
+    display_name: str
+    configured: bool
+    credential_store: CredentialStoreResponse
+    requested_model: str
+    consent: ConsentResponse
+    probe: ConnectionProbeResponse | None = None
+    source_url: str
+    pricing_url: str
+    cost_estimate: CostEstimateResponse
+    billing_note: str
+
+
 class CostEstimateResponse(BaseModel):
     checked_on: str
     model: str
@@ -91,6 +110,9 @@ class CostEstimateResponse(BaseModel):
     disclaimer: str
 
 
+OnlineProviderCard.model_rebuild()
+
+
 class AiProviderStatusResponse(BaseModel):
     provider: str
     display_name: str
@@ -101,8 +123,11 @@ class AiProviderStatusResponse(BaseModel):
     probe: ConnectionProbeResponse | None = None
     source_url: str
     pricing_url: str
-    generation_mode: Literal["mock", "deepseek"] = "mock"
+    generation_mode: Literal["mock", "deepseek", "openai_gpt6_sol"] = "mock"
     cost_estimate: CostEstimateResponse
+    providers: list[OnlineProviderCard] = Field(default_factory=list)
+    learning_notice: str = ""
+    account_notice: str = ""
 
 
 class ApiKeyRequest(BaseModel):
@@ -118,7 +143,7 @@ class ConsentRequest(BaseModel):
 
 
 class GenerationModeRequest(BaseModel):
-    mode: Literal["mock", "deepseek"]
+    mode: Literal["mock", "deepseek", "openai_gpt6_sol"]
 
 
 def _credential_store(request: Request) -> CredentialStorePort:
@@ -264,7 +289,7 @@ def set_ai_generation_mode(
     payload: GenerationModeRequest,
     session: Session = Depends(get_session),
 ) -> dict[str, Any]:
-    if payload.mode == "deepseek" and restore_provider_reconfirm_required(session):
+    if payload.mode in {"deepseek", OPENAI_PROVIDER_ID} and restore_provider_reconfirm_required(session):
         raise AiProviderApiError(
             "RESTORE_PROVIDER_RECONFIRM_REQUIRED",
             "数据已恢复。确认重新配置前保持 Mock，不会切换到在线外发。",
@@ -298,4 +323,112 @@ def accept_external_ai_consent(
 )
 def get_external_ai_consent(session: Session = Depends(get_session)) -> dict[str, Any]:
     return read_consent(session)
+
+
+def _openai_provider(request: Request) -> OpenAIChatProvider:
+    provider = getattr(request.app.state, "openai_provider", None)
+    if not isinstance(provider, OpenAIChatProvider):
+        settings = getattr(request.app.state, "settings", None)
+        timeout = getattr(settings, "provider_timeout_seconds", 60.0)
+        provider = OpenAIChatProvider(timeout_seconds=float(timeout))
+        request.app.state.openai_provider = provider
+    return provider
+
+
+@router.post("/ai/provider/openai/key", response_model=AiProviderStatusResponse, tags=["ai-provider"])
+def save_openai_provider_key(
+    request: Request,
+    payload: ApiKeyRequest,
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    store = _credential_store(request)
+    secret = payload.api_key.get_secret_value()
+    try:
+        save_api_key(session, store, secret, provider_id=OPENAI_PROVIDER_ID)
+        return _status(request, session, store)
+    except CredentialStoreError as exc:
+        raise _store_error(exc) from exc
+    finally:
+        secret = ""
+
+
+@router.delete("/ai/provider/openai/key", response_model=AiProviderStatusResponse, tags=["ai-provider"])
+def delete_openai_provider_key(
+    request: Request, session: Session = Depends(get_session)
+) -> dict[str, Any]:
+    store = _credential_store(request)
+    try:
+        delete_api_key(session, store, provider_id=OPENAI_PROVIDER_ID)
+        return _status(request, session, store)
+    except CredentialStoreError as exc:
+        raise _store_error(exc) from exc
+
+
+@router.post("/ai/provider/openai/test", response_model=AiProviderStatusResponse, tags=["ai-provider"])
+def test_openai_provider_connection(
+    request: Request,
+    payload: ConnectionTestRequest,
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    if not payload.confirm_external_transfer:
+        raise AiProviderApiError(
+            "EXTERNAL_TRANSFER_CONFIRMATION_REQUIRED",
+            "连接测试前必须确认会向 OpenAI 发送一条测试请求，并可能产生 API 费用。",
+            400,
+        )
+    if restore_provider_reconfirm_required(session):
+        raise AiProviderApiError(
+            "RESTORE_PROVIDER_RECONFIRM_REQUIRED",
+            "数据已恢复。请先确认重新配置，当前不会读取密钥或自动外发。",
+            409,
+        )
+    try:
+        assert_external_budget_allows(session)
+    except BudgetRejected as exc:
+        raise AiProviderApiError(exc.code, exc.detail, 409) from exc
+    store = _credential_store(request)
+    provider = _openai_provider(request)
+    with provider_lock():
+        try:
+            secret = store.get_secret(OPENAI_SECRET_REFERENCE)
+        except CredentialStoreError as exc:
+            raise _store_error(exc) from exc
+        if not secret:
+            raise AiProviderApiError("PROVIDER_KEY_MISSING", "请先保存 OpenAI API Key。", 409)
+        try:
+            result = provider.test_connection(secret)
+        except ProviderRequestError as exc:
+            save_probe_failure(
+                session,
+                OPENAI_MODEL,
+                exc.code,
+                exc.detail,
+                exc.retryable,
+                provider_id=OPENAI_PROVIDER_ID,
+            )
+            raise
+        finally:
+            secret = ""
+        save_probe_success(session, result, provider_id=OPENAI_PROVIDER_ID)
+    return _status(request, session, store)
+
+
+@router.post("/ai/provider/openai/consent", response_model=ConsentResponse, tags=["ai-provider"])
+def accept_openai_consent(
+    payload: ConsentRequest, session: Session = Depends(get_session)
+) -> dict[str, Any]:
+    if payload.version != OPENAI_CONSENT_VERSION:
+        raise AiProviderApiError(
+            "CONSENT_VERSION_UNSUPPORTED",
+            "OpenAI 外发说明版本已变化，请重新阅读后确认。",
+            400,
+        )
+    return record_consent(session, OPENAI_PROVIDER_ID)
+
+
+@router.get("/ai/provider/openai/consent", response_model=ConsentResponse, tags=["ai-provider"])
+def get_openai_consent(session: Session = Depends(get_session)) -> dict[str, Any]:
+    return read_consent(session, OPENAI_PROVIDER_ID)
+
+
 __all__ = ["router"]

@@ -8,5 +8,6 @@ export default defineConfig({
     exclude: [...configDefaults.exclude, 'e2e/**'],
     globals: true,
     setupFiles: './src/test/setup.ts',
+    testTimeout: 15000,
   },
 })

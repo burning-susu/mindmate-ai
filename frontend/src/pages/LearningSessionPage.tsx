@@ -15,7 +15,7 @@ import {
 import { type KnowledgeBaseItem } from '../api/knowledgeBases'
 import { CitedText, SourceCitationPanel } from '../components/SourceCitationPanel'
 
-const MOCK_BANNER = '本地规则模拟演示，未调用真实 DeepSeek。学习出题不读取聊天设置里的在线模式。'
+const MOCK_BANNER = '模型选择目前适用于 AI 对话；学习出题仍是本地演示规则。'
 
 function resultLabel(result: string) {
   if (result === 'CORRECT') return '正确'
