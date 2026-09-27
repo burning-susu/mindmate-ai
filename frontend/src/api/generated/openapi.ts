@@ -150,7 +150,9 @@ export interface components {
   };
   "ConversationHistoryListResponse": {
     "items": Array<components["ConversationHistoryItem"]>;
-    "next_cursor"?: string | null
+    "next_cursor"?: string | null;
+    "search_index_status"?: string;
+    "search_truncated"?: boolean
   };
   "ConversationLifecycleResponse": {
     "conversation_id": string;
@@ -318,7 +320,8 @@ export interface components {
   };
   "HistoryLocation": {
     "section": string;
-    "snippet": string
+    "snippet": string;
+    "record_id"?: string | null
   };
   "HistoryTrashItem": {
     "object_type": string;
@@ -545,7 +548,9 @@ export interface components {
   };
   "LearningHistoryListResponse": {
     "items": Array<components["LearningHistoryItem"]>;
-    "next_cursor"?: string | null
+    "next_cursor"?: string | null;
+    "search_index_status"?: string;
+    "search_truncated"?: boolean
   };
   "LearningLifecycleResponse": {
     "learning_session_id": string;

@@ -88,6 +88,8 @@ export default function ChatPage() {
   const [streamNonce, setStreamNonce] = useState(0)
   const [selectedCitation, setSelectedCitation] = useState<Citation | null>(null)
   const [confirmOnlineSend, setConfirmOnlineSend] = useState(false)
+  const [missingMessage, setMissingMessage] = useState(false)
+  const focusMessageId = searchParams.get('message') ?? ''
   const operationRef = useRef<Operation | null>(null)
   const providerQuery = useQuery({
     queryKey: ['ai-provider'],
@@ -168,6 +170,16 @@ export default function ChatPage() {
       })
       .catch(() => undefined)
   }, [messagesQuery.data, selectedConversation, selectedConversationId])
+
+  useEffect(() => {
+    if (!focusMessageId || !selectedConversationId || messagesQuery.isLoading) return
+    const match = messages.some((message) => message.message_id === focusMessageId)
+    setMissingMessage(!match && messages.length > 0)
+    if (!match) return
+    const node = document.getElementById(`message-${focusMessageId}`)
+    node?.scrollIntoView({ block: 'center' })
+    node?.classList.add('history-target')
+  }, [focusMessageId, messages, messagesQuery.isLoading, selectedConversationId])
 
   useEffect(() => {
     const currentOperation = operation
@@ -346,8 +358,10 @@ export default function ChatPage() {
               <div className="chat-empty"><LoaderCircle className="spin" size={24} /><span>正在加载消息</span></div>
             ) : messages.length === 0 ? (
               <div className="chat-empty"><span>这个会话还没有消息。</span></div>
-            ) : messages.map((message) => (
-              <article className={`chat-message chat-message--${message.role.toLowerCase()}`} key={message.message_id}>
+            ) : <>
+              {missingMessage ? <div className="chat-alert chat-alert--warning" role="alert">这条消息不在当前会话里，或已经归档。不会新建会话，也不会重新生成回答。</div> : null}
+              {messages.map((message) => (
+              <article className={`chat-message chat-message--${message.role.toLowerCase()}`} id={`message-${message.message_id}`} key={message.message_id} tabIndex={-1}>
                 <div className="chat-message__meta"><strong>{message.role === 'USER' ? '你' : 'MindMate'}</strong>{message.role === 'ASSISTANT' && message.status !== 'COMPLETED' ? <span>{statusLabel(message.status)}</span> : null}</div>
                 {message.role === 'ASSISTANT' ? <>
                   <AssistantBody content={message.content} citations={message.citations ?? []} onCitation={setSelectedCitation} />
@@ -356,6 +370,7 @@ export default function ChatPage() {
                 </> : <p className="chat-user-content">{message.content}</p>}
               </article>
             ))}
+            </>}
           </div>
 
           {!selectedConversationId ? (

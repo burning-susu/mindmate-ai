@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from mindmate.application.citations import CitationBindingError, bind_feedback_citations
 from mindmate.application.evidence_gate import INSUFFICIENT_MESSAGE
+from mindmate.application.history_search_index import sync_learning_search
 from mindmate.application.hybrid_search import HybridAssessmentResult, HybridCandidate
 from mindmate.application.learning_question_draft import (
     MOCK_MODEL,
@@ -931,6 +932,9 @@ def trash_learning_session(
             412,
             current_row_version=record.row_version,
         )
+    session.expire(record)
+    session.refresh(record)
+    sync_learning_search(session, learning_session_id)
     session.commit()
     session.expire(record)
     session.refresh(record)
@@ -973,6 +977,9 @@ def restore_learning_session(
             412,
             current_row_version=record.row_version,
         )
+    session.expire(record)
+    session.refresh(record)
+    sync_learning_search(session, learning_session_id)
     session.commit()
     session.expire(record)
     session.refresh(record)

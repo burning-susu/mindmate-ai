@@ -6,11 +6,18 @@ History does not own conversation rows and does not copy messages.
 from __future__ import annotations
 
 import base64
+import hashlib
 from datetime import UTC, datetime
 
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
+from mindmate.application.history_search_index import (
+    OWNER_CONVERSATION,
+    collect_hits,
+    locations_for,
+    search_index_status,
+)
 from mindmate.infrastructure.models import (
     AnswerVersion,
     Citation,
@@ -49,19 +56,38 @@ def list_conversation_history(
     active_from: datetime | None = None,
     active_before: datetime | None = None,
 ) -> dict[str, object]:
-    """Active conversations only. Keyword matches title or the saved list summary.
+    """Active conversations only. A keyword reads the local search projection.
 
-    The summary is the same trimmed latest user message already shown in the list.
-    Full message bodies, completed answers and internal prompts are not scanned.
+    Blank keywords keep the unfiltered list. The projection contains titles,
+    non-archived user messages and completed assistant messages.
     """
     keyword = _keyword(q)
-    stamp, conversation_id = _decode_cursor(cursor)
+    signature = _filter_signature(
+        q=keyword,
+        mode=mode,
+        status=status,
+        source_status=source_status,
+        active_from=active_from,
+        active_before=active_before,
+    )
+    stamp, conversation_id = _decode_cursor(cursor, signature)
+    hits: dict[str, list[dict[str, str]]] = {}
+    truncated = False
+    if keyword is not None:
+        hits, truncated = collect_hits(session, OWNER_CONVERSATION, keyword)
+        if not hits:
+            return {
+                "items": [],
+                "next_cursor": None,
+                "search_index_status": search_index_status(session),
+                "search_truncated": truncated,
+            }
     collected: list[dict[str, object]] = []
     seek_stamp = stamp
     seek_id = conversation_id
     while len(collected) <= limit:
         statement = _active_statement(
-            keyword=keyword,
+            owner_ids=set(hits) if keyword is not None else None,
             mode=mode,
             active_from=active_from,
             active_before=active_before,
@@ -87,7 +113,7 @@ def list_conversation_history(
                 continue
             if source_status is not None and item["source_status"] != source_status:
                 continue
-            item["locations"] = _locations(keyword, str(item["title"]), str(item["summary"]))
+            item["locations"] = locations_for(hits, row.conversation_id) if keyword else []
             collected.append(item)
             if len(collected) > limit:
                 filled = True
@@ -99,8 +125,13 @@ def list_conversation_history(
     if len(collected) > limit and page:
         updated = page[-1]["updated_at"]
         if isinstance(updated, datetime):
-            next_cursor = _encode_cursor(updated, str(page[-1]["conversation_id"]))
-    return {"items": page, "next_cursor": next_cursor}
+            next_cursor = _encode_cursor(updated, str(page[-1]["conversation_id"]), signature)
+    return {
+        "items": page,
+        "next_cursor": next_cursor,
+        "search_index_status": search_index_status(session),
+        "search_truncated": truncated,
+    }
 
 
 def list_trashed_conversations(
@@ -149,7 +180,7 @@ def list_trashed_conversations(
 
 def _active_statement(
     *,
-    keyword: str | None,
+    owner_ids: set[str] | None,
     mode: str | None,
     active_from: datetime | None,
     active_before: datetime | None,
@@ -157,31 +188,14 @@ def _active_statement(
     seek_id: str | None,
 ):
     statement = select(Conversation).where(Conversation.deleted_at.is_(None))
+    if owner_ids is not None:
+        statement = statement.where(Conversation.conversation_id.in_(owner_ids))
     if mode is not None:
         statement = statement.where(Conversation.current_mode == mode)
     if active_from is not None:
         statement = statement.where(Conversation.last_active_at >= active_from)
     if active_before is not None:
         statement = statement.where(Conversation.last_active_at < active_before)
-    if keyword is not None:
-        pattern = _like_pattern(keyword)
-        latest_summary = (
-            select(func.substr(Message.content, 1, SUMMARY_LIMIT))
-            .where(
-                Message.conversation_id == Conversation.conversation_id,
-                Message.archived_at.is_(None),
-                Message.role == "USER",
-            )
-            .order_by(Message.sequence_number.desc())
-            .limit(1)
-            .scalar_subquery()
-        )
-        statement = statement.where(
-            or_(
-                Conversation.title.like(pattern, escape="\\"),
-                latest_summary.like(pattern, escape="\\"),
-            )
-        )
     if seek_stamp is not None and seek_id is not None:
         statement = statement.where(
             or_(
@@ -355,48 +369,60 @@ def _keyword(value: str | None) -> str | None:
     return text
 
 
-def _like_pattern(value: str) -> str:
-    escaped = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-    return f"%{escaped}%"
-
-
-def _locations(keyword: str | None, title: str, summary: str) -> list[dict[str, str]]:
-    if keyword is None:
-        return []
-    found: list[dict[str, str]] = []
-    title_snippet = _window(title, keyword)
-    if title_snippet is not None:
-        found.append({"section": "title", "snippet": title_snippet})
-    summary_snippet = _window(summary, keyword)
-    if summary_snippet is not None and summary_snippet != title_snippet:
-        found.append({"section": "summary", "snippet": summary_snippet})
-    return found[:2]
-
-
-def _window(text: str, keyword: str) -> str | None:
-    index = text.casefold().find(keyword.casefold())
-    if index < 0:
+def _filter_signature(
+    *,
+    q: str | None,
+    mode: str | None,
+    status: str | None,
+    source_status: str | None,
+    active_from: datetime | None,
+    active_before: datetime | None,
+) -> str | None:
+    parts = {
+        "q": q,
+        "mode": mode,
+        "status": status,
+        "source_status": source_status,
+        "active_from": active_from.isoformat() if active_from is not None else None,
+        "active_before": active_before.isoformat() if active_before is not None else None,
+    }
+    active = [f"{key}={value}" for key, value in parts.items() if value]
+    if not active:
         return None
-    start = max(0, index - 16)
-    end = min(len(text), index + len(keyword) + 16)
-    return text[start:end]
+    digest = hashlib.sha256("|".join(active).encode()).hexdigest()[:16]
+    return digest
 
 
-def _encode_cursor(stamp: datetime, conversation_id: str) -> str:
-    raw = f"1|{_as_utc(stamp).isoformat()}|{conversation_id}".encode()
-    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+def _encode_cursor(stamp: datetime, conversation_id: str, signature: str | None = None) -> str:
+    stamp_text = _as_utc(stamp).isoformat()
+    if signature is None:
+        raw = f"1|{stamp_text}|{conversation_id}"
+    else:
+        raw = f"3|{stamp_text}|{conversation_id}|{signature}"
+    return base64.urlsafe_b64encode(raw.encode()).decode().rstrip("=")
 
 
-def _decode_cursor(cursor: str | None) -> tuple[datetime | None, str | None]:
+def _decode_cursor(
+    cursor: str | None, signature: str | None
+) -> tuple[datetime | None, str | None]:
     if cursor is None or cursor == "":
         return None, None
     try:
         padded = cursor + ("=" * (-len(cursor) % 4))
         raw = base64.urlsafe_b64decode(padded.encode()).decode()
-        version, stamp, conversation_id = raw.split("|", 2)
-        if version != "1" or not conversation_id:
+        parts = raw.split("|")
+        if parts[0] == "1" and len(parts) == 3:
+            if signature is not None or not parts[2]:
+                raise ValueError
+            parsed = datetime.fromisoformat(parts[1])
+            conversation_id = parts[2]
+        elif parts[0] == "3" and len(parts) == 4:
+            if signature is None or parts[3] != signature or not parts[2]:
+                raise ValueError
+            parsed = datetime.fromisoformat(parts[1])
+            conversation_id = parts[2]
+        else:
             raise ValueError
-        parsed = datetime.fromisoformat(stamp)
     except (ValueError, UnicodeError):
         raise HistoryQueryError("HISTORY_CURSOR_INVALID", "历史游标无效。") from None
     return _as_utc(parsed), conversation_id

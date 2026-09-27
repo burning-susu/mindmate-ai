@@ -204,7 +204,7 @@ def test_learning_query_trash_restore_and_source_block(tmp_path: Path) -> None:
         matched = _walk(
             client,
             "/api/v1/history/learning-sessions",
-            {"limit": 1, "q": "超时", "goal_type": "CUSTOM", "status": "IN_PROGRESS"},
+            {"limit": 1, "q": "记住请求", "goal_type": "CUSTOM", "status": "IN_PROGRESS"},
             "learning_session_id",
         )
         assert pending["learning_session_id"] in matched
@@ -212,7 +212,10 @@ def test_learning_query_trash_restore_and_source_block(tmp_path: Path) -> None:
         assert other["learning_session_id"] not in matched
         hidden_answer = client.get("/api/v1/history/learning-sessions", params={"q": "30"})
         assert hidden_answer.status_code == 200
-        assert hidden_answer.json()["items"] == []
+        hidden_ids = _ids(hidden_answer.json(), "learning_session_id")
+        assert pending["learning_session_id"] not in hidden_ids
+        assert other["learning_session_id"] not in hidden_ids
+        assert answered["learning_session_id"] in hidden_ids
         assert "answer_key" not in hidden_answer.text
         assert feedback["explanation"] not in hidden_answer.text
         bad_goal = client.get("/api/v1/history/learning-sessions", params={"goal_type": "今日需复习"})

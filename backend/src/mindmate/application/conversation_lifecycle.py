@@ -12,6 +12,7 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from mindmate.application.chat_generation import ChatCommandError, utc_now
+from mindmate.application.history_search_index import sync_conversation_search
 from mindmate.infrastructure.models import Conversation
 
 TRASH_RETENTION_DAYS = 30
@@ -52,6 +53,9 @@ def trash_conversation(
             412,
             current_row_version=record.row_version,
         )
+    session.expire(record)
+    session.refresh(record)
+    sync_conversation_search(session, conversation_id)
     session.commit()
     session.expire(record)
     session.refresh(record)
@@ -93,6 +97,9 @@ def restore_conversation(
             412,
             current_row_version=record.row_version,
         )
+    session.expire(record)
+    session.refresh(record)
+    sync_conversation_search(session, conversation_id)
     session.commit()
     session.expire(record)
     session.refresh(record)

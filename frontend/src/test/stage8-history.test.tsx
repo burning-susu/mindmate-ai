@@ -224,6 +224,30 @@ describe('conversation history', () => {
     fireEvent.click(screen.getByRole('button', { name: '确认移入回收站' }))
     await waitFor(() => expect(calls.some((call) => call.startsWith('DELETE') && call.includes('expected_version=4'))).toBe(true))
   })
+
+  it('links a body hit with text highlighting', async () => {
+    window.history.pushState({}, '', '/history?cq=木星')
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/system/session')) return response({ status: 'ready' })
+      if (url.includes('/history/conversations')) {
+        return response({
+          items: [{
+            ...historyItem,
+            locations: [{ section: 'user_message', snippet: '看到木星环<script>', record_id: 'user-1' }],
+          }],
+          next_cursor: null,
+          search_index_status: 'READY',
+        })
+      }
+      return response({ status: 'ok', version: '0.1.0' })
+    }))
+    render(<BrowserRouter><App /></BrowserRouter>)
+    const link = await screen.findByRole('link', { name: /你的问题/ })
+    expect(link).toHaveAttribute('href', '/chat/conversation-1?message=user-1')
+    expect(link.querySelector('mark')?.textContent).toBe('木星')
+    expect(link.querySelector('script')).toBeNull()
+  })
 })
 
 const learningHistoryItem = {

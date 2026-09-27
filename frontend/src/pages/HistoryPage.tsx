@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { GraduationCap, History, LoaderCircle, MessageSquare } from 'lucide-react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
@@ -127,6 +127,86 @@ function hasFilters(filters: HistoryFilters): boolean {
   return Object.values(filters).some((value) => Boolean(value))
 }
 
+const SECTION_LABEL: Record<string, string> = {
+  title: '标题',
+  user_message: '你的问题',
+  assistant_message: '已完成回答',
+  summary: '摘要',
+  topic: '主题',
+  goal: '目标',
+  question: '题干',
+  submitted_answer: '已提交答案',
+  feedback: '已发布反馈',
+  knowledge_point: '知识点',
+}
+
+type HistoryHit = { section: string; snippet: string; record_id?: string | null }
+
+function HighlightedSnippet({ text, keyword }: { text: string; keyword: string }) {
+  const needle = keyword.trim()
+  if (!needle) return <>{text}</>
+  const folded = text.toLocaleLowerCase()
+  const target = needle.toLocaleLowerCase()
+  const parts: ReactNode[] = []
+  let cursor = 0
+  let found = folded.indexOf(target)
+  while (found >= 0) {
+    if (found > cursor) parts.push(text.slice(cursor, found))
+    parts.push(<mark key={`${found}-${cursor}`}>{text.slice(found, found + target.length)}</mark>)
+    cursor = found + target.length
+    found = folded.indexOf(target, cursor)
+  }
+  if (cursor < text.length) parts.push(text.slice(cursor))
+  return <>{parts}</>
+}
+
+function locationHref(kind: 'conversation' | 'learning', ownerId: string, location: HistoryHit): string {
+  const recordId = location.record_id ?? ''
+  if (kind === 'conversation') {
+    if (recordId && (location.section === 'user_message' || location.section === 'assistant_message')) {
+      return `/chat/${ownerId}?message=${encodeURIComponent(recordId)}`
+    }
+    return `/chat/${ownerId}`
+  }
+  if (location.section === 'feedback' && recordId) {
+    return `/learning/session/${ownerId}?question=${encodeURIComponent(recordId)}&focus=feedback`
+  }
+  if ((location.section === 'question' || location.section === 'submitted_answer') && recordId) {
+    return `/learning/session/${ownerId}?question=${encodeURIComponent(recordId)}`
+  }
+  if (location.section === 'knowledge_point') {
+    return `/learning/session/${ownerId}#learning-knowledge-point`
+  }
+  return `/learning/session/${ownerId}`
+}
+
+function HistoryHits({
+  kind,
+  ownerId,
+  keyword,
+  locations,
+}: {
+  kind: 'conversation' | 'learning'
+  ownerId: string
+  keyword: string
+  locations: HistoryHit[] | undefined
+}) {
+  if (!locations?.length) return null
+  return (
+    <span className="history-hits">
+      {locations.map((location) => (
+        <Link
+          key={`${location.section}-${location.record_id ?? ''}-${location.snippet}`}
+          to={locationHref(kind, ownerId, location)}
+        >
+          命中{SECTION_LABEL[location.section] ?? location.section}：
+          <HighlightedSnippet text={location.snippet} keyword={keyword} />
+        </Link>
+      ))}
+    </span>
+  )
+}
+
 function usePagedItems<T>(filterKey: string) {
   const [pager, setPager] = useState({ filterKey, cursor: undefined as string | undefined, previous: [] as T[] })
   if (pager.filterKey !== filterKey) {
@@ -168,7 +248,7 @@ function FilterBar({
         <input
           value={draft}
           maxLength={80}
-          placeholder={kind === 'conversation' ? '标题或已保存摘要' : '学习主题或目标'}
+          placeholder={kind === 'conversation' ? '标题、问题或已完成回答' : '主题、目标、题干或已提交反馈'}
           onChange={(event) => onDraft(event.target.value)}
         />
       </label>
@@ -361,7 +441,10 @@ function ConversationHistory({ trash }: { trash: boolean }) {
 
   return (
     <div className="history-panel">
-      <p>{trash ? '回收站中的对话可以恢复为原来的会话，不会生成新回答。' : '打开已保存的对话不会重新生成回答。搜索只匹配标题和列表里的摘要。'}</p>
+      <p>{trash ? '回收站中的对话可以恢复为原来的会话，不会生成新回答。' : '打开已保存的对话不会重新生成回答。搜索包含标题、你的问题和已经完成的回答。'}</p>
+      {!trash && filters.q && historyQuery.data?.search_index_status && historyQuery.data.search_index_status !== 'READY' ? (
+        <p role="status">正文索引还在补齐，当前命中可能不完整。</p>
+      ) : null}
       {trash ? null : (
         <FilterBar kind="conversation" filters={filters} draft={draft} onDraft={setDraft} onChange={patch} onClear={clearFilters} />
       )}
@@ -408,9 +491,6 @@ function ConversationHistory({ trash }: { trash: boolean }) {
               <span>
                 <strong>{item.title || item.summary || '未命名对话'}</strong>
                 <small>{item.summary}</small>
-                {item.locations?.map((location) => (
-                  <small key={`${location.section}-${location.snippet}`}>命中{location.section === 'title' ? '标题' : '摘要'}：{location.snippet}</small>
-                ))}
                 <small>会话 {item.conversation_id}</small>
               </span>
               <span className="history-item__meta">
@@ -420,6 +500,7 @@ function ConversationHistory({ trash }: { trash: boolean }) {
               </span>
               {openingId === item.conversation_id ? <span>正在打开</span> : <History size={14} aria-hidden="true" />}
             </button>
+            <HistoryHits kind="conversation" ownerId={item.conversation_id} keyword={filters.q ?? ''} locations={item.locations} />
             <button type="button" disabled={!item.row_version || busy} onClick={() => setPending(item)}>移入回收站</button>
           </div>
         ))}
@@ -556,7 +637,10 @@ function LearningHistory({ trash }: { trash: boolean }) {
 
   return (
     <div className="history-panel">
-      <p>{trash ? '回收站中的学习记录可以恢复为原来的会话，不会重新出题。' : '打开已保存的学习会话不会重新出题，也不会自动提交答案。搜索只匹配主题和目标。'}</p>
+      <p>{trash ? '回收站中的学习记录可以恢复为原来的会话，不会重新出题。' : '打开已保存的学习会话不会重新出题，也不会自动提交答案。搜索包含主题、目标、题干和已经提交的答案与反馈。'}</p>
+      {!trash && filters.q && historyQuery.data?.search_index_status && historyQuery.data.search_index_status !== 'READY' ? (
+        <p role="status">正文索引还在补齐，当前命中可能不完整。</p>
+      ) : null}
       {trash ? null : (
         <FilterBar kind="learning" filters={filters} draft={draft} onDraft={setDraft} onChange={patch} onClear={clearFilters} />
       )}
@@ -603,9 +687,6 @@ function LearningHistory({ trash }: { trash: boolean }) {
               <span>
                 <strong>{item.topic || '未命名学习'}</strong>
                 <small>{item.scope_name ?? '资料范围不可用'} · {item.scope_file_count} 个文件</small>
-                {item.locations?.map((location) => (
-                  <small key={`${location.section}-${location.snippet}`}>命中{location.section === 'topic' ? '主题' : '目标'}：{location.snippet}</small>
-                ))}
                 <small>会话 {item.learning_session_id}</small>
               </span>
               <span className="history-item__meta">
@@ -615,6 +696,7 @@ function LearningHistory({ trash }: { trash: boolean }) {
               </span>
               {openingId === item.learning_session_id ? <span>正在打开</span> : <History size={14} aria-hidden="true" />}
             </button>
+            <HistoryHits kind="learning" ownerId={item.learning_session_id} keyword={filters.q ?? ''} locations={item.locations} />
             <button type="button" disabled={!item.row_version || busy} onClick={() => setPending(item)}>移入回收站</button>
           </div>
         ))}

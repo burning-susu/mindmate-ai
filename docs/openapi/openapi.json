@@ -5253,6 +5253,16 @@
               }
             ],
             "title": "Next Cursor"
+          },
+          "search_index_status": {
+            "type": "string",
+            "title": "Search Index Status",
+            "default": "PENDING"
+          },
+          "search_truncated": {
+            "type": "boolean",
+            "title": "Search Truncated",
+            "default": false
           }
         },
         "type": "object",
@@ -6290,6 +6300,17 @@
           "snippet": {
             "type": "string",
             "title": "Snippet"
+          },
+          "record_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Record Id"
           }
         },
         "type": "object",
@@ -7821,6 +7842,16 @@
               }
             ],
             "title": "Next Cursor"
+          },
+          "search_index_status": {
+            "type": "string",
+            "title": "Search Index Status",
+            "default": "PENDING"
+          },
+          "search_truncated": {
+            "type": "boolean",
+            "title": "Search Truncated",
+            "default": false
           }
         },
         "type": "object",

@@ -481,6 +481,10 @@
 .home-tasks__counts dt { color: var(--muted); }
 .home-tasks__counts dd { margin: 0; font-weight: 650; }
 .home-task-layer { position: fixed; inset: 0; z-index: 20; display: flex; justify-content: flex-end; background: rgba(18, 32, 38, 0.28); }
+.history-hits { display: grid; gap: 4px; }
+.history-hits a { color: inherit; font-size: 13px; }
+.history-hits mark, .history-target { background: #ffe08a; }
+.history-target { outline: 2px solid #c45500; scroll-margin: 80px; }
 .home-task-panel { width: min(420px, 100%); height: 100%; overflow: auto; padding: 20px; background: var(--surface); box-shadow: -8px 0 24px rgba(18, 32, 38, 0.12); }
 .home-task-panel__heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .home-task-panel__heading h2 { margin: 0; font-size: 20px; }

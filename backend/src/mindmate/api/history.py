@@ -34,6 +34,7 @@ class HistoryApiError(Exception):
 class HistoryLocation(BaseModel):
     section: str
     snippet: str
+    record_id: str | None = None
 
 
 class ConversationHistoryItem(BaseModel):
@@ -54,6 +55,8 @@ class ConversationHistoryItem(BaseModel):
 class ConversationHistoryListResponse(BaseModel):
     items: list[ConversationHistoryItem]
     next_cursor: str | None = None
+    search_index_status: str = "PENDING"
+    search_truncated: bool = False
 
 
 class LearningHistoryItem(BaseModel):
@@ -75,6 +78,8 @@ class LearningHistoryItem(BaseModel):
 class LearningHistoryListResponse(BaseModel):
     items: list[LearningHistoryItem]
     next_cursor: str | None = None
+    search_index_status: str = "PENDING"
+    search_truncated: bool = False
 
 
 class HistoryTrashItem(BaseModel):

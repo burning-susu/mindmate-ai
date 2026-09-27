@@ -36,6 +36,7 @@ export async function listConversationHistory(
 ): Promise<{
   items: ConversationHistoryItem[]
   next_cursor?: string | null
+  search_index_status?: string
 }> {
   const params = historyParams(cursor, limit, filters)
   return apiRequest(`/api/v1/history/conversations?${params}`, init)
@@ -49,6 +50,7 @@ export async function listLearningHistory(
 ): Promise<{
   items: LearningHistoryItem[]
   next_cursor?: string | null
+  search_index_status?: string
 }> {
   const params = historyParams(cursor, limit, filters, true)
   return apiRequest(`/api/v1/history/learning-sessions?${params}`, init)

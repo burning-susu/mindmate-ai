@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft } from 'lucide-react'
-import { useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { v7 as uuidv7 } from 'uuid'
 
 import { ApiError, apiRequest } from '../api/client'
@@ -39,6 +39,9 @@ function readFailureMessage(error: unknown) {
 
 export default function LearningSessionPage() {
   const { sessionId = '' } = useParams()
+  const [searchParams] = useSearchParams()
+  const focusQuestionId = searchParams.get('question') ?? ''
+  const focusFeedback = searchParams.get('focus') === 'feedback'
   const queryClient = useQueryClient()
   const sessionQuery = useQuery({
     queryKey: ['learning-session', sessionId],
@@ -62,6 +65,15 @@ export default function LearningSessionPage() {
   const clientRequestId = useRef<string | null>(null)
   const submitLock = useRef(false)
   const question = session?.question ?? null
+  const questionMissing = Boolean(focusQuestionId && question && question.question_id !== focusQuestionId)
+  const feedbackMissing = Boolean(focusFeedback && question && !question.feedback && !pendingFeedback)
+  useEffect(() => {
+    if (!question || question.question_id !== focusQuestionId) return
+    const targetId = focusFeedback ? 'learning-feedback' : `learning-question-${question.question_id}`
+    const node = document.getElementById(targetId)
+    node?.scrollIntoView({ block: 'center' })
+    node?.classList.add('history-target')
+  }, [focusFeedback, focusQuestionId, question])
   const feedback = question?.feedback ?? pendingFeedback
   const answered = Boolean(feedback)
   const blocked = session ? blocksAnswer(session) && !answered : false
@@ -152,7 +164,7 @@ export default function LearningSessionPage() {
           <h1>{session.topic}</h1>
           <p>目标：{session.goal_text}</p>
           <p>资料范围：{knowledgeBaseName} · {session.scope?.file_ids.length ?? 0} 个文件 · 题量 {session.target_question_count}</p>
-          {session.plan?.knowledge_point_title && <p>知识点：{session.plan.knowledge_point_title}</p>}
+          {session.plan?.knowledge_point_title && <p id="learning-knowledge-point">知识点：{session.plan.knowledge_point_title}</p>}
           <p>模型 {session.model} · live_model_called={String(session.live_model_called)}</p>
         </div>
       </div>
@@ -165,8 +177,14 @@ export default function LearningSessionPage() {
           <Link className="quiet-button" to={`/knowledge-bases/${session.knowledge_base_id}`}>返回知识库</Link>
         </div>
       )}
+      {questionMissing ? (
+        <div className="inline-error" role="alert">这道题不在当前画面。不会提交答案，也不会新开学习会话。</div>
+      ) : null}
+      {feedbackMissing ? (
+        <div className="inline-error" role="alert">这份反馈还没有发布。不会为了定位而提交答案。</div>
+      ) : null}
       {question && !blocked && (
-        <div className="detail-section learning-question">
+        <div className="detail-section learning-question" id={`learning-question-${question.question_id}`} tabIndex={-1}>
           <h2>第 {question.sequence_number} 题</h2>
           <fieldset disabled={answered || submitting}>
             <legend>{question.prompt_text}</legend>
@@ -196,7 +214,7 @@ export default function LearningSessionPage() {
             </div>
           )}
           {answered && feedback && (
-            <div className="learning-feedback" aria-label="作答反馈">
+            <div className="learning-feedback" id="learning-feedback" aria-label="作答反馈" tabIndex={-1}>
               <p>你的答案：{selectedLabel ?? feedback.selected_option}</p>
               <p>结果：{resultLabel(feedback.result)}</p>
               <p><CitedText text={feedback.explanation} citations={feedback.citations} onCitation={(citation) => {

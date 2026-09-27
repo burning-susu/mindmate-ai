@@ -36,6 +36,10 @@ from mindmate.api.learning import router as learning_router
 from mindmate.api.problem import ProblemDetail
 from mindmate.application.chat_generation import ChatGenerationWorker
 from mindmate.application.embedding_model_install import EmbeddingModelInstallWorker
+from mindmate.application.history_search_index import (
+    HistorySearchBackfill,
+    install_history_search_listener,
+)
 from mindmate.application.index_activation import IndexActivationWorker
 from mindmate.application.index_chunking_worker import IndexChunkingWorker
 from mindmate.application.index_embedding_worker import IndexEmbeddingWorker
@@ -101,6 +105,7 @@ async def lifespan(app: FastAPI):
         app.state.engine = create_sqlite_engine(settings.database_path)
         app.state.database_status = quick_check(app.state.engine)
         app.state.session_factory = create_session_factory(app.state.engine)
+        install_history_search_listener()
         app.state.session = LocalSession()
         app.state.chat_worker = ChatGenerationWorker(
             app.state.session_factory,
@@ -140,6 +145,8 @@ async def lifespan(app: FastAPI):
             app.state.session_factory, settings
         )
         app.state.index_activation_worker.start()
+        app.state.history_search_backfill = HistorySearchBackfill(app.state.session_factory)
+        app.state.history_search_backfill.start()
         yield
     finally:
         chat_worker = getattr(app.state, "chat_worker", None)
@@ -169,6 +176,9 @@ async def lifespan(app: FastAPI):
         worker = getattr(app.state, "parse_worker", None)
         if worker is not None:
             worker.stop()
+        history_backfill = getattr(app.state, "history_search_backfill", None)
+        if history_backfill is not None:
+            history_backfill.stop()
         engine = getattr(app.state, "engine", None)
         if engine is not None:
             engine.dispose()

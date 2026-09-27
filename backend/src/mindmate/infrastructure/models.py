@@ -975,6 +975,44 @@ class LearningFeedback(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class HistorySearchState(Base):
+    """Completeness of the local history full-text projection. Not a business object."""
+
+    __tablename__ = "history_search_state"
+
+    state_key: Mapped[str] = mapped_column(String(40), primary_key=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    error_code: Mapped[str | None] = mapped_column(String(80))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class HistorySearchOwner(Base):
+    __tablename__ = "history_search_owners"
+
+    owner_type: Mapped[str] = mapped_column(String(32), primary_key=True)
+    owner_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+
+
+class HistorySearchDocument(Base):
+    """One safe, published field that history search may quote."""
+
+    __tablename__ = "history_search_documents"
+    __table_args__ = (
+        UniqueConstraint(
+            "owner_type", "section", "source_id", name="uq_history_search_source"
+        ),
+        Index("ix_history_search_owner", "owner_type", "owner_id"),
+    )
+
+    document_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    owner_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    owner_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    section: Mapped[str] = mapped_column(String(40), nullable=False)
+    record_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    source_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+
+
 class BackupEntry(Base):
     __tablename__ = "backup_entries"
     backup_entry_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
