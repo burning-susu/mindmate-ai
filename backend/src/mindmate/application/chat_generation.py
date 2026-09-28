@@ -49,7 +49,14 @@ from mindmate.application.source_snapshots import (
     create_source_snapshots,
 )
 from mindmate.application.tasks import add_event, claim_task, finish_attempt
-from mindmate.application.usage_budget import BudgetRejected, assert_external_budget_allows
+from mindmate.application.usage_budget import (
+    BudgetRejected,
+    assert_external_budget_allows,
+    mark_external_operation_possibly_sent,
+    reserve_external_operation,
+    response_usage_stage,
+    uncertain_external_usage,
+)
 from mindmate.config import Settings
 from mindmate.infrastructure.models import (
     AiOperation,
@@ -640,6 +647,12 @@ def recover_interrupted_chat_operations(session: Session) -> int:
             checkpoint = copy.deepcopy(task.checkpoint_json)
         was_stopping = operation.status == "STOPPING" or bool(checkpoint.get("stop_requested"))
         operation.status = "STOPPED" if was_stopping else "INTERRUPTED"
+        if operation.request_stage == "RESERVED":
+            operation.request_stage = "NOT_SENT"
+            operation.reserved_at = None
+            operation.reserved_estimate_usd = None
+        else:
+            uncertain_external_usage(operation)
         operation.error_code = "GENERATION_STOPPED" if was_stopping else "GENERATION_INTERRUPTED"
         operation.error_detail = (
             "用户已停止生成。"
@@ -855,6 +868,16 @@ def estimate_input_tokens(text: str) -> int:
     """Count one character as one token so the local gate overestimates."""
 
     return len(text)
+
+
+def _provider_token(value: Any) -> int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed >= 0 else None
 
 
 def _fit_external_knowledge_request(request: ChatRequest) -> ChatRequest:
@@ -1431,7 +1454,10 @@ class ChatGenerationWorker:
                             409,
                         )
                     try:
-                        assert_external_budget_allows(gate_session)
+                        assert_external_budget_allows(
+                            gate_session,
+                            confirm_unknown_usage=bool(checkpoint.get("provider_charge_confirmed")),
+                        )
                     except BudgetRejected as exc:
                         raise ProviderRequestError(exc.code, exc.detail, 409) from exc
                 try:
@@ -1451,6 +1477,30 @@ class ChatGenerationWorker:
                         409,
                     )
                 request = constrain_external_chat_request(request)
+                try:
+                    with self._session_factory() as budget_session:
+                        reservation = reserve_external_operation(
+                            budget_session,
+                            operation_id=operation_for_request.operation_id,
+                            provider=provider_id.upper(),
+                            model=request.model_profile,
+                            estimated_input_tokens=estimate_input_tokens(_outbound_text(request)),
+                            estimated_output_tokens=request.max_output_tokens,
+                            confirm_unknown_usage=bool(
+                                checkpoint.get("provider_charge_confirmed")
+                            ),
+                        )
+                        if not reservation["reserved"]:
+                            raise ProviderRequestError(
+                                "BUDGET_OPERATION_ALREADY_SENT",
+                                "此操作已进入发送阶段，不会重复调用 Provider。",
+                                409,
+                            )
+                        mark_external_operation_possibly_sent(
+                            budget_session, operation_for_request.operation_id
+                        )
+                except BudgetRejected as exc:
+                    raise ProviderRequestError(exc.code, exc.detail, 409) from exc
             # Test/runtime injection keeps the established non-streaming fixture
             # path when generation itself is still Mock. Explicit DeepSeek mode
             # uses the SSE adapter below and does not retry a failed call.
@@ -1750,8 +1800,11 @@ class ChatGenerationWorker:
             operation.status = "COMPLETED"
             operation.resolved_model = chunk.resolved_model
             operation.provider_request_id = chunk.provider_request_id
-            operation.usage_input_tokens = usage.get("prompt_tokens")
-            operation.usage_output_tokens = usage.get("completion_tokens")
+            response_usage_stage(
+                operation,
+                _provider_token(usage.get("prompt_tokens")),
+                _provider_token(usage.get("completion_tokens")),
+            )
             operation.usage_total_tokens = usage.get("total_tokens")
             operation.updated_at = now
             operation.completed_at = now
@@ -1824,6 +1877,12 @@ class ChatGenerationWorker:
         if answer is not None:
             answer.status = "FAILED"
         operation.status = "FAILED"
+        if operation.request_stage == "RESERVED":
+            operation.request_stage = "NOT_SENT"
+            operation.reserved_at = None
+            operation.reserved_estimate_usd = None
+        else:
+            uncertain_external_usage(operation)
         operation.error_code = code[:100]
         operation.error_detail = detail[:500]
         operation.updated_at = now
@@ -1878,6 +1937,12 @@ class ChatGenerationWorker:
             answer.status = "STOPPED"
             answer.content = content
         operation.status = "STOPPED"
+        if operation.request_stage == "RESERVED":
+            operation.request_stage = "NOT_SENT"
+            operation.reserved_at = None
+            operation.reserved_estimate_usd = None
+        else:
+            uncertain_external_usage(operation)
         operation.error_code = "GENERATION_STOPPED"
         operation.error_detail = "用户已停止生成。"
         operation.updated_at = now
@@ -1925,6 +1990,12 @@ class ChatGenerationWorker:
             return
         now = utc_now()
         operation.status = "INTERRUPTED"
+        if operation.request_stage == "RESERVED":
+            operation.request_stage = "NOT_SENT"
+            operation.reserved_at = None
+            operation.reserved_estimate_usd = None
+        else:
+            uncertain_external_usage(operation)
         operation.error_code = "GENERATION_INTERRUPTED"
         operation.error_detail = "应用在生成过程中退出，未自动重发不确定的 Provider 请求。"
         operation.updated_at = now

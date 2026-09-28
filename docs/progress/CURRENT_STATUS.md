@@ -3,11 +3,11 @@
 ## 基本信息
 
 - 当前开发分支：`feat/v1-bootstrap`
-- 第六十七批进场本地与远端提交：`feat/v1-bootstrap` → `49a3139ff591ee81f54121eb31e4a96eb27f5834`（2026-09-28 本批进场时核实）
+- 第六十八批进场：分支 `feat/v1-bootstrap`；LOCAL `b67c6ab20827ef9ce26393cefba02229e9a151e0`，REMOTE `49a3139ff591ee81f54121eb31e4a96eb27f5834`。第六十七批提交在进场时仍未推送；核验日期 `2026-09-28`。
 - 最后更新时间：`2026-09-28`
 - 当前开发阶段：阶段 8 开发中，状态 `PARTIAL`；阶段 5、阶段 6、阶段 7 继续 `PARTIAL`
 - 交付顺序：Demo 首先完成，完整 V1 以后精进。求职 Demo 优先文件整理/导入、建库、带来源问答、最小学习陪练和重启恢复。Demo 可用性与完整 V1 阶段状态分开报告。
-- 当前批次状态：`LOG_RETENTION_CODE` `PASS`；普通浏览器 `LOG_RETENTION_BROWSER`、`DIAGNOSTICS_PREVIEW_EXPORT_BROWSER`、`HISTORY_PURGE_BROWSER`、`HISTORY_MULTISTEP_BROWSER` 均 `PARTIAL`，因此整体 `LOG_RETENTION` 与 `DIAGNOSTICS_PREVIEW_EXPORT` 继续 `PARTIAL`，`STAGE8_FULL_V1` 仍 `PARTIAL`。第六十六批 `BACKUP_WORKER_CODE`、`BACKUP_WORKER_BROWSER`、`BACKUP_RESTORE_REGRESSION` 的 `PASS` 保持有效；求职 Demo 沿用第四十二/六十四批 `PASS`，本批未重跑。`BUDGET_RECONCILIATION`、`LEARNING_ONLINE_BROWSER` 仍 `PARTIAL`，真实 DeepSeek/OpenAI 冒烟仍 `PENDING`。详见 `docs/test-reports/stage-67-log-retention-history-browser.md`。
+- 当前批次状态：`LOCAL_BUDGET_RECONCILIATION` `PASS`；`PROVIDER_BILLING_RECONCILIATION` `PENDING`；`LEARNING_ONLINE_CODE` `PASS`；`LEARNING_ONLINE_BROWSER` `PARTIAL`（Chrome 审批服务返回 404，Playwright Chromium 启动返回 `spawn EPERM`）；`REAL_PROVIDER_SMOKE` `PENDING`；`STAGE8_FULL_V1` 仍 `PARTIAL`。第六十七批页面验收继续 `PARTIAL`，第六十六批备份相关 `PASS` 保持有效。求职 Demo 沿用第四十二/六十四批 `PASS`，本批未重跑；阶段 5–7 完整 V1 仍 `PARTIAL`。详见 `docs/test-reports/stage-68-budget-online-browser.md`。
 
 ## 已完成阶段
 
@@ -358,3 +358,13 @@
 - 自动化：诊断后端 `4 passed`；阶段 8 相关组合测试报告 `33 passed`，另有既有历史边界用例在组合顺序中一次波动，隔离重跑通过；前端全量 `15 files / 68 tests passed`，typecheck、lint、build、Ruff、OpenAPI/生成类型和 `git diff --check` 通过。隔离 Mock Demo 准备与启动核对 READY 通过，未调用真实 Provider。
 - 详细报告：`docs/test-reports/stage-65-diagnostics-history-acceptance.md`。普通 Windows 操作者需按报告最短清单补齐设置页诊断下载、历史永久删除确认和三题定位页面证据。
 - Git：本批主要提交为 `c88669115cd0f2a0ab5ce6161f64d9c4c2d90ee8`（`完善：实现安全诊断导出并交接历史页面验收`）。推送已尝试但 `origin/feat/v1-bootstrap` 仍为进场 SHA `381cfeb3c4fade829fb15d985d7db06dedd346b1`，当前 `LOCAL/REMOTE` 不一致；未强推、不改 `main`，需在原 Windows VS Code 终端重试并核验完整 SHA。
+
+## 第六十八批交接
+
+- 状态：`LOCAL_BUDGET_RECONCILIATION` `PASS`；`PROVIDER_BILLING_RECONCILIATION` `PENDING`；`LEARNING_ONLINE_CODE` `PASS`；`LEARNING_ONLINE_BROWSER` `PARTIAL`；`REAL_PROVIDER_SMOKE` `PENDING`；`STAGE8_FULL_V1` `PARTIAL`。Demo 历史 `PASS` 沿用，完整 V1 阶段 5–7 仍 `PARTIAL`。
+- 预算：新增迁移 `f78c9e8a1042`，两类在线操作以 `operation_id` 原子预留并记录请求阶段、UTC 预留/发送时间及 Provider/model 价格快照。费用按 Provider usage 和请求时快照本地估算；缺少 usage 或旧价格快照不会按零成本，未完成预留与未知外发仍参与保护。滚动 30 天和 UTC 自然月、历史窗口 API/设置页查询、Mock/Chat/RAG/Learning 分类已覆盖。
+- 设置与门禁：设置页可选预算周期、硬停止、软提醒与未知用量拒绝/逐次确认；展示已知估算、预留、未知暴露、核对时间、价格来源和 DeepSeek/OpenAI 官方用量入口。Chat/RAG、学习出题/点评与连接探测在未知数据时展示风险或按预算拒绝。官方账单对账仍为 `PENDING`。
+- 自动化：后端预算/Provider/Chat/RAG 组合 `33 passed`；Ruff 通过、定向 Pyright `0 errors`、compileall 和 Alembic head/current `f78c9e8a1042` 通过。前端 `15 files / 72 tests passed`，typecheck、lint、build 通过；OpenAPI 3.1 `111 schemas / 120 operations`，前端生成类型同步，`git diff --check` 通过。真实 Provider 未调用。
+- 浏览器：test-only 服务使用隔离数据根，Health 200、Provider fixture calls `0`；验证后本批 API/Web 端口已关闭。普通 Chrome tab 创建被自动审批层 `404` 拒绝，Playwright Chromium 在页面打开前 `spawn EPERM`。本批没有页面点击、截图或在线会话，未将 API/pytest 记作浏览器通过；第六十七批页面遗留继续 `PARTIAL`。
+- Git：进场 LOCAL 为 `b67c6ab20827ef9ce26393cefba02229e9a151e0`，进场 REMOTE 为 `49a3139ff591ee81f54121eb31e4a96eb27f5834`；第六十七批提交的进场推送尝试退出码 1 且无诊断，复核远端未变。最终本地/远端 SHA 见本批交付说明。
+- 下一批：先补普通 Chrome/Edge Guest profile 中的双 Provider 在线学习页面走查，再处理全局错误、离线体验和阶段 8 完整 V1 追踪矩阵。不得写成官方账单对账、真实 Provider smoke 或阶段 8 完整验收通过。

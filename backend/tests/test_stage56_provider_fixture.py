@@ -63,8 +63,51 @@ def test_learning_provider_fixture_is_test_only_and_reports_safe_call_metadata(t
 def test_test_fixture_route_is_not_registered_for_normal_runtime(tmp_path: Path) -> None:
     app = create_app(Settings(data_dir=tmp_path, env="test", learning_provider_fixture=False))
     with TestClient(app, base_url="http://127.0.0.1") as client:
+        client.post("/api/v1/system/session", headers={"Origin": ORIGIN})
         response = client.get("/api/v1/testing/provider-fixture/calls")
         assert response.status_code == 404
+        fail_next = client.post(
+            "/api/v1/testing/provider-fixture/fail-next-question",
+            headers={"Origin": ORIGIN, "Idempotency-Key": "fixture-fail-disabled"},
+            json={"provider": "OPENAI"},
+        )
+        assert fail_next.status_code == 404
+
+
+def test_failure_switch_is_one_provider_only_and_never_falls_back(tmp_path: Path) -> None:
+    app = create_app(Settings(data_dir=tmp_path, env="test", learning_provider_fixture=True))
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        client.post("/api/v1/system/session", headers={"Origin": ORIGIN})
+        scheduled = client.post(
+            "/api/v1/testing/provider-fixture/fail-next-question",
+            headers={"Origin": ORIGIN, "Idempotency-Key": "fixture-fail-only"},
+            json={"provider": "OPENAI"},
+        )
+        assert scheduled.status_code == 200
+        assert scheduled.json() == {"provider": "OPENAI", "scheduled": True}
+
+        fixture = app.state.provider_fixture
+        with pytest.raises(httpx.ReadTimeout):
+            fixture.transport("OPENAI").handle_request(
+                httpx.Request(
+                    "POST",
+                    "https://api.openai.com/v1/chat/completions",
+                    json={
+                        "model": "gpt-6-sol",
+                        "messages": [{"role": "user", "content": "synthetic question"}],
+                    },
+                )
+            )
+        calls = client.get("/api/v1/testing/provider-fixture/calls").json()["calls"]
+        assert calls == [
+            {
+                "provider": "OPENAI",
+                "host": "api.openai.com",
+                "requested_model": "gpt-6-sol",
+                "request_kind": "question",
+                "authorization_present": False,
+            }
+        ]
 
 
 def test_fixed_provider_fixture_runs_real_learning_business_path_for_both_providers(
@@ -197,3 +240,29 @@ def test_fixed_provider_fixture_runs_real_learning_business_path_for_both_provid
             "OPENAI",
             "OPENAI",
         ]
+
+        scheduled = client.post(
+            "/api/v1/testing/provider-fixture/fail-next-question",
+            headers={"Origin": ORIGIN, "Idempotency-Key": "stage56-failure-setup"},
+            json={"provider": "OPENAI"},
+        )
+        assert scheduled.status_code == 200
+        failed_request_id = "stage56-openai-failed-question"
+        failed_response = client.post(
+            "/api/v1/learning-sessions",
+            headers={"Origin": ORIGIN, "Idempotency-Key": failed_request_id},
+            json={
+                "knowledge_base_id": data.knowledge_base_id,
+                "topic": "API 请求失败时的服务边界",
+                "goal_text": "保持用户选定的服务",
+                "target_question_count": 1,
+                "client_request_id": failed_request_id,
+                "confirm_provider_charge": True,
+            },
+        )
+        assert failed_response.status_code == 200, failed_response.text
+        assert failed_response.json()["failure_code"] == "LEARNING_PROVIDER_INTERRUPTED"
+        calls_after_failure = client.get("/api/v1/testing/provider-fixture/calls").json()["calls"]
+        assert len(calls_after_failure) == 5
+        assert calls_after_failure[-1]["provider"] == "OPENAI"
+        assert [item["provider"] for item in calls_after_failure].count("DEEPSEEK") == 2

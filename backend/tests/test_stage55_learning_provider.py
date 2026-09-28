@@ -295,9 +295,13 @@ def test_invalid_output_and_unknown_result_are_not_retried(tmp_path: Path) -> No
         assert len(deepseek_calls) == 1
         replay = _create(client, data.knowledge_base_id, "down-question", confirm=True)
         assert len(deepseek_calls) == 1
+        assert len(_openai_calls) == 0
         factory = cast(Any, client.app).state.session_factory
         with factory() as session:
             operation = session.query(LearningProviderOperation).one()
+            assert operation.request_stage == "UNKNOWN"
+            assert operation.request_sent_at is not None
+            assert operation.reserved_estimate_usd is not None
             operation.status = "DISPATCHED"
             operation.completed_at = None
             record = session.get(LearningSession, interrupted.json()["learning_session_id"])
@@ -309,4 +313,5 @@ def test_invalid_output_and_unknown_result_are_not_retried(tmp_path: Path) -> No
             reloaded = session.get(LearningProviderOperation, operation.operation_id)
             assert reloaded is not None
             assert reloaded.status == "INTERRUPTED"
+            assert reloaded.request_stage == "UNKNOWN"
         assert len(deepseek_calls) == 1

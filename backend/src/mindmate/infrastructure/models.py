@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import (
@@ -11,6 +12,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -518,6 +520,13 @@ class AiOperation(Base):
     usage_input_tokens: Mapped[int | None] = mapped_column(Integer)
     usage_output_tokens: Mapped[int | None] = mapped_column(Integer)
     usage_total_tokens: Mapped[int | None] = mapped_column(Integer)
+    request_stage: Mapped[str] = mapped_column(
+        String(30), default="NOT_SENT", server_default=text("'NOT_SENT'"), nullable=False
+    )
+    reserved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    request_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reserved_estimate_usd: Mapped[Decimal | None] = mapped_column(Numeric(18, 8))
+    price_snapshot_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     provider_request_id: Mapped[str | None] = mapped_column(String(128))
     error_code: Mapped[str | None] = mapped_column(String(100))
     error_detail: Mapped[str | None] = mapped_column(String(500))
@@ -1029,6 +1038,13 @@ class LearningProviderOperation(Base):
     usage_input_tokens: Mapped[int | None] = mapped_column(Integer)
     usage_output_tokens: Mapped[int | None] = mapped_column(Integer)
     usage_total_tokens: Mapped[int | None] = mapped_column(Integer)
+    request_stage: Mapped[str] = mapped_column(
+        String(30), default="NOT_SENT", server_default=text("'NOT_SENT'"), nullable=False
+    )
+    reserved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    request_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reserved_estimate_usd: Mapped[Decimal | None] = mapped_column(Numeric(18, 8))
+    price_snapshot_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     provider_request_id: Mapped[str | None] = mapped_column(String(128))
     error_code: Mapped[str | None] = mapped_column(String(100))
     error_detail: Mapped[str | None] = mapped_column(String(500))

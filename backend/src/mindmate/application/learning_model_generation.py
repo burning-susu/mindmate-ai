@@ -67,7 +67,16 @@ from mindmate.application.source_snapshots import (
     create_source_snapshots,
     read_source_snapshot,
 )
-from mindmate.application.usage_budget import BudgetRejected, assert_external_budget_allows
+from mindmate.application.usage_budget import (
+    BudgetRejected,
+    assert_external_budget_allows,
+    budget_status,
+    mark_external_operation_possibly_sent,
+    release_external_operation_reservation,
+    reserve_external_operation,
+    response_usage_stage,
+    uncertain_external_usage,
+)
 from mindmate.infrastructure.models import (
     Chunk,
     IndexVersion,
@@ -151,6 +160,12 @@ def recover_dispatched_learning_operations(session: Session) -> int:
     )
     now = utc_now()
     for operation in rows:
+        if operation.request_stage == "RESERVED":
+            operation.request_stage = "NOT_SENT"
+            operation.reserved_at = None
+            operation.reserved_estimate_usd = None
+        else:
+            uncertain_external_usage(operation)
         operation.status = INTERRUPTED
         operation.error_code = "PROVIDER_RESULT_UNKNOWN"
         operation.error_detail = "外发结果未知，已停止自动重试。"
@@ -228,12 +243,33 @@ def learning_provider_plan(session: Session, mode: str) -> dict[str, Any]:
     feedback_ceiling = _ceiling(rates, output_tokens=1536)
     provider_name = "OPENAI" if mode == OPENAI_PROVIDER_ID else "DEEPSEEK" if online else "mock"
     requested = OPENAI_MODEL if mode == OPENAI_PROVIDER_ID else DEEPSEEK_MODEL if online else None
+    budget = budget_status(session)
+    unknown_count = budget["usage_summary"]["unknown_usage_operations"]
+    unknown_notice = None
+    if online and budget["budget"]["enabled"] and unknown_count:
+        if budget["budget"]["unknown_usage_policy"] == "confirm":
+            unknown_notice = (
+                f"本预算周期有 {unknown_count} 次在线操作的 usage 或价格快照未知。"
+                "勾选本次费用确认也表示你接受继续外发并承担本地估算不完整的风险。"
+            )
+        else:
+            unknown_notice = (
+                f"本预算周期有 {unknown_count} 次在线操作的 usage 或价格快照未知；"
+                "当前策略会在请求前拒绝继续外发。"
+            )
+    budget_notice = budget.get("hard_stop_block_reason")
+    if unknown_notice and budget_notice:
+        budget_notice = f"{budget_notice} {unknown_notice}"
+    elif unknown_notice:
+        budget_notice = unknown_notice
     return {
         "generation_mode": mode,
         "provider": provider_name if online else MOCK_PROVIDER,
         "requested_model": requested,
         "requires_charge_confirmation": online,
         "requires_provider_key": online,
+        "budget_notice": budget_notice,
+        "budget_blocks": bool(budget.get("hard_stop_would_block")),
         "outbound_summary": (
             "创建题目时会把学习主题、学习目标和至多 2 段服务端批准的资料摘录发给"
             f" {provider_name}。提交答案时会把这道题的原答案、你的选择和同一批摘录发给同一家服务。"
@@ -1003,7 +1039,9 @@ def _require_gates(
     rates = public_cost_estimate_for(frozen.mode if frozen.mode == OPENAI_PROVIDER_ID else "deepseek")
     try:
         assert_external_budget_allows(
-            session, estimated_request_usd=Decimal(_ceiling(rates, output_tokens=output_tokens))
+            session,
+            estimated_request_usd=Decimal(_ceiling(rates, output_tokens=output_tokens)),
+            confirm_unknown_usage=bool(runtime.confirm_provider_charge),
         )
     except BudgetRejected as exc:
         raise LearningCommandError(exc.code, exc.detail, 409) from exc
@@ -1301,6 +1339,44 @@ def _call_provider(
         stream=False,
     )
     try:
+        reservation = reserve_external_operation(
+            session,
+            operation_id=operation.operation_id,
+            provider=frozen.provider_name,
+            model=frozen.requested_model,
+            estimated_input_tokens=len(system_text) + len(user_text),
+            estimated_output_tokens=max_output_tokens,
+            confirm_unknown_usage=bool(runtime.confirm_provider_charge),
+        )
+    except BudgetRejected as exc:
+        _finish_operation(
+            session,
+            operation,
+            status="FAILED",
+            error_code=exc.code,
+            error_detail=exc.detail,
+        )
+        raise LearningCommandError(exc.code, exc.detail, 409) from exc
+    if not reservation["reserved"]:
+        raise LearningCommandError(
+            "BUDGET_OPERATION_ALREADY_SENT",
+            "此学习操作已进入发送阶段，不会重复调用 Provider。",
+            409,
+        )
+    session.refresh(operation)
+    try:
+        mark_external_operation_possibly_sent(session, operation.operation_id)
+    except BudgetRejected as exc:
+        release_external_operation_reservation(session, operation.operation_id)
+        _finish_operation(
+            session,
+            operation,
+            status="FAILED",
+            error_code=exc.code,
+            error_detail=exc.detail,
+        )
+        raise LearningCommandError(exc.code, exc.detail, 409) from exc
+    try:
         response = frozen.adapter.generate(request, api_key)
     except ProviderRequestError as exc:
         status = INTERRUPTED if exc.retryable or exc.status >= 500 else "FAILED"
@@ -1365,13 +1441,16 @@ def _finish_operation(
         operation.resolved_model = response.resolved_model
         operation.provider_request_id = response.provider_request_id
         usage = response.usage or {}
-        operation.usage_input_tokens = _token(usage.get("prompt_tokens"))
-        if operation.usage_input_tokens is None:
-            operation.usage_input_tokens = _token(usage.get("input_tokens"))
-        operation.usage_output_tokens = _token(usage.get("completion_tokens"))
-        if operation.usage_output_tokens is None:
-            operation.usage_output_tokens = _token(usage.get("output_tokens"))
+        input_tokens = _token(usage.get("prompt_tokens"))
+        if input_tokens is None:
+            input_tokens = _token(usage.get("input_tokens"))
+        output_tokens = _token(usage.get("completion_tokens"))
+        if output_tokens is None:
+            output_tokens = _token(usage.get("output_tokens"))
+        response_usage_stage(operation, input_tokens, output_tokens)
         operation.usage_total_tokens = _token(usage.get("total_tokens"))
+    else:
+        uncertain_external_usage(operation)
     session.commit()
 
 

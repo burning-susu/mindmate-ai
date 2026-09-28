@@ -185,7 +185,11 @@ export default function LearningSessionPage() {
 
   const createNext = async () => {
     if (!session || !canContinue || nextLock.current) return
-    if (onlineSession && (!nextChargeConfirmed || !providerPlanQuery.data)) return
+    if (onlineSession && (
+      !nextChargeConfirmed
+      || !providerPlanQuery.data
+      || providerPlanQuery.data.budget_blocks
+    )) return
     nextLock.current = true
     setGeneratingNext(true)
     setNextError('')
@@ -448,6 +452,7 @@ export default function LearningSessionPage() {
         <section className="detail-section learning-next-question" aria-label="下一题">
           {onlineSession && providerPlanQuery.data && (
             <div className="settings-privacy-copy">
+              {providerPlanQuery.data.budget_notice ? <p role="alert">{providerPlanQuery.data.budget_notice}</p> : null}
               <p>{providerPlanQuery.data.outbound_summary}</p>
               <p>
                 本次下一题将发送给 {providerPlanQuery.data.provider}，按公开费率估算不超过
@@ -477,7 +482,11 @@ export default function LearningSessionPage() {
           <button
             className="primary-button"
             type="button"
-            disabled={generatingNext || (onlineSession && (!nextChargeConfirmed || !providerPlanQuery.data))}
+            disabled={generatingNext || (onlineSession && (
+              !nextChargeConfirmed
+              || !providerPlanQuery.data
+              || providerPlanQuery.data.budget_blocks
+            ))}
             aria-busy={generatingNext}
             onClick={() => void createNext()}
           >

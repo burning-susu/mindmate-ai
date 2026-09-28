@@ -13,6 +13,7 @@ from mindmate.application.hybrid_search import HybridAssessmentResult, HybridSea
 from mindmate.application.retrieval_test_queries import RetrievalQueryEncoderError
 from mindmate.application.source_snapshots import purge_source_snapshots_for_files
 from mindmate.config import Settings
+from mindmate.infrastructure.models import AiOperation
 from mindmate.main import create_app
 from mindmate.security.credentials import InMemoryCredentialStore
 from test_stage5_source_snapshots import _seed_active_index, _supported_result
@@ -152,6 +153,7 @@ def test_external_knowledge_request_is_bounded_and_citation_constraint_blocks_su
 ) -> None:
     provider = MockChatProvider(response_factory=lambda _request: "没有引用编号")
     provider.requires_external_transfer = True
+    provider.provider_name = "DEEPSEEK"
     settings = Settings(data_dir=tmp_path, env="test", chat_worker_poll_seconds=0.01)
     app = create_app(settings)
     app.state.chat_provider = provider
@@ -190,6 +192,13 @@ def test_external_knowledge_request_is_bounded_and_citation_constraint_blocks_su
         failed = _wait(client, created.json()["operation_id"])
         assert failed["status"] == "FAILED"
         assert failed["error_code"] == "CITATION_CONSTRAINT_FAILED"
+        factory = cast(Any, client.app).state.session_factory
+        with factory() as session:
+            operation = session.get(AiOperation, failed["operation_id"])
+            assert operation is not None
+            assert operation.request_stage == "UNKNOWN"
+            assert operation.request_sent_at is not None
+            assert operation.reserved_estimate_usd is not None
         assert len(provider.calls) == 1
         sent = provider.calls[0]
         assert sent.max_output_tokens == 256

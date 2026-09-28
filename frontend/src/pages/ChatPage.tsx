@@ -20,6 +20,7 @@ import {
   streamOperation,
 } from '../api/chat'
 import { getAiProviderStatus } from '../api/aiProvider'
+import { getAiBudgetStatus } from '../api/systemSettings'
 import { ApiError, apiRequest } from '../api/client'
 import type { KnowledgeBaseListResponse } from '../api/knowledgeBases'
 import { SourceCitationPanel } from '../components/SourceCitationPanel'
@@ -98,6 +99,12 @@ export default function ChatPage() {
   })
   const generationMode = providerQuery.data?.generation_mode ?? 'mock'
   const onlineGeneration = generationMode === 'deepseek' || generationMode === 'openai_gpt6_sol'
+  const budgetQuery = useQuery({
+    queryKey: ['ai-budget'],
+    queryFn: ({ signal }) => getAiBudgetStatus(signal),
+    enabled: onlineGeneration,
+    staleTime: 5_000,
+  })
   const openAiCard = providerQuery.data?.providers?.find((item) => item.provider_id === 'openai_gpt6_sol')
   const selectedOnline = generationMode === 'openai_gpt6_sol' ? openAiCard : undefined
   const onlineReady = generationMode === 'openai_gpt6_sol'
@@ -107,7 +114,18 @@ export default function ChatPage() {
       && providerQuery.data.consent.accepted
       && providerQuery.data.credential_store.available,
     )
-  const onlineBlocked = onlineGeneration && (!onlineReady || !confirmOnlineSend)
+  const budgetLoading = onlineGeneration && (budgetQuery.isLoading || budgetQuery.isError)
+  const onlineBlocked = onlineGeneration && (
+    !onlineReady
+    || !confirmOnlineSend
+    || budgetLoading
+    || Boolean(budgetQuery.data?.hard_stop_would_block)
+  )
+  const unknownBudgetCount = budgetQuery.data?.usage_summary?.unknown_usage_operations ?? 0
+  const needsUnknownBudgetConfirmation = onlineGeneration
+    && budgetQuery.data?.budget?.enabled
+    && budgetQuery.data.budget.unknown_usage_policy === 'confirm'
+    && unknownBudgetCount > 0
 
   const conversationsQuery = useQuery({
     queryKey: ['chat-conversations'],
@@ -411,10 +429,21 @@ export default function ChatPage() {
               {onlineGeneration ? (
                 <div className="chat-online-gate">
                   <p>{(selectedOnline?.cost_estimate ?? providerQuery.data?.cost_estimate)?.disclaimer ?? '费用估算不是严格美元限额。'} 知识库问题用满本地上限时粗估不超过 {(selectedOnline?.cost_estimate ?? providerQuery.data?.cost_estimate)?.knowledge_question_estimated_usd_ceiling ?? '0.001'} 美元。</p>
+                  {budgetQuery.isError ? <p role="alert">本地预算状态读取失败，暂不能确认是否允许外发。</p> : null}
+                  {budgetQuery.data?.hard_stop_block_reason ? <p role="alert">{budgetQuery.data.hard_stop_block_reason}</p> : null}
+                  {needsUnknownBudgetConfirmation ? (
+                    <p role="alert">
+                      周期内有 {unknownBudgetCount} 次在线操作的 usage 或价格快照未知；勾选下方确认也表示接受继续外发并承担本地估算不完整的风险。
+                    </p>
+                  ) : null}
                   {!onlineReady ? <p>需要先在设置页保存系统凭据中的 Key，并确认当前版本的外发说明。页面不会接收或保存 Key。</p> : null}
                   <label className="settings-checkline">
                     <input type="checkbox" checked={confirmOnlineSend} onChange={(event) => setConfirmOnlineSend(event.target.checked)} />
-                    <span>我确认本次会外发当前问题与必要的少量证据，并接受上述保守费用估算。</span>
+                    <span>
+                      {needsUnknownBudgetConfirmation
+                        ? '我确认本次会外发当前问题与必要的少量证据，接受保守费用估算和未知历史用量风险。'
+                        : '我确认本次会外发当前问题与必要的少量证据，并接受上述保守费用估算。'}
+                    </span>
                   </label>
                 </div>
               ) : null}

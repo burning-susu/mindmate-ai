@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 # ruff: noqa: B008
+from datetime import datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Request, Response
@@ -22,6 +23,7 @@ from mindmate.application.storage_stats import storage_overview
 from mindmate.application.usage_budget import (
     budget_status,
     privacy_diagnostics_status,
+    read_budget,
     set_budget,
     summarize_usage,
 )
@@ -115,8 +117,24 @@ def get_storage_overview(request: Request) -> dict[str, Any]:
 
 
 @router.get("/ai-usage")
-def get_ai_usage(session: Session = Depends(get_session)) -> dict[str, Any]:
-    return summarize_usage(session, days=30)
+def get_ai_usage(
+    start: datetime | None = None,
+    end: datetime | None = None,
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    budget = read_budget(session)
+    try:
+        return summarize_usage(
+            session,
+            period=budget["period"],
+            start=start,
+            end=end,
+            include_active_reservations=start is None and end is None,
+        )
+    except ValueError as exc:
+        raise SystemSettingsApiError(
+            str(exc), "用量查询窗口无效，请提供正确的 UTC 起止时间。", 400
+        ) from exc
 
 
 @router.get("/ai-budget")

@@ -615,3 +615,13 @@
 - 浏览器：当前可用界面仅显示没有标签页的 Codex 内置浏览器。枚举普通窗口时审批层返回 `404 Not Found`，错误为当前模型账户不支持 `gpt-5.6-luna`（request id `023bfe13-d0a2-4735-b0da-de80d2d1b305`）。没有重试审批，没有创建普通 Chrome/Edge 页面点击，没有下载诊断包、永久删除数据或生成截图。`LOG_RETENTION_BROWSER`、`DIAGNOSTICS_PREVIEW_EXPORT_BROWSER`、`HISTORY_PURGE_BROWSER`、`HISTORY_MULTISTEP_BROWSER` 均保持 `PARTIAL`。
 - 保留缺口：第六十六批备份 Worker、浏览器及恢复回归 `PASS` 不变；`BUDGET_RECONCILIATION` 与 `LEARNING_ONLINE_BROWSER` 仍 `PARTIAL`，真实 Provider 冒烟 `PENDING`。求职 Demo 既有 `PASS` 与完整 V1 阶段 5–8 的 `PARTIAL` 分开记录。
 - 详细报告：`docs/test-reports/stage-67-log-retention-history-browser.md`。下一批仍需本地周期用量/预算账目核对及 test-only 在线 Provider 页面走查；本地估算不等于 DeepSeek/OpenAI 官方实际账单。
+
+### 第六十八批：阶段 8 本地预算核对与在线学习验收
+
+- 状态：`LOCAL_BUDGET_RECONCILIATION` `PASS`（仅本地估算/预算保护实现与隔离测试）；`PROVIDER_BILLING_RECONCILIATION` `PENDING`；`LEARNING_ONLINE_CODE` `PASS`（MockTransport）；`LEARNING_ONLINE_BROWSER` `PARTIAL`；`REAL_PROVIDER_SMOKE` `PENDING`；`STAGE8_FULL_V1` `PARTIAL`。求职 Demo `PASS` 沿用旧证据，本批未重跑；阶段 5–7 完整 V1 保持 `PARTIAL`。
+- 数据与守卫：迁移 `f78c9e8a1042` 为 `ai_operations` 和 `learning_provider_operations` 增加请求阶段、`reserved_at`、`request_sent_at`、预估预留与费率快照。SQLite `BEGIN IMMEDIATE` 按唯一 `operation_id` 原子计算已知 usage、未知外发和未完成预留；响应结算幂等，未知 usage/旧费率快照遵循拒绝或逐次确认策略。两张调用表统一按 UTC 窗口统计，并区分 Mock、DeepSeek、OpenAI、Chat、RAG、学习出题与点评。
+- 设置页与查询：预算支持滚动 30 天/UTC 自然月、硬停止、软提醒、未知用量策略；显示已知估算、预留、未知暴露、窗口起止、核对时间、价格快照来源日期、Provider 官方用量入口和官方账单未核对状态。设置页的“历史窗口”用 UTC 开始日/不包含结束日查询 `GET /api/v1/system/ai-usage?start=...&end=...`，不改变活动预算周期。
+- 测试：后端预算、学习 Provider、Provider fixture、Chat/RAG 与恢复组合 `33 passed`；包含独立进程争抢预留、UTC 跨月发送时间、旧窗口、历史无费率快照、未知请求恢复、双 Provider 费率、Mock 无费用和选择服务失败不回退。Ruff `src tests scripts` 通过；定向 Pyright `0 errors`；compileall 通过；Alembic `heads/current` 均为 `f78c9e8a1042`。前端 Vitest `15 files / 72 tests`、typecheck、lint、build 通过。OpenAPI 3.1 `111 schemas / 120 operations`，生成类型同步，`git diff --check` 通过。真实 Key/Provider 未使用。
+- 浏览器：隔离 test-only server 的健康检查为 200，fixture calls 初始与结束均为 0；Playwright Chromium 启动报 `spawn EPERM`。普通 Chrome profile 创建被审批层 `404` 拒绝，提示当前模型账户不支持 `gpt-5.6-luna`；没有重试或绕过，没有页面会话、截图或人工调用计数。普通 Chrome/Edge 双 Provider 页面走查仍待补。
+- 对账：费用由 DeepSeek/OpenAI 各自账户结算。界面按 Provider 返回 usage 和请求时价格快照做本地估算，未获取官方账单，不显示官方已对账或费用绝对上限。`PROVIDER_BILLING_RECONCILIATION` 与真实 Provider smoke 继续 `PENDING`。
+- 交接：报告见 `docs/test-reports/stage-68-budget-online-browser.md`。下一批先补普通 Chrome/Edge Guest profile 的真实页面证据，再处理全局错误、离线体验和阶段 8 最终追踪矩阵；第六十七批日志、诊断下载、历史永久删除和多题定位页面缺口继续 `PARTIAL`。

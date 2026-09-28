@@ -105,6 +105,12 @@ export default function SettingsPage() {
   const [budgetEnabled, setBudgetEnabled] = useState<boolean | null>(null)
   const [hardStop, setHardStop] = useState<string | null>(null)
   const [softRemind, setSoftRemind] = useState<string | null>(null)
+  const [budgetPeriod, setBudgetPeriod] = useState<'30d' | 'calendar_month' | null>(null)
+  const [unknownUsagePolicy, setUnknownUsagePolicy] = useState<'deny' | 'confirm' | null>(null)
+  const [historyStart, setHistoryStart] = useState('')
+  const [historyEnd, setHistoryEnd] = useState('')
+  const [historyRange, setHistoryRange] = useState<{ start: string; end: string } | null>(null)
+  const [historyRangeError, setHistoryRangeError] = useState<string | null>(null)
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false)
   const [diagnosticsMessage, setDiagnosticsMessage] = useState<string | null>(null)
   const [diagnosticsError, setDiagnosticsError] = useState<string | null>(null)
@@ -118,6 +124,18 @@ export default function SettingsPage() {
     queryFn: ({ signal }) => getEmbeddingModelStatus(signal),
   })
   const usageQuery = useQuery({ queryKey: ['ai-usage'], queryFn: ({ signal }) => getAiUsageSummary(signal) })
+  const historyUsageQuery = useQuery({
+    queryKey: ['ai-usage-window', historyRange],
+    queryFn: ({ signal }) => {
+      if (!historyRange) throw new Error('需要选择历史窗口。')
+      return getAiUsageSummary(signal, {
+        start: `${historyRange.start}T00:00:00Z`,
+        end: `${historyRange.end}T00:00:00Z`,
+      })
+    },
+    enabled: historyRange !== null,
+    retry: false,
+  })
   const budgetQuery = useQuery({
     queryKey: ['ai-budget'],
     queryFn: ({ signal }) => getAiBudgetStatus(signal),
@@ -146,6 +164,8 @@ export default function SettingsPage() {
   const budgetEnabledValue = budgetEnabled ?? budgetQuery.data?.budget.enabled ?? false
   const hardStopValue = hardStop ?? budgetQuery.data?.budget.hard_stop_usd ?? ''
   const softRemindValue = softRemind ?? budgetQuery.data?.budget.soft_remind_usd ?? ''
+  const budgetPeriodValue = budgetPeriod ?? (budgetQuery.data?.budget.period === 'calendar_month' ? 'calendar_month' : '30d')
+  const unknownUsagePolicyValue = unknownUsagePolicy ?? budgetQuery.data?.budget.unknown_usage_policy ?? 'deny'
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['ai-provider'] })
   const saveMutation = useMutation({
@@ -212,13 +232,15 @@ export default function SettingsPage() {
         enabled: budgetEnabledValue,
         hard_stop_usd: hardStopValue.trim() || null,
         soft_remind_usd: softRemindValue.trim() || null,
-        period: '30d',
-        unknown_usage_policy: 'deny',
+        period: budgetPeriodValue,
+        unknown_usage_policy: unknownUsagePolicyValue,
       }),
     onSuccess: () => {
       setBudgetEnabled(null)
       setHardStop(null)
       setSoftRemind(null)
+      setBudgetPeriod(null)
+      setUnknownUsagePolicy(null)
       void queryClient.invalidateQueries({ queryKey: ['ai-budget'] })
       void queryClient.invalidateQueries({ queryKey: ['ai-usage'] })
     },
@@ -327,8 +349,11 @@ export default function SettingsPage() {
     openAiConsentMutation.isPending
   const generationMode = status?.generation_mode ?? 'mock'
   const openAi = status?.providers?.find((item) => item.provider_id === 'openai_gpt6_sol')
-  const canTest = Boolean(status?.configured && status.credential_store.available && confirmTransfer && !busy)
-  const canTestOpenAi = Boolean(openAi?.configured && openAi.credential_store.available && confirmOpenAiTransfer && !busy)
+  const budgetAllowsProbe = Boolean(
+    !budgetQuery.isLoading && !budgetQuery.isError && !budgetQuery.data?.hard_stop_would_block,
+  )
+  const canTest = Boolean(status?.configured && status.credential_store.available && confirmTransfer && !busy && budgetAllowsProbe)
+  const canTestOpenAi = Boolean(openAi?.configured && openAi.credential_store.available && confirmOpenAiTransfer && !busy && budgetAllowsProbe)
   const activeBackup = backupsQuery.data?.items.find((item) => isBackupInProgress(item.status))
   const modeLabel = generationMode === 'deepseek'
     ? 'DeepSeek 在线'
@@ -653,7 +678,7 @@ export default function SettingsPage() {
                 <Wallet size={18} aria-hidden="true" />
               </span>
               <h2 id="usage-heading">本地用量与预算</h2>
-              <p>近 30 天用量来自持久 AiOperation；Mock 与在线分开统计，未知 usage 不会记成 0。</p>
+              <p>按 UTC 预算周期统计 Chat、RAG 与学习操作；费用由所选 Provider 账户结算。</p>
             </div>
           </div>
           {usageQuery.isLoading || budgetQuery.isLoading ? <LoadingBlock label="正在读取用量与预算" /> : null}
@@ -676,29 +701,110 @@ export default function SettingsPage() {
                   .filter((item) => item.provider === 'DEEPSEEK' || item.provider === 'OPENAI')
                   .map((item) => (
                     <span key={item.provider}>
-                      {item.provider === 'OPENAI' ? 'OpenAI' : 'DeepSeek'}：{item.operations} 次，估算{' '}
-                      {item.usage_complete ? item.estimated_usd ?? '未知' : '含未知 usage，未当作已结算 0'}
+                      {item.provider === 'OPENAI' ? 'OpenAI' : 'DeepSeek'}：{item.operations} 次；本地估算{' '}
+                      {item.estimated_usd ?? '未知'}；未知用量 {item.unknown_usage_operations} 次
                     </span>
                   ))}
                 <span>
-                  在线估算：
+                  已知 usage 本地估算：
                   {usageQuery.data.estimated_online_usd == null
                     ? '尚无统计'
                     : `${usageQuery.data.estimated_online_usd} ${usageQuery.data.currency}`}
                 </span>
+                <span>未发送预留：{usageQuery.data.reserved_online_usd} {usageQuery.data.currency}</span>
+                <span>已外发未知预估：{usageQuery.data.unknown_exposure_estimated_usd} {usageQuery.data.currency}</span>
+                <span>
+                  窗口（UTC）：{usageQuery.data.window_start} 至 {usageQuery.data.window_end}
+                </span>
+                <span>最近核对：{usageQuery.data.checked_at}</span>
               </div>
               {usageQuery.data.online_actual_usage_message ? (
                 <p className="settings-hint">{usageQuery.data.online_actual_usage_message}</p>
               ) : null}
-              {usageQuery.data.unknown_usage_operations > 0 ? (
+              {usageQuery.data.totals.online.unknown_usage_operations > 0 ? (
                 <p className="settings-hint">
-                  有 {usageQuery.data.unknown_usage_operations} 次操作缺少 usage，未计入已计量 Token。
+                  在线有 {usageQuery.data.totals.online.unknown_usage_operations} 次操作的 usage 或价格快照未知；未按零成本放行。
                 </p>
               ) : null}
               <p className="settings-hint">
-                {usageQuery.data.estimate_disclaimer} 价格来源日期{' '}
-                {usageQuery.data.cost_estimate.checked_on}；不能断言官方实时余额。
+                {usageQuery.data.estimate_disclaimer} {usageQuery.data.billing_reconciliation_status}
               </p>
+              <div className="settings-links">
+                <a href={usageQuery.data.provider_billing_urls?.deepseek ?? 'https://platform.deepseek.com/usage'} target="_blank" rel="noreferrer">
+                  <ExternalLink size={14} aria-hidden="true" />
+                  DeepSeek 官方用量与账单
+                </a>
+                <a href={usageQuery.data.provider_billing_urls?.openai ?? 'https://platform.openai.com/usage'} target="_blank" rel="noreferrer">
+                  <ExternalLink size={14} aria-hidden="true" />
+                  OpenAI 官方用量与账单
+                </a>
+                <a href={usageQuery.data.cost_estimates?.deepseek?.pricing_url ?? usageQuery.data.cost_estimate.pricing_url} target="_blank" rel="noreferrer">
+                  <ExternalLink size={14} aria-hidden="true" />
+                  DeepSeek 当前公开价格（核于 {usageQuery.data.cost_estimates?.deepseek?.checked_on ?? usageQuery.data.cost_estimate.checked_on}）
+                </a>
+                <a href={usageQuery.data.cost_estimates?.openai?.pricing_url ?? 'https://developers.openai.com/api/docs/models/gpt-6-sol'} target="_blank" rel="noreferrer">
+                  <ExternalLink size={14} aria-hidden="true" />
+                  OpenAI 当前公开价格（核于 {usageQuery.data.cost_estimates?.openai?.checked_on ?? '未核对'}）
+                </a>
+                {(usageQuery.data.used_price_sources ?? []).map((source) => (
+                  <a key={`${source.provider}-${source.checked_on}-${source.pricing_url}`} href={source.pricing_url} target="_blank" rel="noreferrer">
+                    <ExternalLink size={14} aria-hidden="true" />
+                    {source.provider} 价格来源（核对于 {source.checked_on}）
+                  </a>
+                ))}
+              </div>
+              <p className="settings-hint">
+                操作类型：{(usageQuery.data.by_operation_type ?? []).map((item) => `${item.operation_type} ${item.operations} 次`).join('；') || '暂无记录'}
+              </p>
+              <details>
+                <summary>历史窗口</summary>
+                <form
+                  className="settings-key-form"
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    setHistoryRangeError(null)
+                    if (!historyStart || !historyEnd || historyStart >= historyEnd) {
+                      setHistoryRangeError('结束日期必须晚于开始日期。')
+                      return
+                    }
+                    setHistoryRange({ start: historyStart, end: historyEnd })
+                  }}
+                >
+                  <label htmlFor="usage-history-start">开始日期（UTC）</label>
+                  <input
+                    id="usage-history-start"
+                    type="date"
+                    value={historyStart}
+                    onChange={(event) => setHistoryStart(event.target.value)}
+                    required
+                  />
+                  <label htmlFor="usage-history-end">结束日期（UTC，不包含）</label>
+                  <input
+                    id="usage-history-end"
+                    type="date"
+                    value={historyEnd}
+                    min={historyStart || undefined}
+                    onChange={(event) => setHistoryEnd(event.target.value)}
+                    required
+                  />
+                  {historyRangeError ? <p className="settings-error-text" role="alert">{historyRangeError}</p> : null}
+                  <button className="quiet-button" type="submit">查询历史窗口</button>
+                </form>
+                {historyUsageQuery.isError ? (
+                  <FailBlock error={historyUsageQuery.error} onRetry={() => void historyUsageQuery.refetch()} />
+                ) : null}
+                {historyUsageQuery.data ? (
+                  <div className="settings-provider-meta">
+                    <span>
+                      UTC 窗口：{historyUsageQuery.data.window_start} 至 {historyUsageQuery.data.window_end}
+                    </span>
+                    <span>已知费用本地估算：{historyUsageQuery.data.estimated_online_usd} {historyUsageQuery.data.currency}</span>
+                    <span>预留：{historyUsageQuery.data.reserved_online_usd} {historyUsageQuery.data.currency}</span>
+                    <span>未知操作：{historyUsageQuery.data.totals.online.unknown_usage_operations}</span>
+                    <span>{historyUsageQuery.data.billing_reconciliation_status}</span>
+                  </div>
+                ) : null}
+              </details>
             </>
           ) : null}
           {budgetQuery.data ? (
@@ -715,8 +821,17 @@ export default function SettingsPage() {
                   checked={budgetEnabledValue}
                   onChange={(event) => setBudgetEnabled(event.target.checked)}
                 />
-                <span>启用近 30 天硬停止阈值（默认关闭；在后端外发前判断）</span>
+                <span>启用本地硬停止阈值（默认关闭；请求前原子预留）</span>
               </label>
+              <label htmlFor="budget-period">预算周期</label>
+              <select
+                id="budget-period"
+                value={budgetPeriodValue}
+                onChange={(event) => setBudgetPeriod(event.target.value as '30d' | 'calendar_month')}
+              >
+                <option value="30d">滚动 30 天（UTC）</option>
+                <option value="calendar_month">UTC 自然月</option>
+              </select>
               <label htmlFor="budget-hard-stop">硬停止阈值（USD）</label>
               <input
                 id="budget-hard-stop"
@@ -733,9 +848,20 @@ export default function SettingsPage() {
                 placeholder="例如 0.50"
                 disabled={!budgetEnabledValue}
               />
+              <label htmlFor="budget-unknown-policy">未知用量或费率策略</label>
+              <select
+                id="budget-unknown-policy"
+                value={unknownUsagePolicyValue}
+                onChange={(event) => setUnknownUsagePolicy(event.target.value as 'deny' | 'confirm')}
+                disabled={!budgetEnabledValue}
+              >
+                <option value="deny">拒绝后续外发</option>
+                <option value="confirm">每次显示风险并明确确认</option>
+              </select>
               <div className="settings-provider-meta">
                 <span>币种：{budgetQuery.data.currency}</span>
-                <span>已用估算：{budgetQuery.data.spent_estimated_usd}</span>
+                <span>已知费用本地估算：{budgetQuery.data.spent_estimated_usd}</span>
+                <span>预算暴露估算（含预留）：{budgetQuery.data.budget_exposure_estimated_usd}</span>
                 <span>
                   余量：
                   {budgetQuery.data.remaining_estimated_usd == null
@@ -743,15 +869,17 @@ export default function SettingsPage() {
                     : budgetQuery.data.remaining_estimated_usd}
                 </span>
                 <span>
-                  未知用量策略：{budgetQuery.data.budget.unknown_usage_policy === 'deny' ? '保守拒绝' : '需确认'}
+                  未知用量策略：{unknownUsagePolicyValue === 'deny' ? '拒绝外发' : '每次确认'}
                 </span>
+                <span>预算窗口（UTC）：{budgetQuery.data.window_start} 至 {budgetQuery.data.window_end}</span>
+                <span>最近核对：{budgetQuery.data.checked_at}</span>
               </div>
               {budgetQuery.data.soft_remind_triggered ? (
                 <p className="settings-hint">已触及软提醒阈值。</p>
               ) : null}
               {budgetQuery.data.hard_stop_would_block ? (
                 <p className="settings-error-text" role="status">
-                  当前硬停止将阻止新的外部 Provider 调用。
+                  {budgetQuery.data.hard_stop_block_reason ?? '当前硬停止将阻止新的外部 Provider 调用。'}
                 </p>
               ) : null}
               {budgetMutation.isError ? (
@@ -1036,8 +1164,18 @@ export default function SettingsPage() {
               checked={confirmTransfer}
               onChange={(event) => setConfirmTransfer(event.target.checked)}
             />
-            <span>我确认本次会向 DeepSeek 发送固定测试文本，并接受极小 API 用量。</span>
+            <span>
+              {budgetQuery.data?.budget.enabled
+                && budgetQuery.data.budget?.unknown_usage_policy === 'confirm'
+                && (budgetQuery.data.usage_summary?.unknown_usage_operations ?? 0) > 0
+                ? '我确认向 DeepSeek 发送固定测试文本、接受极小用量，并接受历史未知用量带来的估算风险。'
+                : '我确认本次会向 DeepSeek 发送固定测试文本，并接受极小 API 用量。'}
+            </span>
           </label>
+          {budgetQuery.data?.hard_stop_block_reason ? (
+            <p className="settings-error-text" role="status">{budgetQuery.data.hard_stop_block_reason}</p>
+          ) : null}
+          {budgetQuery.isError ? <p className="settings-error-text" role="status">本地预算状态读取失败，暂不能确认是否允许连接探测。</p> : null}
           <button className="primary-button" type="button" disabled={!canTest} onClick={() => testMutation.mutate()}>
             <Wifi size={15} aria-hidden="true" />
             {testMutation.isPending ? '正在测试连接' : '测试连接'}
@@ -1095,7 +1233,13 @@ export default function SettingsPage() {
               checked={confirmOpenAiTransfer}
               onChange={(event) => setConfirmOpenAiTransfer(event.target.checked)}
             />
-            <span>我确认本次会向 OpenAI 发送一条测试请求，并接受可能产生的 API 费用。</span>
+            <span>
+              {budgetQuery.data?.budget.enabled
+                && budgetQuery.data.budget?.unknown_usage_policy === 'confirm'
+                && (budgetQuery.data.usage_summary?.unknown_usage_operations ?? 0) > 0
+                ? '我确认向 OpenAI 发送测试请求、接受可能费用，并接受历史未知用量带来的估算风险。'
+                : '我确认本次会向 OpenAI 发送一条测试请求，并接受可能产生的 API 费用。'}
+            </span>
           </label>
           <button className="primary-button" type="button" disabled={!canTestOpenAi} onClick={() => testOpenAiMutation.mutate()}>
             {testOpenAiMutation.isPending ? '正在测试 OpenAI' : '测试 OpenAI 连接'}

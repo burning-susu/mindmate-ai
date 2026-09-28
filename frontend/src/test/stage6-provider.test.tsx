@@ -72,24 +72,41 @@ function settingsAuxiliaryResponse(url: string, logFileCount = 1) {
       message: null,
     })
   }
-  if (url.endsWith('/api/v1/system/ai-usage')) {
+  if (url.includes('/api/v1/system/ai-usage')) {
+    const query = new URL(url, 'http://127.0.0.1').searchParams
     return response({
       period_days: 30,
-      since: '2026-08-28T00:00:00Z',
-      until: '2026-09-27T00:00:00Z',
+      window_period: '30d',
+      since: query.get('start') ?? '2026-08-28T00:00:00Z',
+      until: query.get('end') ?? '2026-09-27T00:00:00Z',
+      window_start: query.get('start') ?? '2026-08-28T00:00:00Z',
+      window_end: query.get('end') ?? '2026-09-27T00:00:00Z',
+      checked_at: '2026-09-28T10:00:00Z',
       currency: 'USD',
       totals: {
-        mock: { operations: 0, input_tokens: 0, output_tokens: 0, total_tokens: 0, unknown_usage_operations: 0, estimated_usd: null, usage_complete: true },
-        online: { operations: 0, input_tokens: 0, output_tokens: 0, total_tokens: 0, unknown_usage_operations: 0, estimated_usd: '0', usage_complete: true },
+        mock: { operations: 0, input_tokens: 0, output_tokens: 0, total_tokens: 0, unknown_usage_operations: 0, unknown_price_operations: 0, estimated_usd: null, reserved_estimated_usd: '0', unknown_exposure_estimated_usd: '0', usage_complete: true },
+        online: { operations: 0, input_tokens: 0, output_tokens: 0, total_tokens: 0, unknown_usage_operations: 0, unknown_price_operations: 0, estimated_usd: '0', reserved_estimated_usd: '0', unknown_exposure_estimated_usd: '0', usage_complete: true },
       },
       daily: [],
       by_model: [],
+      by_provider: [],
+      by_operation_type: [],
       online_actual_usage_available: false,
       online_actual_usage_message: '在线实际用量暂无记录',
       unknown_usage_operations: 0,
       estimated_online_usd: '0',
+      reserved_online_usd: '0',
+      unknown_exposure_estimated_usd: '0',
+      budget_exposure_estimated_usd: '0',
+      provider_billing_urls: { deepseek: 'https://platform.deepseek.com/usage', openai: 'https://platform.openai.com/usage' },
+      used_price_sources: [],
+      billing_reconciliation_status: '尚未与官方账单核对',
       estimate_disclaimer: '估算说明',
       cost_estimate: { checked_on: '2026-09-26', pricing_url: 'https://example.invalid', rate_assumption: 'fixture', input_usd_per_million_tokens: '0.30', output_usd_per_million_tokens: '1.20', disclaimer: '估算说明' },
+      cost_estimates: {
+        deepseek: { checked_on: '2026-09-26', pricing_url: 'https://example.invalid/deepseek', rate_assumption: 'fixture', input_usd_per_million_tokens: '0.30', output_usd_per_million_tokens: '1.20', disclaimer: '估算说明' },
+        openai: { checked_on: '2026-09-27', pricing_url: 'https://example.invalid/openai', rate_assumption: 'fixture', input_usd_per_million_tokens: '2', output_usd_per_million_tokens: '10', disclaimer: '估算说明' },
+      },
     })
   }
   if (url.endsWith('/api/v1/system/ai-budget')) {
@@ -97,9 +114,15 @@ function settingsAuxiliaryResponse(url: string, logFileCount = 1) {
       budget: { enabled: false, currency: 'USD', period: '30d', hard_stop_usd: null, soft_remind_usd: null, unknown_usage_policy: 'deny', updated_at: null },
       usage_summary: { estimated_online_usd: '0', unknown_usage_operations: 0, online_operations: 0, online_usage_complete: true, online_actual_usage_message: '在线实际用量暂无记录' },
       spent_estimated_usd: '0',
+      budget_exposure_estimated_usd: '0',
       remaining_estimated_usd: null,
       soft_remind_triggered: false,
       hard_stop_would_block: false,
+      hard_stop_block_reason: null,
+      checked_at: '2026-09-28T10:00:00Z',
+      window_start: '2026-08-28T00:00:00Z',
+      window_end: '2026-09-27T00:00:00Z',
+      billing_reconciliation_status: '尚未与官方账单核对',
       currency: 'USD',
       estimate_disclaimer: '估算说明',
     })
@@ -276,6 +299,38 @@ describe('stage 6 AI provider configuration', () => {
     await waitFor(() => expect(calls).toEqual([JSON.stringify({ mode: 'deepseek' })]))
     expect(await screen.findByText('DeepSeek 在线生成、会外发当前问题与必要的少量证据。')).toBeInTheDocument()
     expect(calls.some((body) => body.includes('api_key'))).toBe(false)
+  })
+
+  it('queries a historical UTC usage window without changing the active budget period', async () => {
+    queryClient.clear()
+    window.history.pushState({}, '', '/settings')
+    const usageRequests: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/system/session')) return response({ status: 'ready' })
+      const auxiliary = settingsAuxiliaryResponse(url)
+      if (auxiliary) {
+        if (url.includes('/api/v1/system/ai-usage')) usageRequests.push(url)
+        return auxiliary
+      }
+      if (url.endsWith('/api/v1/ai/provider')) return response(initialStatus)
+      return response({ status: 'ok', version: '0.1.0' })
+    }))
+
+    render(<BrowserRouter><App /></BrowserRouter>)
+    expect(await screen.findByRole('heading', { name: '设置' })).toBeInTheDocument()
+    expect(screen.getByLabelText('预算周期')).toHaveValue('30d')
+    fireEvent.click(screen.getByText('历史窗口'))
+    fireEvent.change(screen.getByLabelText('开始日期（UTC）'), { target: { value: '2026-09-01' } })
+    fireEvent.change(screen.getByLabelText('结束日期（UTC，不包含）'), { target: { value: '2026-10-01' } })
+    fireEvent.click(screen.getByRole('button', { name: '查询历史窗口' }))
+
+    expect(await screen.findByText(/UTC 窗口：2026-09-01T00:00:00Z 至 2026-10-01T00:00:00Z/)).toBeInTheDocument()
+    expect(usageRequests).toHaveLength(2)
+    const historyRequest = new URL(usageRequests[1], 'http://127.0.0.1')
+    expect(historyRequest.searchParams.get('start')).toBe('2026-09-01T00:00:00Z')
+    expect(historyRequest.searchParams.get('end')).toBe('2026-10-01T00:00:00Z')
+    expect(screen.getByLabelText('预算周期')).toHaveValue('30d')
   })
 
   it('previews the safe diagnostics projection and lets the user cancel it', async () => {

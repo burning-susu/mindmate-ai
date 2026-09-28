@@ -256,7 +256,9 @@ def test_ai_provider_connection(
             409,
         )
     try:
-        assert_external_budget_allows(session)
+        assert_external_budget_allows(
+            session, confirm_unknown_usage=payload.confirm_external_transfer
+        )
     except BudgetRejected as exc:
         raise AiProviderApiError(exc.code, exc.detail, 409) from exc
     store = _credential_store(request)
@@ -383,7 +385,9 @@ def test_openai_provider_connection(
             409,
         )
     try:
-        assert_external_budget_allows(session)
+        assert_external_budget_allows(
+            session, confirm_unknown_usage=payload.confirm_external_transfer
+        )
     except BudgetRejected as exc:
         raise AiProviderApiError(exc.code, exc.detail, 409) from exc
     store = _credential_store(request)

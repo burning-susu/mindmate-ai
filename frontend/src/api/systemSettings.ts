@@ -27,32 +27,57 @@ export type UsageBucket = {
   output_tokens: number
   total_tokens: number
   unknown_usage_operations: number
+  unknown_price_operations: number
   estimated_usd: string | null
+  reserved_estimated_usd: string
+  unknown_exposure_estimated_usd: string
   usage_complete: boolean
+}
+
+export type AiPriceEstimate = {
+  checked_on: string
+  pricing_url: string
+  rate_assumption: string
+  input_usd_per_million_tokens: string
+  output_usd_per_million_tokens: string
+  disclaimer: string
 }
 
 export type AiUsageSummary = {
   period_days: number
+  window_period: string
   since: string
   until: string
+  window_start: string
+  window_end: string
+  checked_at: string
   currency: string
   totals: { mock: UsageBucket; online: UsageBucket }
   daily: Array<{ date: string; mock: UsageBucket; online: UsageBucket }>
-  by_model: Array<{ channel: string; model: string } & UsageBucket>
+  by_model: Array<{ channel: string; provider: string; model: string; operation_type: string } & UsageBucket>
   by_provider?: Array<{ provider: string } & UsageBucket>
+  by_operation_type: Array<{ operation_type: string } & UsageBucket>
   online_actual_usage_available: boolean
   online_actual_usage_message: string | null
   unknown_usage_operations: number
   estimated_online_usd: string | null
+  reserved_online_usd: string
+  unknown_exposure_estimated_usd: string
+  budget_exposure_estimated_usd: string
   estimate_disclaimer: string
-  cost_estimate: {
+  billing_reconciliation_status: string
+  provider_billing_urls: { deepseek: string; openai: string }
+  cost_estimate: AiPriceEstimate
+  cost_estimates: {
+    deepseek: AiPriceEstimate
+    openai: AiPriceEstimate
+  }
+  used_price_sources: Array<{
+    provider: string
     checked_on: string
     pricing_url: string
-    rate_assumption: string
-    input_usd_per_million_tokens: string
-    output_usd_per_million_tokens: string
-    disclaimer: string
-  }
+    operations: number
+  }>
 }
 
 export type BudgetConfig = {
@@ -69,15 +94,24 @@ export type BudgetStatus = {
   budget: BudgetConfig
   usage_summary: {
     estimated_online_usd: string | null
+    reserved_online_usd: string
+    unknown_exposure_estimated_usd: string
+    budget_exposure_estimated_usd: string
     unknown_usage_operations: number
     online_operations: number
     online_usage_complete: boolean
     online_actual_usage_message: string | null
   }
   spent_estimated_usd: string
+  budget_exposure_estimated_usd: string
   remaining_estimated_usd: string | null
   soft_remind_triggered: boolean
   hard_stop_would_block: boolean
+  hard_stop_block_reason: string | null
+  checked_at: string
+  window_start: string
+  window_end: string
+  billing_reconciliation_status: string
   currency: string
   estimate_disclaimer: string
 }
@@ -171,8 +205,14 @@ export function getStorageOverview(signal?: AbortSignal) {
   return apiRequest<StorageOverview>('/api/v1/system/storage', { signal })
 }
 
-export function getAiUsageSummary(signal?: AbortSignal) {
-  return apiRequest<AiUsageSummary>('/api/v1/system/ai-usage', { signal })
+export function getAiUsageSummary(
+  signal?: AbortSignal,
+  window?: { start: string; end: string },
+) {
+  const query = window
+    ? `?${new URLSearchParams({ start: window.start, end: window.end }).toString()}`
+    : ''
+  return apiRequest<AiUsageSummary>(`/api/v1/system/ai-usage${query}`, { signal })
 }
 
 export function getAiBudgetStatus(signal?: AbortSignal) {

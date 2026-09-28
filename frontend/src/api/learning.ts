@@ -12,6 +12,8 @@ export type LearningProviderPlan = {
   requested_model: string | null
   requires_charge_confirmation: boolean
   requires_provider_key: boolean
+  budget_notice: string | null
+  budget_blocks?: boolean
   outbound_summary: string
   question_estimate: {
     checked_on: string

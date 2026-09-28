@@ -59,7 +59,15 @@ export default function LearningNewPage() {
       : ''
   const topicReady = !topicError
   const goalReady = !goalError
-  const canSubmit = Boolean(knowledgeBaseId) && ready && topicReady && goalReady && !knowledgeBaseQuery.isLoading && !membersQuery.isLoading && !planQuery.isLoading && !submitting && (!online || chargeConfirmed)
+  const canSubmit = Boolean(knowledgeBaseId)
+    && ready
+    && topicReady
+    && goalReady
+    && !knowledgeBaseQuery.isLoading
+    && !membersQuery.isLoading
+    && !planQuery.isLoading
+    && !submitting
+    && (!online || (chargeConfirmed && !planQuery.data?.budget_blocks))
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -202,6 +210,7 @@ export default function LearningNewPage() {
           {planQuery.data ? <p role="status">{planQuery.data.outbound_summary}</p> : null}
           {online && planQuery.data ? (
             <div className="settings-privacy-copy">
+              {planQuery.data.budget_notice ? <p role="alert">{planQuery.data.budget_notice}</p> : null}
               <p>
                 将向 {planQuery.data.provider} 发送学习主题、学习目标和至多 2 段服务端批准的资料摘录。
                 请求模型 {planQuery.data.requested_model}。按 {planQuery.data.question_estimate.checked_on} 公开费率，
