@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import threading
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -16,6 +15,7 @@ from mindmate.application.local_backup import (
     ARCHIVE_SUFFIX,
     FORMAT_VERSION,
     BackupBuildError,
+    backup_manifest_sha256,
     create_backup_archive,
     read_schema_version,
     verify_backup_archive,
@@ -24,8 +24,6 @@ from mindmate.application.local_restore import RESTORE_FLOW_AVAILABLE
 from mindmate.application.tasks import create_task
 from mindmate.config import Settings
 from mindmate.infrastructure.models import BackgroundTask, Backup, BackupEntry, new_id
-
-_CREATE_LOCK = threading.Lock()
 
 UNENCRYPTED_WARNING = (
     "此备份包未加密，并包含用户文件与学习历史。请保存在受保护磁盘上，不要上传到云端或共享给他人。"
@@ -46,14 +44,18 @@ def _idempotency_task_key(raw_key: str) -> str:
     return f"bc:{digest}"
 
 
+def _retry_task_key(raw_key: str) -> str:
+    digest = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
+    return f"br:{digest}"
+
+
 def _now() -> datetime:
     return datetime.now(UTC)
 
 
 def _archive_relative_name(backup_id: str, created_at: datetime) -> str:
     stamp = created_at.strftime("%Y%m%d-%H%M%S")
-    short = backup_id.replace("-", "")[:8]
-    return f"backups/mindmate-backup-{stamp}-{short}{ARCHIVE_SUFFIX}"
+    return f"backups/mindmate-backup-{stamp}-{backup_id}{ARCHIVE_SUFFIX}"
 
 
 def _has_drive_prefix(relative: str) -> bool:
@@ -130,24 +132,71 @@ def _persist_entries(session: Session, backup_id: str, manifest: dict[str, Any])
         )
 
 
-def _update_backup_task(session: Session, backup_id: str, *, status: str, error: str | None) -> None:
-    now = _now()
-    for task_row in session.scalars(
-        select(BackgroundTask).where(BackgroundTask.task_type == "BACKUP_CREATE")
-    ):
-        payload = task_row.checkpoint_json or {}
-        if payload.get("backup_id") != backup_id:
-            continue
-        task_row.status = status
-        task_row.updated_at = now
-        task_row.completed_at = now if status in {"COMPLETED", "FAILED"} else task_row.completed_at
-        task_row.progress = 100 if status == "COMPLETED" else task_row.progress
-        task_row.error_summary = error
-        task_row.checkpoint_json = {
-            **payload,
-            "phase": "completed" if status == "COMPLETED" else "failed",
-        }
-        break
+def _backup_for_task_key(
+    session: Session,
+    task_key: str,
+    *,
+    expected_backup_id: str | None = None,
+) -> Backup | None:
+    task = session.scalar(
+        select(BackgroundTask).where(BackgroundTask.idempotency_key == task_key)
+    )
+    if task is None:
+        return None
+    checkpoint = task.checkpoint_json if isinstance(task.checkpoint_json, dict) else {}
+    backup_id = checkpoint.get("backup_id")
+    if not isinstance(backup_id, str):
+        return None
+    if expected_backup_id is not None and backup_id != expected_backup_id:
+        raise BackupBuildError("BACKUP_IDEMPOTENCY_CONFLICT", "重试请求已用于另一份备份。")
+    return session.get(Backup, backup_id)
+
+
+def _active_backup(session: Session) -> Backup | None:
+    return session.scalar(
+        select(Backup)
+        .where(Backup.status.in_({"CREATING", "QUEUED", "RUNNING"}))
+        .order_by(Backup.created_at, Backup.backup_id)
+        .limit(1)
+    )
+
+
+def _commit_new_task_or_resolve_race(
+    session: Session,
+    *,
+    task_key: str,
+    expected_backup_id: str | None = None,
+) -> Backup:
+    from sqlalchemy.exc import IntegrityError
+
+    try:
+        session.commit()
+    except IntegrityError as exc:
+        session.rollback()
+        existing = _backup_for_task_key(
+            session,
+            task_key,
+            expected_backup_id=expected_backup_id,
+        )
+        if existing is not None:
+            return existing
+        if _active_backup(session) is not None:
+            raise BackupBuildError(
+                "BACKUP_CREATE_IN_PROGRESS",
+                "已有备份任务正在排队或运行，请稍后重试。",
+            ) from exc
+        raise
+    backup_id = expected_backup_id
+    if backup_id is None:
+        task = session.scalar(
+            select(BackgroundTask).where(BackgroundTask.idempotency_key == task_key)
+        )
+        checkpoint = task.checkpoint_json if task and isinstance(task.checkpoint_json, dict) else {}
+        backup_id = checkpoint.get("backup_id") if isinstance(checkpoint, dict) else None
+    row = session.get(Backup, backup_id) if isinstance(backup_id, str) else None
+    if row is None:
+        raise BackupBuildError("BACKUP_CREATE_FAILED", "备份任务已保存，但备份记录无法读取。")
+    return row
 
 
 def start_or_get_backup(
@@ -156,15 +205,19 @@ def start_or_get_backup(
     *,
     idempotency_key: str,
 ) -> Backup:
-    """Idempotent backup create: returns existing row for the same Idempotency-Key."""
+    """Persist an idempotent backup record and queued task without building the archive."""
     task_key = _idempotency_task_key(idempotency_key)
+    existing = _backup_for_task_key(session, task_key)
+    if existing is not None:
+        return existing
+    if _active_backup(session) is not None:
+        raise BackupBuildError(
+            "BACKUP_CREATE_IN_PROGRESS",
+            "已有备份任务正在排队或运行，请稍后重试。",
+        )
+
     task = create_task(session, "BACKUP_CREATE", task_key, {"phase": "init"})
     session.flush()
-    existing_id = (task.checkpoint_json or {}).get("backup_id")
-    if existing_id:
-        existing = session.get(Backup, existing_id)
-        if existing is not None:
-            return existing
 
     created_at = _now()
     backup_id = str(uuid7())
@@ -173,7 +226,7 @@ def start_or_get_backup(
     row = Backup(
         backup_id=backup_id,
         archive_relative_path=relative,
-        status="CREATING",
+        status="QUEUED",
         backup_format_version=FORMAT_VERSION,
         schema_version=schema_version,
         file_count=0,
@@ -186,62 +239,66 @@ def start_or_get_backup(
         error_summary=None,
     )
     session.add(row)
-    task.checkpoint_json = {"backup_id": backup_id, "phase": "creating"}
-    task.status = "RUNNING"
-    task.started_at = created_at
+    task.checkpoint_json = {"backup_id": backup_id, "phase": "queued"}
+    task.status = "QUEUED"
+    task.phase = "QUEUED"
+    task.progress = None
+    task.error_summary = None
+    task.completed_at = None
+    task.lease_owner = None
+    task.lease_until = None
     task.updated_at = created_at
-    session.commit()
-
-    _run_create_locked(session, settings, row.backup_id)
-    session.refresh(row)
-    return row
+    return _commit_new_task_or_resolve_race(session, task_key=task_key)
 
 
-def _run_create_locked(session: Session, settings: Settings, backup_id: str) -> None:
-    with _CREATE_LOCK:
-        row = session.get(Backup, backup_id)
-        if row is None or row.status == "COMPLETED":
-            return
-        destination = resolve_archive_path(settings, row)
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            manifest = create_backup_archive(
-                settings.resolved_data_dir,
-                destination,
-                row.schema_version,
-            )
-            row.status = "COMPLETED"
-            row.file_count = int(manifest.get("file_count") or 0)
-            row.total_size = int(manifest.get("total_size") or 0)
-            row.manifest_sha256 = str(manifest.get("manifest_sha256") or ("0" * 64))
-            row.includes_vectors = bool(manifest.get("includes_vectors"))
-            row.includes_parsed = bool(manifest.get("includes_parsed"))
-            row.schema_version = str(manifest.get("schema_version") or row.schema_version)
-            row.completed_at = _now()
-            row.error_summary = None
-            _persist_entries(session, row.backup_id, manifest)
-            _update_backup_task(session, backup_id, status="COMPLETED", error=None)
-            session.commit()
-        except BackupBuildError as exc:
-            destination.unlink(missing_ok=True)
-            for partial in destination.parent.glob("mindmate-backup-*.partial"):
-                try:
-                    partial.unlink(missing_ok=True)
-                except OSError:
-                    pass
-            row.status = "FAILED"
-            row.error_summary = exc.detail[:500]
-            row.completed_at = _now()
-            _update_backup_task(session, backup_id, status="FAILED", error=exc.detail[:500])
-            session.commit()
-        except Exception:  # noqa: BLE001 — sanitize for user-facing status
-            destination.unlink(missing_ok=True)
-            row.status = "FAILED"
-            row.error_summary = "备份创建失败，请稍后重试。"
-            row.completed_at = _now()
-            _update_backup_task(session, backup_id, status="FAILED", error=row.error_summary)
-            session.commit()
-            # Status is persisted for polling; do not re-raise private exception details.
+def retry_backup(
+    session: Session,
+    *,
+    backup_id: str,
+    idempotency_key: str,
+) -> Backup:
+    task_key = _retry_task_key(idempotency_key)
+    existing = _backup_for_task_key(session, task_key, expected_backup_id=backup_id)
+    if existing is not None:
+        return existing
+    row = session.get(Backup, backup_id)
+    if row is None:
+        raise BackupBuildError("BACKUP_NOT_FOUND", "备份记录不存在。")
+    if row.status in {"CREATING", "QUEUED", "RUNNING"}:
+        return row
+    if row.status != "FAILED":
+        raise BackupBuildError("BACKUP_RETRY_NOT_ALLOWED", "仅失败的备份可以重试。")
+    active = _active_backup(session)
+    if active is not None:
+        raise BackupBuildError(
+            "BACKUP_CREATE_IN_PROGRESS",
+            "已有备份任务正在排队或运行，请稍后重试。",
+        )
+
+    task = create_task(session, "BACKUP_CREATE", task_key, {"backup_id": backup_id})
+    task.status = "QUEUED"
+    task.phase = "QUEUED"
+    task.progress = None
+    task.error_summary = None
+    task.completed_at = None
+    task.lease_owner = None
+    task.lease_until = None
+    task.checkpoint_json = {"backup_id": backup_id, "phase": "queued"}
+    task.updated_at = _now()
+    row.status = "QUEUED"
+    row.file_count = 0
+    row.total_size = 0
+    row.manifest_sha256 = "0" * 64
+    row.includes_vectors = False
+    row.includes_parsed = False
+    row.completed_at = None
+    row.error_summary = None
+    session.execute(delete(BackupEntry).where(BackupEntry.backup_id == backup_id))
+    return _commit_new_task_or_resolve_race(
+        session,
+        task_key=task_key,
+        expected_backup_id=backup_id,
+    )
 
 
 def verify_managed_backup(session: Session, settings: Settings, backup_id: str) -> dict[str, Any]:
@@ -251,7 +308,20 @@ def verify_managed_backup(session: Session, settings: Settings, backup_id: str) 
     if row.status != "COMPLETED":
         raise BackupBuildError("BACKUP_NOT_READY", "仅已完成的备份可以校验。")
     path = resolve_archive_path(settings, row)
-    manifest = verify_backup_archive(path, expect_schema=row.schema_version)
+    try:
+        manifest = verify_backup_archive(path, expect_schema=row.schema_version)
+    except BackupBuildError:
+        row.status = "FAILED"
+        row.completed_at = _now()
+        row.error_summary = "备份文件缺失或未通过完整性校验。"
+        session.commit()
+        raise
+    if backup_manifest_sha256(path) != row.manifest_sha256:
+        row.status = "FAILED"
+        row.completed_at = _now()
+        row.error_summary = "备份文件与记录不匹配，无法下载。"
+        session.commit()
+        raise BackupBuildError("BACKUP_ARCHIVE_MISMATCH", "备份文件未通过归档一致性校验。")
     return {
         "backup_id": backup_id,
         "verified": True,
@@ -270,6 +340,7 @@ __all__ = [
     "get_backup",
     "list_backups",
     "resolve_archive_path",
+    "retry_backup",
     "start_or_get_backup",
     "verify_backup",
     "verify_managed_backup",

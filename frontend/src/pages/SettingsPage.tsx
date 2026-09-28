@@ -27,6 +27,7 @@ import {
   formatBackupSize,
   isBackupInProgress,
   listBackups,
+  retryBackup,
   type BackupRecord,
 } from '../api/backups'
 import {
@@ -229,13 +230,37 @@ export default function SettingsPage() {
       setBackupMessage(
         backup.status === 'COMPLETED'
           ? '备份已完成，可下载到本地保存。'
-          : '备份任务已创建，正在写入一致性快照…',
+          : '备份任务已持久化。可以离开此页面，稍后回来查看状态。',
       )
       void queryClient.invalidateQueries({ queryKey: ['system-backups'] })
     },
     onError: (error) => {
       setBackupError(errorText(error))
     },
+  })
+  const retryBackupMutation = useMutation({
+    mutationFn: (backupId: string) => retryBackup(backupId),
+    onMutate: () => {
+      setBackupError(null)
+      setBackupMessage(null)
+    },
+    onSuccess: (backup) => {
+      setBackupMessage('备份重试任务已持久化。状态会在任务完成后更新。')
+      queryClient.setQueryData(
+        ['system-backups'],
+        (current: { items: BackupRecord[] } | undefined) =>
+          current
+            ? {
+                ...current,
+                items: current.items.map((item) =>
+                  item.backup_id === backup.backup_id ? backup : item,
+                ),
+              }
+            : current,
+      )
+      void queryClient.invalidateQueries({ queryKey: ['system-backups'] })
+    },
+    onError: (error) => setBackupError(errorText(error)),
   })
   const diagnosticsDownloadMutation = useMutation({
     mutationFn: () => downloadDiagnostics(),
@@ -263,7 +288,8 @@ export default function SettingsPage() {
   function backupStatusLabel(statusValue: string) {
     if (statusValue === 'COMPLETED') return '已完成'
     if (statusValue === 'FAILED') return '失败'
-    if (isBackupInProgress(statusValue)) return '创建中'
+    if (statusValue === 'QUEUED') return '排队中'
+    if (statusValue === 'RUNNING' || statusValue === 'CREATING') return '正在创建'
     return statusValue
   }
 
@@ -282,6 +308,7 @@ export default function SettingsPage() {
   const openAi = status?.providers?.find((item) => item.provider_id === 'openai_gpt6_sol')
   const canTest = Boolean(status?.configured && status.credential_store.available && confirmTransfer && !busy)
   const canTestOpenAi = Boolean(openAi?.configured && openAi.credential_store.available && confirmOpenAiTransfer && !busy)
+  const activeBackup = backupsQuery.data?.items.find((item) => isBackupInProgress(item.status))
   const modeLabel = generationMode === 'deepseek'
     ? 'DeepSeek 在线'
     : generationMode === 'openai_gpt6_sol'
@@ -1060,8 +1087,8 @@ export default function SettingsPage() {
             >
               {backupsQuery.isLoading
                 ? '读取中'
-                : backupsQuery.data?.items.some((item) => isBackupInProgress(item.status))
-                  ? '创建中'
+                : activeBackup
+                  ? backupStatusLabel(activeBackup.status)
                   : backupsQuery.data?.items[0]
                     ? backupStatusLabel(backupsQuery.data.items[0].status)
                     : '尚未备份'}
@@ -1094,6 +1121,16 @@ export default function SettingsPage() {
                     {backup.error_summary && <span className="settings-error-text">{backup.error_summary}</span>}
                   </div>
                   <div className="settings-actions">
+                    {backup.status === 'FAILED' && (
+                      <button
+                        className="quiet-button"
+                        type="button"
+                        disabled={retryBackupMutation.isPending || Boolean(activeBackup)}
+                        onClick={() => retryBackupMutation.mutate(backup.backup_id)}
+                      >
+                        {retryBackupMutation.isPending ? '正在重试…' : '重试备份'}
+                      </button>
+                    )}
                     <button
                       className="quiet-button"
                       type="button"

@@ -594,3 +594,13 @@
 - 验收：诊断后端 `4 passed`；前端全量 `15 files / 68 tests passed`；typecheck、lint、build、Ruff、OpenAPI 生成和 `git diff --check` 通过。阶段 8 相关后端组合测试报告 `33 passed`，另有既有历史边界用例在组合顺序中一次波动，隔离重跑通过；本批未修改历史删除实现。隔离 Mock Demo 准备与启动核对 READY 通过，未调用真实 Provider。
 - 浏览器：创建 Codex 内置浏览器标签页时审批层返回 `404 Not Found`（当前模型账户不支持 `gpt-5.6-luna`），未重复尝试，也未把 HTTP/pytest 当页面证据。详细报告见 `docs/test-reports/stage-65-diagnostics-history-acceptance.md`，普通 Windows 操作者需按报告最短清单补齐页面截图、合成 ID 和 Network 证据。
 - Git：本批主要提交为 `c88669115cd0f2a0ab5ce6161f64d9c4c2d90ee8`（`完善：实现安全诊断导出并交接历史页面验收`）。推送已尝试但远端仍为 `381cfeb3c4fade829fb15d985d7db06dedd346b1`，`LOCAL/REMOTE` 不一致；未强推、不改 `main`，需要在原 Windows VS Code 终端重试并核对完整 SHA。
+
+### 第六十六批：阶段 8 独立备份 Worker 与恢复回归
+
+- 状态：`BACKUP_WORKER_CODE` `PASS`；`BACKUP_WORKER_BROWSER` `PASS`；`BACKUP_RESTORE_REGRESSION` `PASS`；`STAGE8_FULL_V1` `PARTIAL`。阶段 5、6、7 完整 V1 继续 `PARTIAL`。求职 Demo 可用性沿用第四十二/六十四批 `PASS` 证据，本批未重跑整条 Demo；完整 V1 状态单独报告。
+- 实现：备份创建请求只提交 `Backup` 与 SQLite `BackgroundTask`，返回 `202`。新迁移 `7f39d81c0a64` 为活动备份加单活动部分唯一索引。应用生命周期启动/停止 `BackupCreationWorker`；Worker 使用原子租约、心跳、跨进程目标锁、分块可中断归档和安全的已发布归档复核。备份记录与任务阶段同事务更新，残留 `.partial` 不可下载。恢复快照里的 `QUEUED/RUNNING/CREATING` 备份继续收为失败、任务收为中断，恢复双重确认、重启切换、回滚、Mock 与 `NEEDS_REBUILD` 规则未变。
+- 一致性与重试：归档名含完整备份 ID，避免 UUIDv7 同秒前缀冲突。崩溃恢复验证归档内 SQLite 快照绑定当前备份/任务/相对路径；下载校验 manifest 哈希与数据库记录相同，源文件缺失、损坏或被替换时关闭下载并显示脱敏失败状态。设置页区分 `QUEUED / RUNNING / COMPLETED / FAILED`，失败备份可用独立幂等键重试。
+- 浏览器：已安装 Windows Chrome 在隔离 profile 和 Mock 数据根中点击创建，收到 HTTP `202`；刷新页面后同一 ID 最终为 `COMPLETED`，点击下载成功。下载文件与服务端本地归档 SHA-256 一致，离线格式 1 校验 `PASS`，文件数 2，`includes_secrets=false`、`includes_vectors=false`。截图留在忽略的 `backend/build/stage66-backup-browser-artifacts-final/`。本次隔离 API/Web 为 `8018/5186`，结束后端口已释放。
+- 自动化：备份 Worker、备份导出、完整恢复和任务测试组合 `22 passed`；前端 Vitest `15 files / 69 tests passed`；TypeScript、lint、production build、Ruff、定向 Pyright（`0 errors`）、OpenAPI 3.1/生成类型、Alembic head 和 `git diff --check` 均通过。build 保留既有 `518.47 kB` JS chunk 提示。pytest 使用仓库 `backend/build` 隔离 basetemp，因为默认 `%TEMP%` 在本机不可枚举。
+- 保留缺口：`LOG_RETENTION`、`BUDGET_RECONCILIATION`、第六十五批 `DIAGNOSTICS_PREVIEW_EXPORT`、`HISTORY_PURGE_BROWSER`、`HISTORY_MULTISTEP_BROWSER` 与 `LEARNING_ONLINE_BROWSER` 仍 `PARTIAL`；真实 DeepSeek/OpenAI 付费冒烟 `PENDING`。阶段 8 和完整 V1 均未整体通过。
+- 详细报告：`docs/test-reports/stage-66-backup-worker.md`。本批未使用真实 Key 或调用在线 Provider。

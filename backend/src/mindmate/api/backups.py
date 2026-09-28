@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 # ruff: noqa: B008
-from datetime import datetime
+import os
+from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Request, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -19,6 +20,7 @@ from mindmate.application.backups import (
     get_backup,
     list_backups,
     resolve_archive_path,
+    retry_backup,
     start_or_get_backup,
     verify_managed_backup,
 )
@@ -116,6 +118,15 @@ def _map_build_error(exc: BackupBuildError) -> BackupApiError:
         "BACKUP_CONTENT_MISSING": 409,
         "BACKUP_DATABASE_MISSING": 409,
         "BACKUP_ARCHIVE_MISSING": 404,
+        "BACKUP_CREATE_IN_PROGRESS": 409,
+        "BACKUP_IDEMPOTENCY_CONFLICT": 409,
+        "BACKUP_RETRY_NOT_ALLOWED": 409,
+        "BACKUP_HASH_MISMATCH": 409,
+        "BACKUP_VERIFY_FAILED": 409,
+        "BACKUP_ENTRY_MISSING": 409,
+        "BACKUP_SIZE_MISMATCH": 409,
+        "BACKUP_ARCHIVE_MISMATCH": 409,
+        "BACKUP_ARCHIVE_TASK_MISMATCH": 409,
         "RESTORE_IN_PROGRESS": 409,
         "RESTORE_ALREADY_CONFIRMED": 409,
         "RESTORE_PRECHECK_EXPIRED": 409,
@@ -135,7 +146,7 @@ def _map_build_error(exc: BackupBuildError) -> BackupApiError:
     return BackupApiError(exc.code, detail, status)
 
 
-@router.post("", response_model=BackupResponse)
+@router.post("", response_model=BackupResponse, status_code=202)
 def create_backup_endpoint(
     request: Request,
     session: Session = Depends(get_session),
@@ -149,6 +160,9 @@ def create_backup_endpoint(
         row = start_or_get_backup(session, settings, idempotency_key=idempotency_key)
     except BackupBuildError as exc:
         raise _map_build_error(exc) from exc
+    worker = getattr(request.app.state, "backup_worker", None)
+    if worker is not None:
+        worker.notify()
     return backup_public_view(row)
 
 
@@ -331,13 +345,33 @@ def verify_backup_endpoint(
         raise _map_build_error(exc) from exc
 
 
+@router.post("/{backup_id}/retry", response_model=BackupResponse, status_code=202)
+def retry_backup_endpoint(
+    backup_id: str,
+    request: Request,
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    _require_local_session(request)
+    idempotency_key = request.headers.get("idempotency-key", "").strip()
+    if not idempotency_key:
+        raise BackupApiError("IDEMPOTENCY_KEY_REQUIRED", "写请求必须携带 Idempotency-Key。", 400)
+    try:
+        row = retry_backup(session, backup_id=backup_id, idempotency_key=idempotency_key)
+    except BackupBuildError as exc:
+        raise _map_build_error(exc) from exc
+    worker = getattr(request.app.state, "backup_worker", None)
+    if worker is not None:
+        worker.notify()
+    return backup_public_view(row)
+
+
 @router.get("/{backup_id}/download")
 def download_backup_endpoint(
     backup_id: str,
     request: Request,
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
-) -> FileResponse:
+) -> StreamingResponse:
     _require_local_session(request)
     row = get_backup(session, backup_id)
     if row is None:
@@ -347,21 +381,37 @@ def download_backup_endpoint(
     try:
         path = resolve_archive_path(settings, row)
         # Re-verify before streaming so incomplete/tampered archives are never returned.
-        from mindmate.application.local_backup import verify_backup_archive
-
-        verify_backup_archive(path, expect_schema=row.schema_version)
+        verify_managed_backup(session, settings, backup_id)
     except BackupBuildError as exc:
+        row.status = "FAILED"
+        row.completed_at = datetime.now(UTC)
+        row.error_summary = "备份文件缺失或未通过完整性校验，无法下载。"
+        session.commit()
         raise _map_build_error(exc) from exc
-    if not path.is_file():
-        raise BackupApiError("BACKUP_ARCHIVE_MISSING", "备份包文件不存在。", 404)
+    try:
+        archive_handle = path.open("rb")
+        archive_size = os.fstat(archive_handle.fileno()).st_size
+    except OSError as exc:
+        row.status = "FAILED"
+        row.completed_at = datetime.now(UTC)
+        row.error_summary = "备份文件缺失或不可读取，无法下载。"
+        session.commit()
+        raise BackupApiError(
+            "BACKUP_ARCHIVE_MISSING",
+            "备份文件缺失或不可读取，无法下载。",
+            404,
+        ) from exc
+
+    def stream_archive():
+        try:
+            while chunk := archive_handle.read(1024 * 1024):
+                yield chunk
+        finally:
+            archive_handle.close()
 
     filename = path.name
-    response = FileResponse(
-        path,
-        media_type="application/zip",
-        filename=filename,
-        content_disposition_type="attachment",
-    )
+    response = StreamingResponse(stream_archive(), media_type="application/zip")
+    response.headers["Content-Length"] = str(archive_size)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Content-Disposition"] = (
         f"attachment; filename*=UTF-8''{quote(filename, safe='')}"

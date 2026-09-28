@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import json
 import sqlite3
+import time
 import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
@@ -91,13 +92,28 @@ def _seed_content_object(session: Session, settings: Settings, payload: bytes) -
     return row
 
 
+def _wait_for_backup(client: TestClient, backup_id: str, *, expected: str = "COMPLETED") -> dict:
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        response = client.get(f"/api/v1/backups/{backup_id}", headers={"Origin": ORIGIN})
+        assert response.status_code == 200, response.text
+        body = response.json()
+        if body["status"] in {"COMPLETED", "FAILED"}:
+            assert body["status"] == expected, body
+            return body
+        time.sleep(0.02)
+    raise AssertionError(f"backup {backup_id} did not reach a terminal state")
+
+
 def test_empty_database_backup_create_verify_download(tmp_path: Path) -> None:
     client, _, _ = _make_app(tmp_path)
     with client:
         headers = _session_headers(client)
         created = client.post("/api/v1/backups", headers=headers, json={})
-        assert created.status_code == 200
-        body = created.json()
+        assert created.status_code == 202
+        initial = created.json()
+        assert initial["status"] in {"QUEUED", "RUNNING"}
+        body = _wait_for_backup(client, initial["backup_id"])
         assert body["status"] == "COMPLETED"
         assert body["includes_secrets"] is False
         assert body["encrypted"] is False
@@ -191,8 +207,8 @@ def test_backup_includes_files_excludes_secrets_logs_models(tmp_path: Path) -> N
 
         headers = _session_headers(client)
         created = client.post("/api/v1/backups", headers=headers, json={})
-        assert created.status_code == 200
-        body = created.json()
+        assert created.status_code == 202
+        body = _wait_for_backup(client, created.json()["backup_id"])
         assert body["status"] == "COMPLETED"
         assert body["file_count"] >= 2
 
@@ -239,8 +255,8 @@ def test_backup_rejects_missing_content_object(tmp_path: Path) -> None:
             session.commit()
         headers = _session_headers(client)
         created = client.post("/api/v1/backups", headers=headers, json={})
-        assert created.status_code == 200
-        body = created.json()
+        assert created.status_code == 202
+        body = _wait_for_backup(client, created.json()["backup_id"], expected="FAILED")
         assert body["status"] == "FAILED"
         assert body["download_available"] is False
         assert not list((settings.resolved_data_dir / "backups").glob("*.mindmate-backup"))
@@ -260,10 +276,10 @@ def test_backup_idempotent_retry(tmp_path: Path) -> None:
             headers=_session_headers(client, idempotency=key),
             json={},
         )
-        assert first.status_code == 200
-        assert second.status_code == 200
+        assert first.status_code == 202
+        assert second.status_code == 202
         assert first.json()["backup_id"] == second.json()["backup_id"]
-        assert first.json()["status"] == "COMPLETED"
+        assert _wait_for_backup(client, first.json()["backup_id"])["status"] == "COMPLETED"
 
 
 def test_verify_rejects_path_traversal_zip(tmp_path: Path) -> None:

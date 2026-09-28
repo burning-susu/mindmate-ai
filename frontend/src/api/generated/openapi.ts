@@ -1031,6 +1031,9 @@ export interface operations {
   "POST /api/v1/backups/{backup_id}/verify": {
     operationId: "verify_backup_endpoint_api_v1_backups__backup_id__verify_post"
   };
+  "POST /api/v1/backups/{backup_id}/retry": {
+    operationId: "retry_backup_endpoint_api_v1_backups__backup_id__retry_post"
+  };
   "GET /api/v1/backups/{backup_id}/download": {
     operationId: "download_backup_endpoint_api_v1_backups__backup_id__download_get"
   };

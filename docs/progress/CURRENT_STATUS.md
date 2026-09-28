@@ -3,11 +3,11 @@
 ## 基本信息
 
 - 当前开发分支：`feat/v1-bootstrap`
-- 第六十三批进场远端提交：`feat/v1-bootstrap` → `783fb21e576e7b265f2f854a4113bbaa36efb4ef`（2026-09-28 运行 `git ls-remote --heads origin feat/v1-bootstrap` 核实；当时与本地 HEAD 一致）
+- 第六十六批进场本地与远端提交：`feat/v1-bootstrap` → `a5f0cc7fa358983078cc09d9286f351e8bff9816`（2026-09-28 本批进场时核实）
 - 最后更新时间：`2026-09-28`
 - 当前开发阶段：阶段 8 开发中，状态 `PARTIAL`；阶段 5、阶段 6、阶段 7 继续 `PARTIAL`
 - 交付顺序：Demo 首先完成，完整 V1 以后精进。求职 Demo 优先文件整理/导入、建库、带来源问答、最小学习陪练和重启恢复。Demo 可用性与完整 V1 阶段状态分开报告。
-- 当前批次状态：第六十四批问答正例与资料不足拒答有普通浏览器截图 `PASS`；学习入口字段提示及资料不足反馈已修复。用户对修复后的指定一题 Mock、字段提示、提交反馈、来源、刷新恢复回复“已测试，没问题”，故 `DEMO_BROWSER=PASS（用户报告的人工复测，学习步骤未附新截图）`，求职三分钟 Mock Demo 可按此范围演示。`HISTORY_PURGE_BROWSER`、`LEARNING_ONLINE_BROWSER` 仍 `PARTIAL`，`REAL_PROVIDER_SMOKE` 仍 `PENDING`，完整阶段 7/8 仍 `PARTIAL`。本批已有后端定向 pytest `22 passed`、前端 Vitest `67 passed`、typecheck、lint、build 与 Ruff 通过；用户补录后没有重新执行自动化测试。远端 `feat/v1-bootstrap` 已核实为第六十四批提交 `7b24439d8fc6aa0c2ddb421051b478b4a1a3e056`。详见 `docs/test-reports/stage-64-demo-browser-acceptance.md`。
+- 当前批次状态：`BACKUP_WORKER_CODE`、`BACKUP_WORKER_BROWSER`、`BACKUP_RESTORE_REGRESSION` 均 `PASS`；`STAGE8_FULL_V1` 继续 `PARTIAL`。求职 Demo 沿用第四十二/六十四批 `PASS` 证据，本批未重跑完整 Demo。`LOG_RETENTION`、`BUDGET_RECONCILIATION`、`DIAGNOSTICS_PREVIEW_EXPORT`、`HISTORY_PURGE_BROWSER`、`HISTORY_MULTISTEP_BROWSER`、`LEARNING_ONLINE_BROWSER` 仍 `PARTIAL`；真实 DeepSeek/OpenAI 冒烟仍 `PENDING`。详见 `docs/test-reports/stage-66-backup-worker.md`。
 
 ## 已完成阶段
 

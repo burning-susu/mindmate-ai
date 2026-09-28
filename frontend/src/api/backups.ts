@@ -51,12 +51,19 @@ export function getBackup(backupId: string, signal?: AbortSignal) {
   return apiRequest<BackupRecord>(`/api/v1/backups/${backupId}`, { signal })
 }
 
-export function createBackup(idempotencyKey?: string) {
-  const headers: HeadersInit = {}
-  if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey
+export function createBackup(idempotencyKey = uuidv7()) {
+  const headers: HeadersInit = { 'Idempotency-Key': idempotencyKey }
   return apiRequest<BackupRecord>('/api/v1/backups', {
     method: 'POST',
     headers,
+    body: '{}',
+  })
+}
+
+export function retryBackup(backupId: string, idempotencyKey = uuidv7()) {
+  return apiRequest<BackupRecord>(`/api/v1/backups/${backupId}/retry`, {
+    method: 'POST',
+    headers: { 'Idempotency-Key': idempotencyKey },
     body: '{}',
   })
 }

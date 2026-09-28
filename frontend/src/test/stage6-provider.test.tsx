@@ -338,4 +338,64 @@ describe('stage 6 AI provider configuration', () => {
     fireEvent.change(screen.getByLabelText('消息内容'), { target: { value: '短问题' } })
     expect(screen.getByRole('button', { name: '发送' })).toBeEnabled()
   })
+
+  it('shows a retry action for a failed backup and refreshes the queued state', async () => {
+    queryClient.clear()
+    window.history.pushState({}, '', '/settings')
+    const backup = {
+      backup_id: 'backup-66',
+      status: 'FAILED',
+      backup_format_version: '1',
+      schema_version: 'fixture',
+      file_count: 0,
+      total_size: 0,
+      created_at: '2026-09-28T09:00:00Z',
+      completed_at: '2026-09-28T09:01:00Z',
+      error_summary: '备份创建失败，请稍后重试。',
+      includes_vectors: false,
+      includes_parsed: false,
+      includes_secrets: false,
+      encrypted: false,
+      contains_user_files_and_history: true,
+      unencrypted_warning: true,
+      warning_message: '备份未加密',
+      download_available: false,
+      restore_available: true,
+      scope: {
+        database_snapshot: true,
+        content_objects: true,
+        parsed_artifacts: false,
+        non_secret_config: true,
+        vectors: false,
+        fts: false,
+        models: false,
+        logs: false,
+        secrets: false,
+      },
+    }
+    let currentBackup = backup
+    let retryKey = ''
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.includes('/system/session')) return response({ status: 'ready' })
+      if (url.endsWith('/api/v1/backups') || url.includes('/api/v1/backups?')) {
+        return response({ items: [currentBackup], restore_available: true, warning_message: '备份未加密' })
+      }
+      if (url.endsWith('/api/v1/backups/backup-66/retry') && init?.method === 'POST') {
+        retryKey = new Headers(init.headers).get('Idempotency-Key') || ''
+        currentBackup = { ...currentBackup, status: 'QUEUED' }
+        return response(currentBackup, 202)
+      }
+      const auxiliary = settingsAuxiliaryResponse(url)
+      if (auxiliary) return auxiliary
+      if (url.endsWith('/api/v1/ai/provider')) return response(initialStatus)
+      return response({ status: 'ok', version: '0.1.0' })
+    }))
+
+    render(<BrowserRouter><App /></BrowserRouter>)
+    fireEvent.click(await screen.findByRole('button', { name: '重试备份' }))
+    await waitFor(() => expect(retryKey).toBeTruthy())
+    expect(await screen.findAllByText('排队中')).toHaveLength(2)
+    expect(screen.getByRole('button', { name: '下载备份包' })).toBeDisabled()
+  })
 })

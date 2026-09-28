@@ -337,7 +337,7 @@
         "summary": "Create Backup Endpoint",
         "operationId": "create_backup_endpoint_api_v1_backups_post",
         "responses": {
-          "200": {
+          "202": {
             "description": "Successful Response",
             "content": {
               "application/json": {
@@ -697,6 +697,48 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/BackupVerifyResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/backups/{backup_id}/retry": {
+      "post": {
+        "tags": [
+          "backups"
+        ],
+        "summary": "Retry Backup Endpoint",
+        "operationId": "retry_backup_endpoint_api_v1_backups__backup_id__retry_post",
+        "parameters": [
+          {
+            "name": "backup_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Backup Id"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupResponse"
                 }
               }
             }

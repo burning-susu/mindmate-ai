@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import io
 import sqlite3
+import time
 import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
@@ -89,8 +90,18 @@ def _sha(payload: bytes) -> str:
 def _download_archive(client: TestClient) -> tuple[str, bytes]:
     headers = _session_headers(client)
     created = client.post("/api/v1/backups", headers=headers, json={})
-    assert created.status_code == 200, created.text
+    assert created.status_code == 202, created.text
     backup_id = created.json()["backup_id"]
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        status = client.get(f"/api/v1/backups/{backup_id}", headers={"Origin": ORIGIN})
+        assert status.status_code == 200, status.text
+        if status.json()["status"] in {"COMPLETED", "FAILED"}:
+            assert status.json()["status"] == "COMPLETED", status.text
+            break
+        time.sleep(0.02)
+    else:
+        raise AssertionError(f"backup {backup_id} did not complete")
     downloaded = client.get(f"/api/v1/backups/{backup_id}/download", headers={"Origin": ORIGIN})
     assert downloaded.status_code == 200, downloaded.text
     assert downloaded.content[:2] == b"PK"

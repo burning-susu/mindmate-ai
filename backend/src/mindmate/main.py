@@ -41,6 +41,7 @@ from mindmate.api.problem import ProblemDetail
 from mindmate.api.system_settings import SystemSettingsApiError
 from mindmate.api.system_settings import router as system_settings_router
 from mindmate.api.testing import router as testing_router
+from mindmate.application.backup_worker import BackupCreationWorker
 from mindmate.application.chat_generation import ChatGenerationWorker
 from mindmate.application.embedding_model_install import EmbeddingModelInstallWorker
 from mindmate.application.history_purge_worker import HistoryTrashPurgeWorker
@@ -117,6 +118,13 @@ async def lifespan(app: FastAPI):
         app.state.engine = create_sqlite_engine(settings.database_path)
         app.state.database_status = quick_check(app.state.engine)
         app.state.session_factory = create_session_factory(app.state.engine)
+        app.state.backup_worker = BackupCreationWorker(
+            app.state.session_factory,
+            settings,
+            poll_seconds=settings.parse_worker_poll_seconds,
+            lease_seconds=settings.parse_worker_lease_seconds,
+        )
+        app.state.backup_worker.start()
         from mindmate.application.learning_model_generation import (
             recover_dispatched_learning_operations,
         )
@@ -183,6 +191,9 @@ async def lifespan(app: FastAPI):
             app.state.task_retention_worker.start()
         yield
     finally:
+        backup_worker = getattr(app.state, "backup_worker", None)
+        if backup_worker is not None:
+            backup_worker.stop()
         chat_worker = getattr(app.state, "chat_worker", None)
         if chat_worker is not None:
             chat_worker.stop()

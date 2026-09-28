@@ -686,6 +686,14 @@ class ProviderProfile(Base):
 
 class Backup(Base):
     __tablename__ = "backups"
+    __table_args__ = (
+        Index(
+            "uq_backups_one_active_create",
+            text("(1)"),
+            unique=True,
+            sqlite_where=text("status IN ('QUEUED', 'RUNNING')"),
+        ),
+    )
     backup_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     archive_relative_path: Mapped[str] = mapped_column(String(500), nullable=False)
     status: Mapped[str] = mapped_column(String(30), default="CREATED", nullable=False)

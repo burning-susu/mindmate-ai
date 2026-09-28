@@ -8,6 +8,7 @@ import os
 import re
 import sqlite3
 import tempfile
+import threading
 import zipfile
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -99,6 +100,16 @@ def sha256_file(path: Path) -> str:
 
 def sha256_bytes(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
+
+
+def backup_manifest_sha256(archive_path: Path) -> str:
+    try:
+        with zipfile.ZipFile(archive_path) as archive:
+            return sha256_bytes(archive.read("manifest.json"))
+    except FileNotFoundError as exc:
+        raise BackupBuildError("BACKUP_ARCHIVE_MISSING", "备份包不存在。") from exc
+    except (OSError, zipfile.BadZipFile, KeyError) as exc:
+        raise BackupBuildError("BACKUP_VERIFY_FAILED", "备份包校验失败。") from exc
 
 
 def read_schema_version(database_path: Path) -> str:
@@ -355,6 +366,7 @@ def _write_zip_entries(
     items: Iterable[tuple[str, Path, str]],
     *,
     data_root: Path,
+    cancel_event: threading.Event | None = None,
 ) -> list[dict[str, Any]]:
     entries: list[dict[str, Any]] = []
     seen: set[str] = set()
@@ -379,14 +391,31 @@ def _write_zip_entries(
             if not _is_under(data_root.resolve(), resolved):
                 raise BackupBuildError("BACKUP_PATH_INVALID", "备份源路径越界。")
             _reject_symlink_escape(data_root, absolute)
-        digest = sha256_file(absolute)
-        archive.write(absolute, relative)
+        digest = hashlib.sha256()
+        written = 0
+        with absolute.open("rb") as source, archive.open(relative, "w", force_zip64=True) as target:
+            while True:
+                if cancel_event is not None and cancel_event.is_set():
+                    raise BackupBuildError(
+                        "BACKUP_WORKER_LEASE_LOST",
+                        "备份任务租约已失效，当前归档未发布。",
+                    )
+                chunk = source.read(1024 * 1024)
+                if not chunk:
+                    break
+                written += len(chunk)
+                if written > MAX_SINGLE_ENTRY_BYTES or total_size - size + written > MAX_TOTAL_UNCOMPRESSED_BYTES:
+                    raise BackupBuildError("BACKUP_TOO_LARGE", "备份源文件在读取期间超过安全上限。")
+                target.write(chunk)
+                digest.update(chunk)
+        if written != size:
+            raise BackupBuildError("BACKUP_SOURCE_CHANGED", "备份源文件在创建期间发生变化。")
         seen.add(relative)
         entries.append(
             {
                 "path": relative,
-                "sha256": digest,
-                "byte_size": size,
+                "sha256": digest.hexdigest(),
+                "byte_size": written,
                 "entry_type": entry_type,
             }
         )
@@ -401,6 +430,7 @@ def create_backup_archive(
     schema_version: str,
     *,
     app_version: str | None = None,
+    cancel_event: threading.Event | None = None,
 ) -> dict[str, Any]:
     """Create a consistent local backup package with staging + atomic publish."""
     source_root = source_root.resolve()
@@ -443,7 +473,12 @@ def create_backup_archive(
             compresslevel=6,
             allowZip64=True,
         ) as archive:
-            entries = _write_zip_entries(archive, zip_items, data_root=source_root)
+            entries = _write_zip_entries(
+                archive,
+                zip_items,
+                data_root=source_root,
+                cancel_event=cancel_event,
+            )
             manifest = {
                 "backup_format_version": FORMAT_VERSION,
                 "app_version": app_version or APP_VERSION,
@@ -523,6 +558,9 @@ def verify_backup_archive(
     archive_path: Path,
     *,
     expect_schema: str | None = None,
+    expected_backup_id: str | None = None,
+    expected_task_id: str | None = None,
+    expected_archive_relative_path: str | None = None,
 ) -> dict[str, Any]:
     """Verify manifest, hashes, SQLite snapshot, referenced objects, and secret/path scan."""
     archive_path = archive_path.resolve()
@@ -587,6 +625,13 @@ def verify_backup_archive(
                 if top in EXCLUDED_TOP_LEVEL:
                     raise BackupBuildError("BACKUP_CONTAINS_EXCLUDED", "备份包含排除目录内容。")
 
+            if expected_backup_id or expected_task_id:
+                if not expected_backup_id or not expected_task_id or "database/mindmate.db" not in entry_paths:
+                    raise BackupBuildError(
+                        "BACKUP_ARCHIVE_TASK_MISMATCH",
+                        "归档数据库快照与当前备份任务不匹配。",
+                    )
+
             if "database/mindmate.db" in entry_paths:
                 with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as handle:
                     db_temp = Path(handle.name)
@@ -604,6 +649,42 @@ def verify_backup_archive(
                             raise BackupBuildError(
                                 "BACKUP_DATABASE_CORRUPT", "备份内数据库未通过 quick_check。"
                             )
+                        if expected_backup_id and expected_task_id:
+                            try:
+                                backup_row = conn.execute(
+                                    "SELECT status, archive_relative_path FROM backups WHERE backup_id = ?",
+                                    (expected_backup_id,),
+                                ).fetchone()
+                                task_row = conn.execute(
+                                    "SELECT status, checkpoint_json FROM background_tasks WHERE task_id = ?",
+                                    (expected_task_id,),
+                                ).fetchone()
+                                task_checkpoint = json.loads(task_row[1]) if task_row and task_row[1] else {}
+                            except (sqlite3.Error, json.JSONDecodeError, TypeError) as exc:
+                                raise BackupBuildError(
+                                    "BACKUP_ARCHIVE_TASK_MISMATCH",
+                                    "归档数据库快照与当前备份任务不匹配。",
+                                ) from exc
+                            valid_backup_state = backup_row and backup_row[0] in {
+                                "CREATING",
+                                "QUEUED",
+                                "RUNNING",
+                            }
+                            valid_task = (
+                                task_row
+                                and task_row[0] == "RUNNING"
+                                and isinstance(task_checkpoint, dict)
+                                and task_checkpoint.get("backup_id") == expected_backup_id
+                            )
+                            valid_path = (
+                                expected_archive_relative_path is None
+                                or (backup_row and backup_row[1] == expected_archive_relative_path)
+                            )
+                            if not (valid_backup_state and valid_task and valid_path):
+                                raise BackupBuildError(
+                                    "BACKUP_ARCHIVE_TASK_MISMATCH",
+                                    "归档数据库快照与当前备份任务不匹配。",
+                                )
                         try:
                             rows = conn.execute(
                                 "SELECT storage_relative_path FROM content_objects"
@@ -637,6 +718,7 @@ __all__ = [
     "InventoryItem",
     "REBUILD_AFTER_RESTORE",
     "build_file_inventory",
+    "backup_manifest_sha256",
     "create_backup_archive",
     "normalize_archive_path",
     "read_schema_version",
