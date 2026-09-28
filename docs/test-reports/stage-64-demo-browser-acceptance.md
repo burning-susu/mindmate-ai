@@ -74,7 +74,7 @@
 
 ## Git 交付
 
-- 本地提交：`2b9fb2e96cac6c601d5e0e50007df9b9df5aefe3`，信息为 `验收：收口求职Demo学习入口与证据提示`。
+- 本批代码与报告初始提交：`6fafe6e0b9b0995e6276b1909867846a3b13d60c`，信息为 `验收：收口求职Demo学习入口与证据提示`。
 - 远端核验：`origin/feat/v1-bootstrap` 仍为 `ced681a11f85878d9f924abeb213d2fbee4435b0`。
 - `git push origin feat/v1-bootstrap` 在当前环境无输出并以退出码 `1` 失败；没有宣称已推送。下一步应在可用的普通 Windows VS Code 终端重试并核对两边完整 SHA。
 
