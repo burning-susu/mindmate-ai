@@ -1,5 +1,12 @@
 # V1 开发进度
 
+## 当前校准（2026-09-28，阶段 8 宿主走查前）
+
+- 运行时 Git 核验：当前分支 `feat/v1-bootstrap` 的本地 HEAD 与 `origin/feat/v1-bootstrap` 均为 `c11e8fe038d9d901bded048a8a6237925c8adf57`，提交信息为 `验收：整理阶段八演示验收记录与宿主交接`。第六十一批报告记录的进场 SHA `0b6fccef85dd83f6773a92dcddc66e004545882d`、推送挂起和本地领先状态是当时的历史观察，不在本节改写。
+- 当前事实仍是：没有普通 Windows Chrome/Edge 的本批页面点击、刷新、重启、截图或 test-only Provider `calls` 回传；`HISTORY_PURGE_BROWSER`、`LEARNING_ONLINE_BROWSER`、`DEMO_REGRESSION_THIS_BATCH` 保持 `PARTIAL`，`REAL_PROVIDER_SMOKE` 保持 `PENDING`，阶段 7/8 完整 V1 保持 `PARTIAL`。
+- 环境核验：Node `v22.22.2`、npm `11.16.0` 可用；`backend\.venv\Scripts\python.exe` 绑定的 `C:\Users\15932\AppData\Roaming\uv\python\cpython-3.12.11-windows-x86_64-none` 当前无法启动，因此本次没有重跑后端 pytest，也没有把历史测试结果冒充当前宿主验收。
+- 下一步：按 `docs/demo/阶段60宿主验收入口.md` 在普通 Windows 浏览器完成最短走查，首次失败即回传脱敏命令、错误/状态和截图；在收到结果前不新增空验收报告或推测性修复。
+
 ## 阶段 0
 
 - 状态：`COMPLETED`
