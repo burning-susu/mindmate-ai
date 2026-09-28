@@ -357,3 +357,4 @@
 - 诊断：新增本地会话保护的 `/api/v1/system/diagnostics/preview` 与 `/api/v1/system/diagnostics/export`。服务端只返回版本/平台、非秘密配置状态、SQLite 可读写状态、有限任务状态、脱敏错误码/诊断 ID/计数；不读取原始日志、数据库快照、备份、文件正文、Prompt、问题/回答、模型响应、向量、Embedding、Cookie、Key 或完整路径。设置页可预览、取消和下载 JSON，失败不留下临时文件。
 - 自动化：诊断后端 `4 passed`；阶段 8 相关组合测试报告 `33 passed`，另有既有历史边界用例在组合顺序中一次波动，隔离重跑通过；前端全量 `15 files / 68 tests passed`，typecheck、lint、build、Ruff、OpenAPI/生成类型和 `git diff --check` 通过。隔离 Mock Demo 准备与启动核对 READY 通过，未调用真实 Provider。
 - 详细报告：`docs/test-reports/stage-65-diagnostics-history-acceptance.md`。普通 Windows 操作者需按报告最短清单补齐设置页诊断下载、历史永久删除确认和三题定位页面证据。
+- Git：本批主要提交为 `c88669115cd0f2a0ab5ce6161f64d9c4c2d90ee8`（`完善：实现安全诊断导出并交接历史页面验收`）。推送已尝试但 `origin/feat/v1-bootstrap` 仍为进场 SHA `381cfeb3c4fade829fb15d985d7db06dedd346b1`，当前 `LOCAL/REMOTE` 不一致；未强推、不改 `main`，需在原 Windows VS Code 终端重试并核验完整 SHA。

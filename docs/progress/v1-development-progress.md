@@ -593,3 +593,4 @@
 - 前端：设置页新增预览、取消和导出交互，展示包含/排除类别、预计体积、任务摘要和“保存在本机，不自动上传”；`log_retention`、`storage_migration` 仍显示不可用，不提供假按钮。OpenAPI 与 `frontend/src/api/generated/openapi.ts` 已同步。
 - 验收：诊断后端 `4 passed`；前端全量 `15 files / 68 tests passed`；typecheck、lint、build、Ruff、OpenAPI 生成和 `git diff --check` 通过。阶段 8 相关后端组合测试报告 `33 passed`，另有既有历史边界用例在组合顺序中一次波动，隔离重跑通过；本批未修改历史删除实现。隔离 Mock Demo 准备与启动核对 READY 通过，未调用真实 Provider。
 - 浏览器：创建 Codex 内置浏览器标签页时审批层返回 `404 Not Found`（当前模型账户不支持 `gpt-5.6-luna`），未重复尝试，也未把 HTTP/pytest 当页面证据。详细报告见 `docs/test-reports/stage-65-diagnostics-history-acceptance.md`，普通 Windows 操作者需按报告最短清单补齐页面截图、合成 ID 和 Network 证据。
+- Git：本批主要提交为 `c88669115cd0f2a0ab5ce6161f64d9c4c2d90ee8`（`完善：实现安全诊断导出并交接历史页面验收`）。推送已尝试但远端仍为 `381cfeb3c4fade829fb15d985d7db06dedd346b1`，`LOCAL/REMOTE` 不一致；未强推、不改 `main`，需要在原 Windows VS Code 终端重试并核对完整 SHA。

@@ -63,3 +63,10 @@
 ## 后续缺口
 
 独立备份 Worker、周期费用对账、日志保留/清理、全局错误与离线页面、在线 test-only Provider 页面、历史永久删除/三题定位普通浏览器证据，以及需求追踪中尚未完成的完整阶段 8 项仍待后续批次处理。真实 DeepSeek/OpenAI 付费冒烟继续保持 `PENDING`。
+
+## Git 交付
+
+- 分支：`feat/v1-bootstrap`。
+- 本批实现与主要报告提交：`c88669115cd0f2a0ab5ce6161f64d9c4c2d90ee8`，提交信息：`完善：实现安全诊断导出并交接历史页面验收`。
+- `git push origin feat/v1-bootstrap` 已在当前环境尝试；随后 `git ls-remote --heads origin feat/v1-bootstrap` 仍返回 `381cfeb3c4fade829fb15d985d7db06dedd346b1`，因此当前状态为 `LOCAL=c88669115cd0f2a0ab5ce6161f64d9c4c2d90ee8 / REMOTE=381cfeb3c4fade829fb15d985d7db06dedd346b1`，未宣称推送完成。
+- 工作区没有隔离数据库、向量库、模型缓存、日志、截图、诊断导出物或未跟踪构建产物。用户可在原 Windows VS Code 终端执行 `git push origin feat/v1-bootstrap`，再核对 `git rev-parse HEAD` 与 `git ls-remote --heads origin feat/v1-bootstrap` 的完整 SHA；不强推、不修改 `main`。
