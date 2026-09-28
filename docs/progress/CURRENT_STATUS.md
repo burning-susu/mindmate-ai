@@ -3,11 +3,11 @@
 ## 基本信息
 
 - 当前开发分支：`feat/v1-bootstrap`
-- 当前远端提交：`feat/v1-bootstrap` → `c11e8fe038d9d901bded048a8a6237925c8adf57`（2026-09-28 运行 `git ls-remote --heads origin feat/v1-bootstrap` 核实；与本地 HEAD 一致）
+- 第六十三批进场远端提交：`feat/v1-bootstrap` → `783fb21e576e7b265f2f854a4113bbaa36efb4ef`（2026-09-28 运行 `git ls-remote --heads origin feat/v1-bootstrap` 核实；当时与本地 HEAD 一致）
 - 最后更新时间：`2026-09-28`
 - 当前开发阶段：阶段 8 开发中，状态 `PARTIAL`；阶段 5、阶段 6、阶段 7 继续 `PARTIAL`
 - 交付顺序：Demo 首先完成，完整 V1 以后精进。求职 Demo 优先文件整理/导入、建库、带来源问答、最小学习陪练和重启恢复。Demo 可用性与完整 V1 阶段状态分开报告。
-- 当前批次状态：第六十批的实现和验收入口已由提交 `0b6fccef85dd83f6773a92dcddc66e004545882d`（`验收：补跑历史删除测试并建立本机演示入口`）推送到 `origin/feat/v1-bootstrap`。第六十一批提交 `c11e8fe038d9d901bded048a8a6237925c8adf57`（`验收：整理阶段八演示验收记录与宿主交接`）已由运行时核验确认推送完成；第六十一批报告中的进场 SHA、推送挂起和本地领先状态属于当时历史观察，保持原文。第六十批后端关键 pytest `29 passed`、前端 `66 passed` 及其他检查属于历史证据，本次没有重跑。第六十一批已核对现有 Windows 宿主入口和三分钟 Demo 说明，但未取得普通 Windows 浏览器页面证据：当前只观察到 Codex 内置浏览器，浏览器能力查询随后被审批层以 `404` 拒绝，按提示词不再重试；`HISTORY_PURGE_BROWSER`、`LEARNING_ONLINE_BROWSER`、`DEMO_REGRESSION_THIS_BATCH` 均为 `PARTIAL`，`REAL_PROVIDER_SMOKE` 为 `PENDING`。Node `v22.22.2`、npm `11.16.0` 可运行，`backend\.venv` Python 仍因绑定的旧解释器路径无法启动，因此未运行 pytest。阶段 7、8 完整 V1 仍 `PARTIAL`。
+- 当前批次状态：第六十三批 `ENVIRONMENT_READY=PASS`、`DEMO_STARTUP=PASS`；普通 Chrome/Edge 页面操作仍为 `PARTIAL`，`HISTORY_PURGE_BROWSER`、`LEARNING_ONLINE_BROWSER` 为 `PARTIAL`，`REAL_PROVIDER_SMOKE` 为 `PENDING`。本批使用项目内 Python 3.12.14 重建环境，后端关键 pytest `29 passed`、前端 Vitest `66 passed`、typecheck 与 build 通过。求职 Demo 可用性仅确认服务与页面资源启动；等待用户浏览器点击证据。阶段 7/8 完整 V1 继续 `PARTIAL`，详见 `docs/test-reports/stage-63-host-startup-and-demo.md`。
 
 ## 已完成阶段
 

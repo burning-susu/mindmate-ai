@@ -567,3 +567,12 @@
 - 准备：复核 `docs/demo/阶段60宿主验收入口.md` 已含隔离 Mock、test-only Provider、停止方法、页面步骤与脱敏模板；`docs/demo/求职Demo三分钟操作.md` 已给出求职演示路径。本批不新增第二份启动文档。逐项验收表和交接材料见 `docs/test-reports/stage-61-demo-host-acceptance.md`。
 - 未完成与交接：没有页面截图、合成会话 ID、服务调用计数、刷新/重启观察或本批缺陷复现。需在普通 Windows 浏览器完成阶段 61 报告中的五项走查，并回传脱敏记录或失败截图后再继续判定；真实付费 Provider 冒烟不在本次操作内。
 - Git 交接：本地提交的中文信息为 `验收：整理阶段八演示验收记录与宿主交接`。两次普通推送命令均无输出挂起并被停止；`git ls-remote` 核实远端仍为进场 SHA `0b6fccef85dd83f6773a92dcddc66e004545882d`，本地领先 1 个提交。推送原因未判定，不强推；在普通 Windows VS Code 终端运行 `git push origin feat/v1-bootstrap`，再用 `git rev-parse HEAD` 和 `git ls-remote --heads origin feat/v1-bootstrap` 核验两边完整 SHA 一致。完整本地提交 SHA 见交付说明。
+
+### 第六十三批：修复 Windows 运行环境并启动隔离 Demo
+
+- 状态：`ENVIRONMENT_READY=PASS`、`DEMO_STARTUP=PASS`；本批真实浏览器页面走查为 `PARTIAL`，`HISTORY_PURGE_BROWSER` 和 `LEARNING_ONLINE_BROWSER` 为 `PARTIAL`，`REAL_PROVIDER_SMOKE` 为 `PENDING`。阶段 7/8 完整 V1 仍为 `PARTIAL`。
+- 环境修复：旧 `backend/.venv` 绑定 Python 3.12.11。本批使用 uv 安装 Python 3.12.14 到忽略目录 `backend/.uv-python/`，并用 `uv sync --frozen --dev` 重建虚拟环境；旧环境改名保留在忽略的 `backend/build/venv-stage62-broken/`。新 `.venv` 可直接启动，`mindmate` 可导入，固定模型离线 manifest 为 `READY` 且指纹匹配。`backend/uv.lock` 未变。
+- 验证：六个阶段八后端测试文件 `29 passed`；前端 Vitest `15 files / 66 tests passed`、typecheck、build 通过。Alembic revision 为 `d17a5e9c4b20`。Vite build 有单个 513.14 kB gzip 前 chunk 提示；后端测试保留 37 条依赖弃用警告，均未导致失败。
+- Demo 可用性：隔离根为 `%TEMP%\mindmate-ai-stage63-isolated-demo-20260928`，API/Web 端口 `8014/5182`，Provider 为 Mock 且 `deepseek_called=false`；固定 READY 数据含 9 个文件、4 个知识库。主库 `01a0e5b3-defc-7aff-972e-28e980580771` 与索引版本 `01a0e5b3-ee6e-7876-ae04-cb6df0faab9e` 在同根重启后保持一致，准备计数不变；health、ready 与页面资源分别返回 `ok/200/200`。
+- 页面验收：自动 HTTP 请求只证明端口及页面资源可达，不代替 Chrome/Edge 点击。用户仍需完成来源问答、资料不足拒答、Mock 学习、刷新/重启恢复；之后再走查历史永久删除、多题定位与 test-only Provider。真实 DeepSeek/OpenAI 调用未执行，阶段 7/8 完整验收不因本批环境修复和自动测试而改变。
+- 报告：`docs/test-reports/stage-63-host-startup-and-demo.md`。用户级 Python 路径在当前执行沙箱中不可访问；仓库本地虚拟环境与 Demo 已验证可运行。

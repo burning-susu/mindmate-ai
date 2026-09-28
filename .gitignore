@@ -23,6 +23,7 @@ frontend/test-results/
 frontend/playwright-report/
 frontend/coverage/
 backend/.venv/
+backend/.uv-python/
 backend/.pytest_cache/
 backend/.mypy_cache/
 backend/.ruff_cache/
