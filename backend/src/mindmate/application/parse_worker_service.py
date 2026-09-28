@@ -120,6 +120,7 @@ class ParsingWorker:
                 self.worker_id,
                 self._settings.parse_worker_lease_seconds,
                 {FILE_IMPORT_TASK, FILE_REPROCESS_TASK},
+                concurrency_groups="HEAVY",
             )
             if task is None:
                 return None
@@ -228,6 +229,15 @@ class ParsingWorker:
             document_type = record.document_type
 
         lease_stop = threading.Event()
+        cancel_event = threading.Event()
+        cancel_watch_stop = threading.Event()
+        cancel_watch = threading.Thread(
+            target=self._watch_task_cancellation,
+            args=(task_id, cancel_event, cancel_watch_stop),
+            name="mindmate-parse-cancel-watch",
+            daemon=True,
+        )
+        cancel_watch.start()
         lease_thread = threading.Thread(
             target=self._lease_heartbeat,
             args=(task_id, lease_stop),
@@ -245,10 +255,10 @@ class ParsingWorker:
                     document_type,
                     timeout_seconds=self._settings.parser_timeout_seconds,
                     memory_limit_bytes=self._settings.parser_memory_limit_bytes,
-                    stop_event=self._stop_event,
+                    stop_event=cancel_event,
                 )
         except FileValidationError as exc:
-            if exc.code == "PARSER_CANCELLED" and self._stop_event.is_set():
+            if exc.code == "PARSER_CANCELLED" and (self._stop_event.is_set() or cancel_event.is_set()):
                 return "cancelled"
             return self._handle_failure(
                 task_id, file_id, item_index, exc, count_retry=not manual_retry
@@ -261,8 +271,10 @@ class ParsingWorker:
         finally:
             lease_stop.set()
             lease_thread.join(timeout=1)
+            cancel_watch_stop.set()
+            cancel_watch.join(timeout=1)
 
-        if self._stop_event.is_set():
+        if self._stop_event.is_set() or cancel_event.is_set():
             return "cancelled"
         try:
             with self._session_factory() as session:
@@ -454,6 +466,21 @@ class ParsingWorker:
                     session.commit()
             except Exception:
                 return
+
+    def _watch_task_cancellation(
+        self, task_id: str, cancel_event: threading.Event, stop_event: threading.Event
+    ) -> None:
+        while not stop_event.wait(0.05) and not self._stop_event.is_set():
+            try:
+                with self._session_factory() as session:
+                    task = session.get(BackgroundTask, task_id)
+                    if task is None or task.status != "RUNNING" or task.cancel_requested_at is not None:
+                        cancel_event.set()
+                        return
+            except Exception:
+                # The worker's normal safe-point checks remain authoritative if
+                # a transient read cannot be completed.
+                continue
 
     def _fail_worker_task(self, task_id: str) -> None:
         with self._session_factory() as session:

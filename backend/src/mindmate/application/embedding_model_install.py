@@ -182,6 +182,7 @@ class EmbeddingModelInstallWorker:
                 candidate_id,
                 self.worker_id,
                 INSTALL_LEASE_SECONDS,
+                concurrency_groups="HEAVY",
             )
             if task is None:
                 return None

@@ -310,6 +310,66 @@
         }
       }
     },
+    "/api/v1/system/task-concurrency": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Get Task Concurrency",
+        "operationId": "get_task_concurrency_api_v1_system_task_concurrency_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskConcurrencyResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Put Task Concurrency",
+        "operationId": "put_task_concurrency_api_v1_system_task_concurrency_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskConcurrencyUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskConcurrencyResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/system/privacy": {
       "get": {
         "tags": [
@@ -5935,6 +5995,17 @@
             ],
             "title": "Knowledge Base Id"
           },
+          "cancel_reason_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancel Reason Code"
+          },
           "index_version_id": {
             "anyOf": [
               {
@@ -8576,6 +8647,17 @@
               }
             ],
             "title": "Error"
+          },
+          "cancel_reason_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancel Reason Code"
           }
         },
         "type": "object",
@@ -11381,6 +11463,86 @@
           "updated_at"
         ],
         "title": "TagResponse"
+      },
+      "TaskConcurrencyResponse": {
+        "properties": {
+          "heavy_task_limit": {
+            "type": "integer",
+            "title": "Heavy Task Limit"
+          },
+          "vector_write_limit": {
+            "type": "integer",
+            "title": "Vector Write Limit"
+          },
+          "default_heavy_task_limit": {
+            "type": "integer",
+            "title": "Default Heavy Task Limit"
+          },
+          "default_vector_write_limit": {
+            "type": "integer",
+            "title": "Default Vector Write Limit"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "default",
+              "stored",
+              "invalid"
+            ],
+            "title": "Source"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "heavy_task_limit",
+          "vector_write_limit",
+          "default_heavy_task_limit",
+          "default_vector_write_limit",
+          "source"
+        ],
+        "title": "TaskConcurrencyResponse"
+      },
+      "TaskConcurrencyUpdateRequest": {
+        "properties": {
+          "heavy_task_limit": {
+            "type": "integer",
+            "maximum": 2.0,
+            "minimum": 1.0,
+            "title": "Heavy Task Limit",
+            "default": 2
+          },
+          "vector_write_limit": {
+            "type": "integer",
+            "maximum": 1.0,
+            "minimum": 1.0,
+            "title": "Vector Write Limit",
+            "default": 1
+          }
+        },
+        "type": "object",
+        "title": "TaskConcurrencyUpdateRequest"
       },
       "TaskRetentionPreviewResponse": {
         "properties": {

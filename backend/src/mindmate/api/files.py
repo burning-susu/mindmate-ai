@@ -42,7 +42,12 @@ from mindmate.application.files import (
     validate_upload_mime,
 )
 from mindmate.application.source_snapshots import purge_source_snapshots_for_files
-from mindmate.application.tasks import add_event, cancel_task, create_task
+from mindmate.application.tasks import (
+    add_event,
+    cancel_task,
+    cancel_tasks_for_targets,
+    create_task,
+)
 from mindmate.config import Settings
 from mindmate.infrastructure.fts5 import Fts5Projection
 from mindmate.infrastructure.models import (
@@ -291,6 +296,7 @@ class ImportTaskResponse(BaseModel):
     tag_ids: list[str]
     knowledge_base_id: str | None = None
     error: str | None = None
+    cancel_reason_code: str | None = None
 
 
 class BackgroundTaskResponse(BaseModel):
@@ -304,6 +310,7 @@ class BackgroundTaskResponse(BaseModel):
     folder_id: str | None = None
     tag_ids: list[str]
     knowledge_base_id: str | None = None
+    cancel_reason_code: str | None = None
     index_version_id: str | None = None
     results: list[dict[str, Any]]
     summary: dict[str, Any] | None = None
@@ -604,6 +611,7 @@ def _task_payload(task: BackgroundTask) -> dict[str, Any]:
         "results": checkpoint.get("results", []) if isinstance(checkpoint, dict) else [],
         "summary": checkpoint.get("summary") if isinstance(checkpoint, dict) else None,
         "error": task.error_summary,
+        "cancel_reason_code": task.cancel_reason_code,
     }
 
 
@@ -1260,6 +1268,7 @@ def trash_file(
         record.status = "IN_TRASH"
         record.row_version += 1
         record.updated_at = utc_now()
+        cancel_tasks_for_targets(session, file_ids={record.file_id})
         session.commit()
     return _file_payload(session, settings, record)
 
@@ -1439,6 +1448,7 @@ def batch_file_action(
     if payload.tag_id and session.get(Tag, payload.tag_id) is None:
         raise FileApiError("TAG_NOT_FOUND", "标签不存在。", 404)
     results: list[dict[str, Any]] = []
+    trashed_file_ids: set[str] = set()
     for file_id in dict.fromkeys(payload.file_ids):
         try:
             reprocess_task_id: str | None = None
@@ -1478,6 +1488,7 @@ def batch_file_action(
                 record.purge_after = deleted_at + timedelta(days=30)
                 record.status = "IN_TRASH"
                 record.row_version += 1
+                trashed_file_ids.add(record.file_id)
             elif payload.action == "REPROCESS":
                 if record.deleted_at is not None:
                     raise FileApiError("FILE_IN_TRASH", "回收站中的文件不能重新处理。", 409)
@@ -1524,6 +1535,8 @@ def batch_file_action(
             )
         except FileApiError as exc:
             results.append({"file_id": file_id, "status": "FAILED", "error": exc.detail})
+    if trashed_file_ids:
+        cancel_tasks_for_targets(session, file_ids=trashed_file_ids)
     session.commit()
     return {"items": results}
 
@@ -1716,6 +1729,7 @@ def delete_folder(
     if deletion_strategy not in {"MOVE_CHILDREN", "TRASH_RECURSIVE"}:
         raise FileApiError("DELETION_STRATEGY_INVALID", "文件夹删除策略无效。")
     now = utc_now()
+    recursive_file_ids: set[str] = set()
     if deletion_strategy == "MOVE_CHILDREN":
         _atomic_folder_update(
             session,
@@ -1754,6 +1768,9 @@ def delete_folder(
         )
         child_ids = [item.folder_id for item in children]
         all_ids = [folder_id, *child_ids]
+        recursive_file_ids = set(
+            session.scalars(select(FileRecord.file_id).where(FileRecord.folder_id.in_(all_ids)))
+        )
         if child_ids:
             session.execute(
                 update(Folder)
@@ -1778,6 +1795,11 @@ def delete_folder(
             )
             .execution_options(synchronize_session=False)
         )
+    cancel_tasks_for_targets(
+        session,
+        file_ids=recursive_file_ids,
+        folder_ids={folder_id},
+    )
     session.commit()
     return {
         "folder_id": folder_id,

@@ -651,8 +651,8 @@ def test_file_permanent_delete_race_fails_chunk_task_without_stranding_lease(
         with factory() as session:
             task = session.get(BackgroundTask, task_id)
             assert task is not None
-            assert task.status == "FAILED"
-            assert task.error_summary == "INDEX_INPUT_REMOVED"
+            assert task.status == "CANCELLED"
+            assert task.cancel_reason_code == "TARGET_IN_TRASH"
             assert task.lease_owner is None
             assert session.scalar(select(func.count()).select_from(Chunk)) == 0
     finally:

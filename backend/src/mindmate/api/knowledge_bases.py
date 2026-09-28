@@ -35,7 +35,7 @@ from mindmate.application.index_preprocessing import (
 from mindmate.application.knowledge_membership_worker import KNOWLEDGE_MEMBERSHIP_TASK
 from mindmate.application.retrieval_test_queries import RetrievalQueryEncoderError
 from mindmate.application.source_snapshots import purge_source_snapshots_for_knowledge_base
-from mindmate.application.tasks import cancel_task, create_task
+from mindmate.application.tasks import cancel_task, cancel_tasks_for_targets, create_task
 from mindmate.infrastructure.fts5 import Fts5Projection
 from mindmate.infrastructure.models import (
     BackgroundTask,
@@ -771,6 +771,7 @@ def _atomic_update(
     values: dict[str, Any],
     *,
     deleted: bool,
+    commit: bool = True,
 ) -> KnowledgeBase:
     state = KnowledgeBase.deleted_at.is_not(None) if deleted else KnowledgeBase.deleted_at.is_(None)
     result = session.execute(
@@ -794,7 +795,8 @@ def _atomic_update(
             412,
             current_row_version=current.row_version,
         )
-    session.commit()
+    if commit:
+        session.commit()
     session.expire_all()
     updated = session.get(KnowledgeBase, knowledge_base_id)
     if updated is None:
@@ -1150,7 +1152,10 @@ def trash_knowledge_base(
         expected_version,
         {"deleted_at": now, "purge_after": now + timedelta(days=30), "updated_at": now},
         deleted=False,
+        commit=False,
     )
+    cancel_tasks_for_targets(session, knowledge_base_ids={knowledge_base_id})
+    session.commit()
     return _payload(session, record)
 
 

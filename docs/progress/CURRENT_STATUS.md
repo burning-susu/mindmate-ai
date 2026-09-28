@@ -3,11 +3,11 @@
 ## 基本信息
 
 - 当前开发分支：`feat/v1-bootstrap`
-- 第七十批进场：分支 `feat/v1-bootstrap`；LOCAL `ae4432ea38670fb0dac020c5c488ee4ad9d22102`，REMOTE `ae4432ea38670fb0dac020c5c488ee4ad9d22102`；核验日期 `2026-09-28`。
-- 最后更新时间：`2026-09-28`
+- 第七十一批进场：分支 `feat/v1-bootstrap`；LOCAL `cea45860111391444120c8403a1b49a4e6b1a822`，REMOTE `cea45860111391444120c8403a1b49a4e6b1a822`；核验日期 `2026-09-29`。
+- 最后更新时间：`2026-09-29`
 - 当前开发阶段：阶段 8 开发中，状态 `PARTIAL`；阶段 5、阶段 6、阶段 7 继续 `PARTIAL`
 - 交付顺序：Demo 首先完成，完整 V1 以后精进。求职 Demo 优先文件整理/导入、建库、带来源问答、最小学习陪练和重启恢复。Demo 可用性与完整 V1 阶段状态分开报告。
-- 当前批次状态：`AC-GLOBAL-004` 代码回归 `CODE_PASS`（新增知识库/学习会话 404 专用页面回归）；阶段 8 全量仍 `STAGE8_FULL_V1=PARTIAL`，普通 Chrome/Edge 页面未亲测。学习总结持久化/展示/搜索、回收站删除联动任务取消、任务并发下调配置未完成；外部启动器/runtime stdout/stderr 不受日志保留服务控制。阶段 8 浏览器缺口、每项 AC 映射及人工验收卡见 `docs/test-reports/stage-70-stage8-browser-acceptance.md`。本批前端 `16 files / 78 tests`、typecheck、lint、build 通过；后端组合初跑 `74 passed, 1 skipped, 3 failed`，已分别隔离重跑并记录 Windows/FTS 波动，不冒称组合全绿。`LOCAL_BUDGET_RECONCILIATION` 沿用第 68 批 `PASS`，Provider 官方账单和真实 Provider smoke 仍 `PENDING`。求职 Demo 沿用第四十二/六十四批 `PASS`，本批未重跑；阶段 5–7 完整 V1 继续 `PARTIAL`。
+- 当前批次状态：`TASK-AC-05` 与 `TASK-AC-12` 代码/自动化 `CODE_PASS`，普通 Chrome/Edge 仍 `BROWSER_PARTIAL`；阶段 8 全量仍 `STAGE8_FULL_V1=PARTIAL`。第七十一批已在回收站软删除事务内联动取消失效任务，并新增持久 `tasks.concurrency` 配置（默认 `2/1`，可下调为 `1/1`），覆盖真实 Worker 领取和两个独立进程争抢。学习总结持久化/展示/搜索、其它阶段 8 浏览器缺口、外部启动器/runtime stdout/stderr 仍保持原状态。详细报告见 `docs/test-reports/stage-71-trash-task-concurrency.md`；第七十批历史矩阵对应行已回链本报告。本批前端 `16 files / 78 tests`、typecheck、lint、build 通过；受影响后端组合及阶段 71 专用 `7 passed` 在仓库隔离 basetemp 通过。完整后端集合仍有宿主编码、Windows Credential Manager、Provider/budget、目录句柄和 FTS5 波动，未冒称全量通过。`LOCAL_BUDGET_RECONCILIATION` 沿用第 68 批 `PASS`，Provider 官方账单和真实 Provider smoke 仍 `PENDING`。求职 Demo 沿用第四十二/六十四批 `PASS`，本批未重跑；阶段 5–7 完整 V1 继续 `PARTIAL`。
 
 ## 已完成阶段
 
@@ -21,7 +21,7 @@
 ## 当前已实现能力
 
 - 后端：5 类文件导入、托管复制、哈希去重、持久解析 Worker、隔离解析、搜索筛选、文件/文件夹/标签、批量操作、受控内容读取、回收站和永久删除；Folder/Tag 修改、删除与恢复使用数据库原子 `row_version` 乐观锁。
-- 任务与资源安全：复用 `BackgroundTask` 实现文件导入/重新处理及知识库成员准入；解析 Worker 与成员 Worker 按任务类型隔离领取，均使用原子领取、租约、过期恢复、关闭中断与取消状态；Windows 解析子进程使用 Job Object 的 `KILL_ON_JOB_CLOSE` 与进程内存上限，默认 `512 MiB`。
+- 任务与资源安全：复用 `BackgroundTask` 实现文件导入/重新处理及知识库成员准入；解析 Worker 与成员 Worker 按任务类型隔离领取，均使用原子领取、租约、过期恢复、关闭中断与取消状态；第七十一批新增回收站目标匹配、取消原因/事件、解析子进程取消监视器和索引输入范围复核；新增持久 `tasks.concurrency` 配置，统一执行默认重任务 `2`、Embedding/vector 写 `1` 及可下调 `1/1` 的跨进程领取边界；Windows 解析子进程使用 Job Object 的 `KILL_ON_JOB_CLOSE` 与进程内存上限，默认 `512 MiB`。
 - 前端：真实 API 文件工作台、嵌套目录、筛选排序、导入与重复决策、详情编辑/预览、文件和文件夹回收站操作；列表查询参数、详情返回后的筛选/排序/滚动恢复；返回前刷新列表避免旧 `row_version` 竞态；版本冲突提示并引导重新加载，不自动覆盖；第二十四批在知识库详情页增加高级“测试检索”区域，调用现有只读 API，展示三种判定、候选定位与排序信号。
 - 第六十九批全局恢复：`AppShell` 顶栏新增跨路由持久任务抽屉，读取真实任务类型/阶段/进度/终态和脱敏失败摘要；只对后端支持的文件导入、索引、知识库成员和模型安装任务显示取消。新增本地 health 直读阻断页、回环网络异常分类、Chat/学习在线模式离线前置守卫，以及知识库/学习会话 404 专用返回状态。自动化回归覆盖任务取消一次、服务断开和错误提示安全边界；普通 Chrome/Edge 页面证据仍 `BROWSER_PARTIAL`。
 - 模型安装：第三十批在知识库详情页增加固定 ONNX 安装入口，显示来源/许可依据/大小/revision/指纹、本机下载、持久真实进度、取消和重试；仅用户主动点击下载，刷新或应用重启后从持久任务恢复。

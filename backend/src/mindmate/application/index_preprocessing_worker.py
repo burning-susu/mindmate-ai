@@ -123,6 +123,7 @@ class IndexPreprocessingWorker:
                 self.worker_id,
                 self._settings.index_worker_lease_seconds,
                 {INDEX_PREPROCESS_TASK},
+                concurrency_groups="HEAVY",
             )
             if task is None:
                 return None

@@ -125,6 +125,7 @@ class IndexEmbeddingWorker:
                 INDEX_EMBED_TASK,
                 self.worker_id,
                 self._settings.index_embedding_worker_lease_seconds,
+                concurrency_groups=("HEAVY", "VECTOR_WRITE"),
             )
             if task is None:
                 return None

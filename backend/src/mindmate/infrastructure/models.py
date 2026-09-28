@@ -640,6 +640,8 @@ class BackgroundTask(Base):
     checkpoint_version: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     checkpoint_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     error_summary: Mapped[str | None] = mapped_column(String(500))
+    cancel_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancel_reason_code: Mapped[str | None] = mapped_column(String(80))
     lease_owner: Mapped[str | None] = mapped_column(String(100))
     lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

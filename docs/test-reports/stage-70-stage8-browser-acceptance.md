@@ -10,7 +10,7 @@
 
 | 门禁 | 状态 | 证据范围 |
 | --- | --- | --- |
-| `STAGE8_FULL_V1` | `PARTIAL` | 普通 Chrome/Edge 页面证据未取得；学习总结、任务自动取消和并发下调仍有明确缺口；日志服务不管理外部启动器/runtime stdout/stderr |
+| `STAGE8_FULL_V1` | `PARTIAL` | 普通 Chrome/Edge 页面证据未取得；学习总结、其它阶段 8 遗留项和日志服务不管理外部启动器/runtime stdout/stderr；第七十一批已补任务自动取消与并发下调的代码/自动化证据 |
 | `AC-GLOBAL-004` 代码回归 | `CODE_PASS` | 新增知识库与学习会话 404 直达用例；前端全量 `16 files / 78 tests passed` |
 | `LOCAL_BUDGET_RECONCILIATION` | `PASS`（沿用第 68 批） | 本地估算、预留、硬停止与 MockTransport 自动化；不代表厂商账单 |
 | `PROVIDER_BILLING_RECONCILIATION` | `PENDING` | 未取得官方账单或官方用量接口数据 |
@@ -64,14 +64,14 @@
 | `TASK-AC-02` | `GlobalTaskDrawer.tsx` 状态映射与安全摘要 | `test_stage8_global_recovery.test.tsx`、`test_stage8_home_overview.py` | 无普通浏览器任务状态全谱证据 | `CODE_PASS (自动化) / BROWSER_PARTIAL` | 覆盖排队、运行、阻塞、失败、部分成功、完成、取消的页面值与转态 |
 | `TASK-AC-03` | `home_overview.py` 只对有检查点的运行任务显示百分比 | `test_stage8_home_overview.py`、`stage8-home-overview.test.tsx` | 第 50 批有排队/运行状态历史页面证据；本批未复验新抽屉 | `CODE_PASS (沿用) / BROWSER_PARTIAL` | 对已知和未知总量任务分别核阶段、进度和无伪百分比 |
 | `TASK-AC-04` | 文件/知识库成员任务逐项结果和部分成功投影 | `test_stage4_files.py`、`test_stage5_knowledge_bases.py` | 本批没有混合成功/失败导入页面 | `CODE_PASS (沿用) / BROWSER_PARTIAL` | 合成批次一成功一失败，核父任务数量、失败不回滚成功项 |
-| `TASK-AC-05` | Worker 固定并发领取边界：重任务最多 2、Embedding/vector 写最多 1 | 阶段 5 Worker 自动化（本批未重跑） | 没有并发浏览器证据；源码未找到可将并发数下调的设置/API | `CODE_PARTIAL / BROWSER_PARTIAL` | 确认可调低并发的需求实现边界，按变更治理补配置及测试 |
+| `TASK-AC-05` | Worker 固定并发领取边界：重任务最多 2、Embedding/vector 写最多 1 | 第七十一批 `test_stage71_trash_task_concurrency.py`：默认 `2/1`、持久下调 `1/1`、两个独立进程争抢、真实 Worker 领取；配置 API 与迁移证据见 `docs/test-reports/stage-71-trash-task-concurrency.md` | 没有并发浏览器证据 | `CODE_PASS / BROWSER_PARTIAL` | 普通 Chrome/Edge 设置页或接口走查，记录生效值与排队状态；阶段 8 仍不因代码证据整体通过 |
 | `TASK-AC-06` | `/api/v1/tasks/{id}/cancel` 与取消检查点 | `test_tasks_backups.py`、`test_stage5_knowledge_bases.py` | 本批没有排队/运行任务取消和半成品检查 | `CODE_PASS (自动化) / BROWSER_PARTIAL` | 合成排队任务立即取消、运行任务在安全点取消，核无半成品发布 |
 | `TASK-AC-07` | 阶段 Worker 检查点/幂等重试 | `test_stage5_chunking.py`、`test_stage5_index_activation.py`、`test_stage6_parser_worker.py` | 无本批重试页面证据 | `CODE_PASS (沿用) / BROWSER_PARTIAL` | 重试同一合成任务，核成功步骤与业务产物不重复 |
 | `TASK-AC-08` | `parse_worker_service.py` 有界瞬态重试及不可重试错误分类 | `test_stage6_parser_worker.py::test_max_retries_and_non_retryable_failure_are_bounded` | 无本批错误分类页面证据 | `CODE_PASS (沿用) / BROWSER_PARTIAL` | 用失败任务核次数、错误码和不自动重试提示 |
 | `TASK-AC-09` | 应用关闭/Worker lease/interruption recovery | `test_tasks_backups.py`、阶段 5/6 Worker tests | 第 69 批只测页面任务抽屉逻辑；未重启普通页面服务 | `CODE_PASS (自动化) / BROWSER_PARTIAL` | 人工卡停止/启动隔离 API，核安全检查点和同一任务 ID |
 | `TASK-AC-10` | `local_restore.py` 校验、重启切换、回滚；不自动恢复不一致数据 | `test_stage8_backup_restore.py` 坏包/中断/迁移失败回归 | 第 53 批有效备份恢复有 Chrome 证据，本批未重做；不代表迁移失败人工场景 | `CODE_PASS / BROWSER_PARTIAL` | 只继承合法恢复页面证据；失败人工页保持原数据可读并保留恢复点 |
 | `TASK-AC-11` | 文件/知识库/首页/抽屉读取同一 `BackgroundTask` 安全投影 | `home_overview.py`、`GlobalTaskDrawer.tsx`、对应前后端测试 | 第 48/50 批有首页局部任务页证据，缺本批跨页对照 | `CODE_PASS (自动化) / BROWSER_PARTIAL` | 同一 task id 在文件、知识库、首页与抽屉对照状态 |
-| `TASK-AC-12` | 文件与知识库软删除接口写 `IN_TRASH`；Worker 对失效输入做范围复核 | `api/files.py`、`api/knowledge_bases.py`、阶段 5 Worker | 删除接口未调用 `cancel_task`；没有回收站后 QUEUED/RUNNING 任务状态的专用回归 | `CODE_PARTIAL / BROWSER_PARTIAL` | 下一批补自动化覆盖“目标进回收站”取消排队任务、运行任务安全停止及共享资源保留 |
+| `TASK-AC-12` | 文件与知识库软删除接口写 `IN_TRASH`；Worker 对失效输入做范围复核 | 第七十一批新增 `cancel_tasks_for_targets()`、任务取消原因/事件、解析取消监视器、索引输入范围复核；阶段 71 专用测试 `7 passed`，详见 `docs/test-reports/stage-71-trash-task-concurrency.md` | 没有回收站页面点击、刷新或 Network 证据 | `CODE_PASS / BROWSER_PARTIAL` | 普通 Chrome/Edge 中核对单文件、递归文件夹、知识库回收站和任务抽屉同一 task 状态；混合批与共享旧索引按报告范围复验 |
 | `TASK-AC-13` | `task_retention.py` 成功/取消 7 天、失败类 30 天规则 | `test_stage8_task_retention.py`、第 51 批边界测试 | 无普通浏览器保留期限页面证据 | `CODE_PASS / BROWSER_PARTIAL` | 用隔离的旧时间任务预览并清理，核阈值边界和实际计数 |
 | `TASK-AC-14` | retention worker 避免删业务对象和仍引用的父子任务 | `test_stage8_task_retention.py::test_task_retention_skips_references_and_keeps_business_rows` | 无普通浏览器清理后资源对照 | `CODE_PASS / BROWSER_PARTIAL` | 清理后检查文件、知识库、索引、对话、学习记录仍在 |
 | `TASK-AC-15` | AI 请求用 `AiOperation`/学习 Provider operation，非后台长任务 | 阶段 6 Chat、`test_stage55_learning_provider.py`、抽屉前端测试 | 第 54 批 Mock 切换有浏览器证据；本批没核 Drawer 排除 AI 操作 | `CODE_PASS (沿用) / BROWSER_PARTIAL` | 一次 Mock Chat/出题/点评时核 Drawer 不生成对应长任务 |

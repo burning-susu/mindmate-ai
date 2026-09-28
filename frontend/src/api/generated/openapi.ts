@@ -74,6 +74,7 @@ export interface components {
     "folder_id"?: string | null;
     "tag_ids": Array<string>;
     "knowledge_base_id"?: string | null;
+    "cancel_reason_code"?: string | null;
     "index_version_id"?: string | null;
     "results": Array<Record<string, unknown>>;
     "summary"?: Record<string, unknown> | null;
@@ -487,7 +488,8 @@ export interface components {
     "folder_id"?: string | null;
     "tag_ids": Array<string>;
     "knowledge_base_id"?: string | null;
-    "error"?: string | null
+    "error"?: string | null;
+    "cancel_reason_code"?: string | null
   };
   "IndexFileCountsResponse": {
     "total": number;
@@ -916,6 +918,19 @@ export interface components {
     "created_at": string;
     "updated_at": string
   };
+  "TaskConcurrencyResponse": {
+    "heavy_task_limit": number;
+    "vector_write_limit": number;
+    "default_heavy_task_limit": number;
+    "default_vector_write_limit": number;
+    "source": "default" | "stored" | "invalid";
+    "updated_at"?: string | null;
+    "error_code"?: string | null
+  };
+  "TaskConcurrencyUpdateRequest": {
+    "heavy_task_limit"?: number;
+    "vector_write_limit"?: number
+  };
   "TaskRetentionPreviewResponse": {
     "as_of": string;
     "eligible_total": number;
@@ -995,6 +1010,12 @@ export interface operations {
   };
   "PUT /api/v1/system/ai-budget": {
     operationId: "put_ai_budget_api_v1_system_ai_budget_put"
+  };
+  "GET /api/v1/system/task-concurrency": {
+    operationId: "get_task_concurrency_api_v1_system_task_concurrency_get"
+  };
+  "PUT /api/v1/system/task-concurrency": {
+    operationId: "put_task_concurrency_api_v1_system_task_concurrency_put"
   };
   "GET /api/v1/system/privacy": {
     operationId: "get_privacy_status_api_v1_system_privacy_get"

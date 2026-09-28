@@ -88,6 +88,7 @@ class IndexFtsWorker:
                 INDEX_FTS_TASK,
                 self.worker_id,
                 self._settings.index_fts_worker_lease_seconds,
+                concurrency_groups="HEAVY",
             )
             if task is None:
                 return None

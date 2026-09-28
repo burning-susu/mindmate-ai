@@ -221,7 +221,7 @@ def test_deleted_file_does_not_receive_old_parse_result(worker_client, monkeypat
     assert deleted.status_code == 200
     release.set()
     failed = _wait_import(client, payload["import_id"])
-    assert failed["status"] == "FAILED"
+    assert failed["status"] == "CANCELLED"
     assert client.get(f"/api/v1/files/{file_id}").json()["status"] == "IN_TRASH"
     assert not (data_dir / "parsed" / f"{file_id}.json").exists()
 

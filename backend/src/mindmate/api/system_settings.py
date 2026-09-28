@@ -20,6 +20,13 @@ from mindmate.application.diagnostics import (
     serialize_diagnostics,
 )
 from mindmate.application.storage_stats import storage_overview
+from mindmate.application.task_concurrency import (
+    DEFAULT_HEAVY_TASK_LIMIT,
+    DEFAULT_VECTOR_WRITE_LIMIT,
+    read_task_concurrency,
+    task_concurrency_payload,
+    write_task_concurrency,
+)
 from mindmate.application.usage_budget import (
     budget_status,
     privacy_diagnostics_status,
@@ -87,6 +94,23 @@ class BudgetUpdateRequest(BaseModel):
     soft_remind_usd: str | None = Field(default=None, max_length=32)
     period: Literal["30d", "calendar_month"] = "30d"
     unknown_usage_policy: Literal["deny", "confirm"] = "deny"
+
+
+class TaskConcurrencyResponse(BaseModel):
+    heavy_task_limit: int
+    vector_write_limit: int
+    default_heavy_task_limit: int
+    default_vector_write_limit: int
+    source: Literal["default", "stored", "invalid"]
+    updated_at: str | None = None
+    error_code: str | None = None
+
+
+class TaskConcurrencyUpdateRequest(BaseModel):
+    heavy_task_limit: int = Field(default=DEFAULT_HEAVY_TASK_LIMIT, ge=1, le=DEFAULT_HEAVY_TASK_LIMIT)
+    vector_write_limit: int = Field(
+        default=DEFAULT_VECTOR_WRITE_LIMIT, ge=1, le=DEFAULT_VECTOR_WRITE_LIMIT
+    )
 
 
 class DiagnosticLogClearResponse(BaseModel):
@@ -160,6 +184,31 @@ def put_ai_budget(
         code = str(exc)
         raise SystemSettingsApiError(code, _budget_error_detail(code), 400) from exc
     return budget_status(session)
+
+
+@router.get("/task-concurrency", response_model=TaskConcurrencyResponse)
+def get_task_concurrency(session: Session = Depends(get_session)) -> dict[str, Any]:
+    return task_concurrency_payload(read_task_concurrency(session))
+
+
+@router.put("/task-concurrency", response_model=TaskConcurrencyResponse)
+def put_task_concurrency(
+    payload: TaskConcurrencyUpdateRequest,
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    try:
+        config = write_task_concurrency(
+            session,
+            heavy_task_limit=payload.heavy_task_limit,
+            vector_write_limit=payload.vector_write_limit,
+        )
+        session.commit()
+    except ValueError as exc:
+        session.rollback()
+        raise SystemSettingsApiError(
+            str(exc), "任务并发配置无效，只能在默认上限内下调。", 400
+        ) from exc
+    return task_concurrency_payload(config)
 
 
 @router.get("/privacy")

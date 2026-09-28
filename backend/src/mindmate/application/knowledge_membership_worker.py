@@ -85,6 +85,7 @@ class KnowledgeMembershipWorker:
                 self.worker_id,
                 self._settings.knowledge_worker_lease_seconds,
                 {KNOWLEDGE_MEMBERSHIP_TASK},
+                concurrency_groups="HEAVY",
             )
             if task is None:
                 return None

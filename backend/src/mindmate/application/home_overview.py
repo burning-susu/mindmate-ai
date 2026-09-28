@@ -95,6 +95,7 @@ def _task_item(task: BackgroundTask) -> dict[str, Any]:
         "progress_percent": _progress_percent(task),
         "failure_code": failure_code,
         "failure_summary": failure_summary,
+        "cancel_reason_code": task.cancel_reason_code,
         "updated_at": task.updated_at,
     }
 

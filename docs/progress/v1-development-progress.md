@@ -645,3 +645,13 @@
 - 未完成事实：学习完成总结不存在持久化/展示/检索路径；文件/知识库软删除没有调用 `cancel_task`；未找到 `TASK-AC-05` 可下调并发的设置/API；stdout/stderr 超出应用结构化日志控制范围。各项与对应验收行、测试证据及下一动作见 `docs/test-reports/stage-70-stage8-browser-acceptance.md`。
 - 外部验收状态：test-only 在线学习 MockTransport 代码证据沿用第 68 批；本批没有页面调用摘要。Provider 官方账单核对、真实 Provider smoke 均 `PENDING`。第 53/66 批备份/恢复页面证据按原范围继承，不计成本批亲测。
 - Git：交付分支、中文提交信息、最终本地/远端完整 SHA 记于本批交付说明；不修改 `main`，不强推。
+
+### 第七十一批：阶段 8 回收站任务联动与并发配置
+
+- 进场：`feat/v1-bootstrap`；本地/远端完整 SHA 均为 `cea45860111391444120c8403a1b49a4e6b1a822`；工作区干净。开发日期 `2026-09-29`。
+- 状态：`TASK-AC-05` 与 `TASK-AC-12` 代码/自动化 `CODE_PASS`；两项普通 Chrome/Edge 页面均 `BROWSER_PARTIAL`；`STAGE8_FULL_V1` 继续 `PARTIAL`。求职 Demo 仍沿用既有 `PASS`，完整 V1 阶段 5–7 不变。
+- 回收站联动：`BackgroundTask` 增加 `cancel_requested_at`、`cancel_reason_code`，迁移 `g1a2b3c4d5e6`。文件、文件夹和知识库软删除在同一事务内按文件 ID、文件夹目标、知识库 scope 和 `IndexVersionInput` 精确取消失效任务；`MOVE_CHILDREN` 不取消搬移后文件任务；递归回收按实际文件集合处理；混合批成员任务保留有效条目。运行解析任务通过独立取消监视器停止解析子进程，索引 Worker 继续在发布前复核取消、版本和来源状态；恢复不自动重放任务。
+- 并发配置：新增持久 `tasks.concurrency`，`GET/PUT /api/v1/system/task-concurrency` 展示与更新生效值。默认重任务上限 `2`、Embedding/vector 写 `1`，只允许降低到 `1/1`；无效持久值 fail-closed 到 `1/1`。解析、成员、预处理、切片、Embedding、FTS、模型安装 Worker 的领取使用统一 DB 条件；备份独占约束和 AI 交互请求保持独立。
+- 证据：`backend/tests/test_stage71_trash_task_concurrency.py` `7 passed`，包含两个独立进程争抢和真实 Worker 领取；受影响阶段 4/5/6/任务/迁移隔离组合通过。前端 Vitest `16 files / 78 tests passed`、typecheck、lint、build 通过；OpenAPI `113 schemas / 122 operations` 与生成类型同步；Ruff/compileall/`git diff --check` 通过。完整后端集合另有宿主编码、Windows Credential Manager、Provider/budget、目录句柄和 FTS5 波动，未冒称全量通过。
+- 浏览器与费用：当前会话没有普通 Chrome/Edge 标签页，无截图、URL、Network 计数；未使用真实 Key、未访问真实 Provider、未产生付费调用。阶段 8 仍不可写成 `PASS`。
+- 报告：`docs/test-reports/stage-71-trash-task-concurrency.md`。下一批目标为学习会话完成总结的持久化、展示和历史检索定位。

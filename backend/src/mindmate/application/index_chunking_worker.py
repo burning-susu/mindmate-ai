@@ -98,6 +98,7 @@ class IndexChunkingWorker:
                 self.worker_id,
                 self._settings.index_chunk_worker_lease_seconds,
                 {CHUNK_GENERATION_TASK},
+                concurrency_groups="HEAVY",
             )
             if task is None:
                 return None

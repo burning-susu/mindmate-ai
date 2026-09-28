@@ -7,10 +7,27 @@ from sqlalchemy import and_, exists, func, or_, select, update
 from sqlalchemy.orm import Session, aliased
 from uuid6 import uuid7
 
-from mindmate.infrastructure.models import BackgroundTask, TaskAttempt, TaskEvent
+from mindmate.application.task_concurrency import (
+    HEAVY_TASK_TYPES,
+    VECTOR_WRITE_TASK_TYPES,
+    read_task_concurrency,
+)
+from mindmate.infrastructure.models import (
+    BackgroundTask,
+    IndexVersion,
+    IndexVersionInput,
+    TaskAttempt,
+    TaskEvent,
+)
 
 FINAL_STATES = {"COMPLETED", "FAILED", "CANCELLED"}
 CLAIMABLE_STATES = {"QUEUED", "INTERRUPTED"}
+TARGET_CANCEL_STATES = {"QUEUED", "BLOCKED", "RUNNING", "INTERRUPTED", "PAUSED", "CANCELLING"}
+PARTIAL_FILE_TASK_TYPES = {
+    "FILE_IMPORT",
+    "FILE_REPROCESS",
+    "KNOWLEDGE_MEMBERSHIP_ADD",
+}
 
 
 def now() -> datetime:
@@ -76,8 +93,58 @@ def _claimable_clause(now_value: datetime, task_model=BackgroundTask):
     )
 
 
+def _normalize_concurrency_groups(
+    groups: str | tuple[str, ...] | None,
+) -> tuple[str, ...]:
+    if groups is None:
+        return ()
+    if isinstance(groups, str):
+        return (groups,)
+    return tuple(dict.fromkeys(groups))
+
+
+def _concurrency_available_clauses(
+    session: Session,
+    current: datetime,
+    groups: str | tuple[str, ...] | None,
+    *,
+    task_model=BackgroundTask,
+) -> list[Any]:
+    normalized = _normalize_concurrency_groups(groups)
+    if not normalized:
+        return []
+    config = read_task_concurrency(session)
+    clauses: list[Any] = []
+    group_types = {
+        "HEAVY": HEAVY_TASK_TYPES,
+        "VECTOR_WRITE": VECTOR_WRITE_TASK_TYPES,
+    }
+    for group in normalized:
+        task_types = group_types.get(group)
+        limit = config.limit_for(group)
+        if not task_types or limit is None:
+            continue
+        active_count = (
+            select(func.count())
+            .select_from(task_model)
+            .where(
+                task_model.task_type.in_(task_types),
+                task_model.status == "RUNNING",
+                task_model.lease_until > current,
+            )
+            .scalar_subquery()
+        )
+        clauses.append(active_count < limit)
+    return clauses
+
+
 def claim_task(
-    session: Session, task_id: str, worker_id: str, lease_seconds: int = 60
+    session: Session,
+    task_id: str,
+    worker_id: str,
+    lease_seconds: int = 60,
+    *,
+    concurrency_groups: str | tuple[str, ...] | None = None,
 ) -> BackgroundTask | None:
     """Atomically claim one task if it is queued or its lease has expired.
 
@@ -88,7 +155,11 @@ def claim_task(
     lease_until = started + timedelta(seconds=lease_seconds)
     result = session.execute(
         update(BackgroundTask)
-        .where(BackgroundTask.task_id == task_id, _claimable_clause(started))
+        .where(
+            BackgroundTask.task_id == task_id,
+            _claimable_clause(started),
+            *_concurrency_available_clauses(session, started, concurrency_groups),
+        )
         .values(
             status="RUNNING",
             lease_owner=worker_id,
@@ -109,7 +180,12 @@ def claim_task(
 
 
 def claim_next_serial_task(
-    session: Session, task_type: str, worker_id: str, lease_seconds: int = 60
+    session: Session,
+    task_type: str,
+    worker_id: str,
+    lease_seconds: int = 60,
+    *,
+    concurrency_groups: str | tuple[str, ...] | None = None,
 ) -> BackgroundTask | None:
     """Atomically claim one task while enforcing a process-wide concurrency limit of one."""
     current = now()
@@ -149,6 +225,7 @@ def claim_next_serial_task(
         .where(
             candidate.task_type == task_type,
             _claimable_clause(current, candidate),
+            *_concurrency_available_clauses(session, current, concurrency_groups),
             ~exists(
                 select(1).select_from(active).where(
                     active.task_type == task_type,
@@ -166,6 +243,7 @@ def claim_next_serial_task(
         .where(
             BackgroundTask.task_id == candidate_id,
             _claimable_clause(current),
+            *_concurrency_available_clauses(session, current, concurrency_groups),
         )
         .values(
             status="RUNNING",
@@ -215,6 +293,8 @@ def claim_next_task(
     worker_id: str,
     lease_seconds: int = 60,
     task_types: set[str] | None = None,
+    *,
+    concurrency_groups: str | tuple[str, ...] | None = None,
 ) -> BackgroundTask | None:
     """Find candidates and use the atomic claim boundary for each one."""
     statement = select(BackgroundTask.task_id).where(_claimable_clause(now()))
@@ -226,7 +306,13 @@ def claim_next_task(
         .limit(32)
     )
     for task_id in candidate_ids:
-        claimed = claim_task(session, task_id, worker_id, lease_seconds)
+        claimed = claim_task(
+            session,
+            task_id,
+            worker_id,
+            lease_seconds,
+            concurrency_groups=concurrency_groups,
+        )
         if claimed is not None:
             return claimed
     return None
@@ -291,16 +377,123 @@ def checkpoint_task(
     )
 
 
-def cancel_task(session: Session, task: BackgroundTask) -> None:
+def cancel_task(
+    session: Session,
+    task: BackgroundTask,
+    reason_code: str = "USER_REQUESTED",
+) -> None:
     if task.status in FINAL_STATES:
         return
+    cancellation_time = now()
+    was_running = task.status == "RUNNING"
+    task.cancel_requested_at = cancellation_time
+    task.cancel_reason_code = reason_code[:80]
     task.status = "CANCELLED"
-    task.updated_at = now()
-    task.completed_at = now()
+    task.updated_at = cancellation_time
+    task.completed_at = cancellation_time
     task.lease_owner = None
     task.lease_until = None
     task.row_version += 1
-    add_event(session, task, "CANCELLED")
+    add_event(
+        session,
+        task,
+        "CANCEL_REQUESTED" if was_running else "CANCELLED",
+        {"reason_code": task.cancel_reason_code},
+    )
+    if was_running:
+        add_event(session, task, "CANCELLED", {"reason_code": task.cancel_reason_code})
+    finish_attempt(session, task.task_id, "CANCELLED", task.cancel_reason_code)
+
+
+def cancel_tasks_for_targets(
+    session: Session,
+    *,
+    file_ids: set[str] | None = None,
+    folder_ids: set[str] | None = None,
+    knowledge_base_ids: set[str] | None = None,
+    reason_code: str = "TARGET_IN_TRASH",
+) -> list[str]:
+    """Cancel only durable tasks whose persisted target is now invalid.
+
+    The caller keeps this operation in the same transaction as the soft
+    deletion. Index-stage tasks are matched through their immutable version
+    inputs, while old completed indexes and shared source objects are left
+    untouched.
+    """
+
+    file_ids = set(file_ids or ())
+    folder_ids = set(folder_ids or ())
+    knowledge_base_ids = set(knowledge_base_ids or ())
+    if not file_ids and not folder_ids and not knowledge_base_ids:
+        return []
+
+    tasks = list(
+        session.scalars(
+            select(BackgroundTask).where(~BackgroundTask.status.in_(FINAL_STATES))
+        )
+    )
+    version_ids = {
+        str(checkpoint.get("index_version_id"))
+        for task in tasks
+        if isinstance(task.checkpoint_json, dict)
+        and isinstance((checkpoint := task.checkpoint_json).get("index_version_id"), str)
+    }
+    versions = {
+        version.index_version_id: version
+        for version in session.scalars(
+            select(IndexVersion).where(IndexVersion.index_version_id.in_(version_ids))
+        )
+    }
+    input_file_ids: dict[str, set[str]] = {}
+    if file_ids and version_ids:
+        for version_id, input_file_id in session.execute(
+            select(IndexVersionInput.index_version_id, IndexVersionInput.file_id).where(
+                IndexVersionInput.index_version_id.in_(version_ids),
+                IndexVersionInput.file_id.in_(file_ids),
+            )
+        ):
+            input_file_ids.setdefault(str(version_id), set()).add(str(input_file_id))
+
+    cancelled: list[str] = []
+    for task in tasks:
+        if task.status not in TARGET_CANCEL_STATES:
+            continue
+        checkpoint = task.checkpoint_json if isinstance(task.checkpoint_json, dict) else {}
+        context_value = checkpoint.get("context")
+        context = context_value if isinstance(context_value, dict) else {}
+        direct_file_ids = {
+            str(context.get("file_id"))
+        } if isinstance(context.get("file_id"), str) else set()
+        items = checkpoint.get("items")
+        if isinstance(items, list):
+            direct_file_ids.update(
+                str(item.get("file_id"))
+                for item in items
+                if isinstance(item, dict) and isinstance(item.get("file_id"), str)
+            )
+        direct_folder_id = context.get("folder_id")
+        target_knowledge_base = checkpoint.get("knowledge_base_id")
+        version_id = checkpoint.get("index_version_id")
+        version = versions.get(version_id) if isinstance(version_id, str) else None
+        direct_file_matches = direct_file_ids & file_ids
+        matches = bool(direct_file_matches) and (
+            task.task_type not in PARTIAL_FILE_TASK_TYPES
+            or not (direct_file_ids - file_ids)
+        )
+        matches = matches or (isinstance(direct_folder_id, str) and direct_folder_id in folder_ids)
+        matches = matches or (
+            isinstance(target_knowledge_base, str) and target_knowledge_base in knowledge_base_ids
+        )
+        matches = matches or (
+            version is not None and version.scope_id in knowledge_base_ids
+        )
+        matches = matches or (
+            isinstance(version_id, str) and bool(input_file_ids.get(version_id))
+        )
+        if matches:
+            cancel_task(session, task, reason_code)
+            cancelled.append(task.task_id)
+    return cancelled
 
 
 def recover_running_tasks(session: Session) -> int:
