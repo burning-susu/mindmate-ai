@@ -25,6 +25,52 @@ export class ApiError extends Error {
   }
 }
 
+export class LocalBackendUnavailableError extends Error {
+  constructor(message = '本地服务暂时不可用，请启动本地 API 后重新连接。') {
+    super(message)
+    this.name = 'LocalBackendUnavailableError'
+  }
+}
+
+export function isLocalBackendUnavailable(error: unknown): boolean {
+  return error instanceof LocalBackendUnavailableError
+    || (error instanceof ApiError && ['LOCAL_RUNTIME_UNAVAILABLE', 'LOCAL_SESSION_UNAVAILABLE'].includes(error.problem.code))
+}
+
+async function readProblem(response: Response): Promise<ProblemDetail> {
+  const fallback: ProblemDetail = {
+    type: 'about:blank',
+    title: '请求失败',
+    status: response.status,
+    code: 'REQUEST_FAILED',
+    detail: '请求没有完成，请稍后重试。',
+    instance: '',
+    request_id: '',
+    retryable: response.status >= 500,
+    field_errors: [],
+    actions: [],
+  }
+  try {
+    const payload = await response.json() as Partial<ProblemDetail>
+    if (typeof payload.detail === 'string') {
+      return {
+        ...fallback,
+        ...payload,
+        status: typeof payload.status === 'number' ? payload.status : response.status,
+        code: typeof payload.code === 'string' ? payload.code : fallback.code,
+        detail: payload.detail,
+        title: typeof payload.title === 'string' ? payload.title : fallback.title,
+        retryable: typeof payload.retryable === 'boolean' ? payload.retryable : fallback.retryable,
+        field_errors: Array.isArray(payload.field_errors) ? payload.field_errors : [],
+        actions: Array.isArray(payload.actions) ? payload.actions : [],
+      }
+    }
+  } catch {
+    // Use the fixed fallback below when the local server did not return problem+json.
+  }
+  return fallback
+}
+
 let sessionPromise: Promise<void> | null = null
 
 export function clearLocalSessionCache(): void {
@@ -39,11 +85,16 @@ export async function ensureLocalSession(): Promise<void> {
       headers: { 'X-Request-ID': uuidv7() },
     }).then(async (response) => {
       if (!response.ok) {
-        throw new Error('无法建立本地会话')
+        const problem = await readProblem(response)
+        if (response.status >= 500 || problem.code.startsWith('LOCAL_')) {
+          throw new ApiError(response.status, problem)
+        }
+        throw new LocalBackendUnavailableError('无法建立本地会话，请重新连接。')
       }
     }).catch((error: unknown) => {
       sessionPromise = null
-      throw error
+      if (error instanceof ApiError || error instanceof LocalBackendUnavailableError) throw error
+      throw new LocalBackendUnavailableError()
     })
   }
   return sessionPromise
@@ -59,15 +110,19 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
   if (init.method && !['GET', 'HEAD', 'OPTIONS'].includes(init.method.toUpperCase()) && !headers.has('Idempotency-Key')) {
     headers.set('Idempotency-Key', uuidv7())
   }
-  const response = await fetch(path, {
-    ...init,
-    headers,
-    credentials: 'same-origin',
-    cache: 'no-store',
-  })
+  let response: Response
+  try {
+    response = await fetch(path, {
+      ...init,
+      headers,
+      credentials: 'same-origin',
+      cache: 'no-store',
+    })
+  } catch {
+    throw new LocalBackendUnavailableError()
+  }
   if (!response.ok) {
-    const problem = (await response.json()) as ProblemDetail
-    throw new ApiError(response.status, problem)
+    throw new ApiError(response.status, await readProblem(response))
   }
   return (await response.json()) as T
 }
@@ -83,19 +138,23 @@ export async function apiUpload<T>(
   Object.entries(fields).forEach(([key, value]) => {
     if (value !== undefined) body.append(key, value)
   })
-  const response = await fetch(path, {
-    method: 'POST',
-    body,
-    credentials: 'same-origin',
-    cache: 'no-store',
-    headers: {
-      'X-Request-ID': uuidv7(),
-      'Idempotency-Key': uuidv7(),
-    },
-  })
+  let response: Response
+  try {
+    response = await fetch(path, {
+      method: 'POST',
+      body,
+      credentials: 'same-origin',
+      cache: 'no-store',
+      headers: {
+        'X-Request-ID': uuidv7(),
+        'Idempotency-Key': uuidv7(),
+      },
+    })
+  } catch {
+    throw new LocalBackendUnavailableError()
+  }
   if (!response.ok) {
-    const problem = (await response.json()) as ProblemDetail
-    throw new ApiError(response.status, problem)
+    throw new ApiError(response.status, await readProblem(response))
   }
   return (await response.json()) as T
 }

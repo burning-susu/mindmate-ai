@@ -33,4 +33,13 @@ describe('stage 4 API client headers', () => {
     expect(headers.has('Content-Type')).toBe(false)
     expect(calls[1][1]?.body).toBeInstanceOf(FormData)
   })
+
+  it('classifies a loopback network failure without exposing the browser exception', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      throw new TypeError('Failed to fetch')
+    }))
+    const { apiRequest, LocalBackendUnavailableError } = await import('../api/client')
+
+    await expect(apiRequest('/api/v1/files')).rejects.toBeInstanceOf(LocalBackendUnavailableError)
+  })
 })

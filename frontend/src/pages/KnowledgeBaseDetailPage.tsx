@@ -3,7 +3,7 @@ import { ArrowLeft, BookOpen, FilePlus2, GraduationCap, MessageSquare, RefreshCw
 import { type FormEvent, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
-import { apiRequest } from '../api/client'
+import { ApiError, apiRequest } from '../api/client'
 import { isVersionConflict, type FileListResponse } from '../api/files'
 import KnowledgeBaseIndexPanel from '../components/KnowledgeBaseIndexPanel'
 import KnowledgeBaseRetrievalPanel from '../components/KnowledgeBaseRetrievalPanel'
@@ -145,6 +145,9 @@ export default function KnowledgeBaseDetailPage() {
   const { knowledgeBaseId = '' } = useParams()
   const query = useQuery({ queryKey: ['knowledge-base', knowledgeBaseId], queryFn: () => apiRequest<KnowledgeBaseItem>(`/api/v1/knowledge-bases/${knowledgeBaseId}`), enabled: Boolean(knowledgeBaseId) })
   if (query.isLoading) return <section className="detail-page"><h1>正在加载知识库…</h1></section>
-  if (query.isError || !query.data) return <section className="detail-page"><Link className="back-link" to="/knowledge-bases"><ArrowLeft size={16} aria-hidden="true" />返回知识库</Link><h1>知识库加载失败</h1><p>{query.error instanceof Error ? query.error.message : '知识库不存在。'}</p><button className="quiet-button" type="button" onClick={() => void query.refetch()}>重试</button></section>
+  if (query.isError || !query.data) {
+    const notFound = query.error instanceof ApiError && query.error.status === 404
+    return <section className="detail-page"><Link className="back-link" to="/knowledge-bases"><ArrowLeft size={16} aria-hidden="true" />返回知识库</Link><h1>{notFound ? '知识库不存在' : '知识库加载失败'}</h1><p>{notFound ? '这个知识库已被删除或当前本地数据中不存在，未执行任何写入。' : query.error instanceof Error ? query.error.message : '当前无法读取知识库。'}</p>{notFound ? null : <button className="quiet-button" type="button" onClick={() => void query.refetch()}>重试</button>}</section>
+  }
   return <section className="detail-page"><Link className="back-link" to="/knowledge-bases"><ArrowLeft size={16} aria-hidden="true" />返回知识库</Link><DetailForm key={query.data.row_version} item={query.data} /></section>
 }

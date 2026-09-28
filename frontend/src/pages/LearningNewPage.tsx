@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, WifiOff } from 'lucide-react'
 import { type FormEvent, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { v7 as uuidv7 } from 'uuid'
@@ -7,6 +7,7 @@ import { v7 as uuidv7 } from 'uuid'
 import { ApiError, apiRequest } from '../api/client'
 import { createLearningSession, getLearningProviderPlan } from '../api/learning'
 import { listKnowledgeBaseMembers, type KnowledgeBaseItem, type KnowledgeBaseListResponse } from '../api/knowledgeBases'
+import { useNetworkStatus } from '../useNetworkStatus'
 
 const MOCK_BANNER = '新建学习会话使用当前选择。Mock 仍按本地规则出题和评分，不会外发。在线模式每道题和每次点评前都会单独确认费用。已经创建的会话保持创建时的服务。这仍不是完整学习计划或复习。'
 
@@ -47,6 +48,8 @@ export default function LearningNewPage() {
     retry: false,
   })
   const online = planQuery.data?.requires_charge_confirmation === true
+  const networkOnline = useNetworkStatus()
+  const offlineProviderBlocked = online && !networkOnline
   const topicError = topic.trim().length === 0
     ? '请输入学习主题。'
     : topic.trim().length > 80
@@ -67,6 +70,7 @@ export default function LearningNewPage() {
     && !membersQuery.isLoading
     && !planQuery.isLoading
     && !submitting
+    && !offlineProviderBlocked
     && (!online || (chargeConfirmed && !planQuery.data?.budget_blocks))
 
   const submit = async (event: FormEvent) => {
@@ -210,6 +214,7 @@ export default function LearningNewPage() {
           {planQuery.data ? <p role="status">{planQuery.data.outbound_summary}</p> : null}
           {online && planQuery.data ? (
             <div className="settings-privacy-copy">
+              {offlineProviderBlocked ? <p className="chat-alert chat-alert--warning" role="alert"><WifiOff size={15} aria-hidden="true" /> 当前设备处于离线状态，不会创建在线学习请求。恢复网络后请显式重试。</p> : null}
               {planQuery.data.budget_notice ? <p role="alert">{planQuery.data.budget_notice}</p> : null}
               <p>
                 将向 {planQuery.data.provider} 发送学习主题、学习目标和至多 2 段服务端批准的资料摘录。

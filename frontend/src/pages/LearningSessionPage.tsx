@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, WifiOff } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { v7 as uuidv7 } from 'uuid'
@@ -18,6 +18,7 @@ import {
 } from '../api/learning'
 import { type KnowledgeBaseItem } from '../api/knowledgeBases'
 import { CitedText, SourceCitationPanel } from '../components/SourceCitationPanel'
+import { useNetworkStatus } from '../useNetworkStatus'
 
 const MOCK_BANNER = '新建学习会话使用当前选择。Mock 仍按本地规则出题和评分，不会外发。在线模式每道题和每次点评前都会单独确认费用。已经创建的会话保持创建时的服务。这仍不是完整学习计划或复习。'
 
@@ -164,6 +165,8 @@ export default function LearningSessionPage() {
       || (blocksAnswer(session) && !answered)
     : false
   const onlineSession = Boolean(session && session.provider !== 'mock')
+  const networkOnline = useNetworkStatus()
+  const offlineProviderBlocked = onlineSession && !networkOnline
   const canContinue = Boolean(
     session
     && answered
@@ -185,11 +188,11 @@ export default function LearningSessionPage() {
 
   const createNext = async () => {
     if (!session || !canContinue || nextLock.current) return
-    if (onlineSession && (
+    if (offlineProviderBlocked || (onlineSession && (
       !nextChargeConfirmed
       || !providerPlanQuery.data
       || providerPlanQuery.data.budget_blocks
-    )) return
+    ))) return
     nextLock.current = true
     setGeneratingNext(true)
     setNextError('')
@@ -261,7 +264,7 @@ export default function LearningSessionPage() {
 
   const submit = async () => {
     if (!question || !selectedOption || answered || blocked || submitLock.current) return
-    if (onlineSession && !chargeConfirmed) return
+    if (offlineProviderBlocked || (onlineSession && !chargeConfirmed)) return
     submitLock.current = true
     setSubmitting(true)
     setSubmitError('')
@@ -314,12 +317,13 @@ export default function LearningSessionPage() {
     return <section className="detail-page learning-page"><p role="status">正在读取学习会话…</p></section>
   }
   if (sessionQuery.isError || !session) {
+    const notFound = sessionQuery.error instanceof ApiError && sessionQuery.error.status === 404
     return (
       <section className="detail-page learning-page">
         <p className="learning-mock-banner" role="status">{MOCK_BANNER}</p>
         <div className="inline-error" role="alert">
-          <span>{readFailureMessage(sessionQuery.error)}</span>
-          <button className="quiet-button" type="button" onClick={() => void sessionQuery.refetch()}>重新读取</button>
+          <span>{notFound ? '这个学习会话不存在或已进入回收站，未提交新的答案。' : readFailureMessage(sessionQuery.error)}</span>
+          {notFound ? null : <button className="quiet-button" type="button" onClick={() => void sessionQuery.refetch()}>重新读取</button>}
           <Link className="quiet-button" to="/knowledge-bases">返回知识库</Link>
         </div>
       </section>
@@ -400,6 +404,7 @@ export default function LearningSessionPage() {
               </label>
             ))}
           </fieldset>
+          {offlineProviderBlocked ? <p className="chat-alert chat-alert--warning" role="alert"><WifiOff size={15} aria-hidden="true" /> 当前设备处于离线状态，不会向在线 Provider 发送点评请求。恢复网络后请显式重试。</p> : null}
           {!answered && onlineSession && (
             <label>
               <input
@@ -411,7 +416,7 @@ export default function LearningSessionPage() {
             </label>
           )}
           {!answered && (
-            <button className="primary-button" type="button" disabled={!selectedOption || submitting || (onlineSession && !chargeConfirmed)} aria-busy={submitting} onClick={() => void submit()}>
+            <button className="primary-button" type="button" disabled={!selectedOption || submitting || offlineProviderBlocked || (onlineSession && !chargeConfirmed)} aria-busy={submitting} onClick={() => void submit()}>
               {submitting ? '正在提交' : '提交答案'}
             </button>
           )}
@@ -473,6 +478,7 @@ export default function LearningSessionPage() {
           {onlineSession && providerPlanQuery.isError && (
             <div className="inline-error" role="alert">费用估算暂时不可用，不能外发下一题。</div>
           )}
+          {offlineProviderBlocked ? <p className="chat-alert chat-alert--warning" role="alert"><WifiOff size={15} aria-hidden="true" /> 当前设备处于离线状态，不会生成下一题。恢复网络后请显式重试。</p> : null}
           {nextError && (
             <div className="inline-error" role="alert">
               <span>{nextError}</span>
@@ -482,7 +488,7 @@ export default function LearningSessionPage() {
           <button
             className="primary-button"
             type="button"
-            disabled={generatingNext || (onlineSession && (
+            disabled={generatingNext || offlineProviderBlocked || (onlineSession && (
               !nextChargeConfirmed
               || !providerPlanQuery.data
               || providerPlanQuery.data.budget_blocks

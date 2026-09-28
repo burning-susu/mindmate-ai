@@ -625,3 +625,13 @@
 - 浏览器：隔离 test-only server 的健康检查为 200，fixture calls 初始与结束均为 0；Playwright Chromium 启动报 `spawn EPERM`。普通 Chrome profile 创建被审批层 `404` 拒绝，提示当前模型账户不支持 `gpt-5.6-luna`；没有重试或绕过，没有页面会话、截图或人工调用计数。普通 Chrome/Edge 双 Provider 页面走查仍待补。
 - 对账：费用由 DeepSeek/OpenAI 各自账户结算。界面按 Provider 返回 usage 和请求时价格快照做本地估算，未获取官方账单，不显示官方已对账或费用绝对上限。`PROVIDER_BILLING_RECONCILIATION` 与真实 Provider smoke 继续 `PENDING`。
 - 交接：报告见 `docs/test-reports/stage-68-budget-online-browser.md`。下一批先补普通 Chrome/Edge Guest profile 的真实页面证据，再处理全局错误、离线体验和阶段 8 最终追踪矩阵；第六十七批日志、诊断下载、历史永久删除和多题定位页面缺口继续 `PARTIAL`。
+
+### 第六十九批：阶段 8 全局任务与离线容错收口
+
+- 状态：`GLOBAL_TASK_DRAWER_CODE`、`LOCAL_BACKEND_UNAVAILABLE_CODE`、`PARTIAL_FAILURE_CODE`、`OFFLINE_LOCAL_CODE`、`ONLINE_PROVIDER_DISABLED_WHEN_OFFLINE` 代码/自动化门禁 `PASS`；`GLOBAL_TASK_DRAWER_BROWSER` `BROWSER_PARTIAL`；`STAGE8_FULL_V1` 继续 `PARTIAL`。阶段 5–7 完整 V1、真实 Provider smoke、官方账单对账保持原状态。
+- 全局任务：新增跨路由顶栏任务抽屉，读取持久 `/api/v1/home/overview?task_limit=30`，展示真实类型、状态、阶段、进度、更新时间、脱敏失败码/摘要和任务编号。关闭/Escape 不取消任务；仅文件导入、索引、知识库成员、本地模型安装显示已有取消 API，成功后刷新全局/首页摘要并阻止重复取消。跨页/取消一次回归已覆盖。
+- 全局错误与离线：`AppShell` 改为只读 `/api/v1/health` 探测，服务不可用时全页阻断并提供重连与回环启动说明；`api/client.ts` 对网络失败和不完整 ProblemDetail 使用安全固定提示。Chat、学习新建和学习会话在浏览器明确离线时阻断 DeepSeek/OpenAI 外发并保留 Mock/本地能力；不以在线状态推断 Provider 一定可用。
+- 路由恢复：知识库和学习会话详情对 404 输出专用不存在/已回收状态与返回入口，文件详情既有专用状态保留；不自动重试、覆盖或清空未提交内容。
+- 自动化：前端全量 `16 files / 76 tests passed`，新增全局恢复/客户端组合 `6 passed`；typecheck、lint、build 和 `git diff --check` 通过。后端任务保留、预算、备份组合在仓库隔离 basetemp `16 passed`。默认 `%TEMP%` pytest 根目录权限问题已记录，未影响隔离重跑。
+- 浏览器：本批 `cua.getState()` 仅返回无标签页的 Codex In-app Browser，没有普通 Chrome/Edge 可绑定窗口；未重复审批失败或 Playwright `spawn EPERM`。没有截图、URL、profile、页面会话或 Network 计数，因此全局任务抽屉、离线断网和第 67/68 批页面验收不得写成普通浏览器 `PASS`。
+- 报告：`docs/test-reports/stage-69-global-recovery.md`，含阶段 8 AC 追踪矩阵、自动化证据、浏览器边界与最短人工补验步骤。下一批先补普通浏览器页面证据，再决定阶段 8 是否可收口；不以矩阵文档替代功能或验收。

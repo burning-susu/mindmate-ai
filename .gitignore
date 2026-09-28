@@ -25,6 +25,7 @@ frontend/coverage/
 backend/.venv/
 backend/.uv-python/
 backend/.pytest_cache/
+backend/.pytest-stage69/
 backend/.mypy_cache/
 backend/.ruff_cache/
 backend/.pyright/

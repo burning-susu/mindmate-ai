@@ -25,6 +25,7 @@ import { ApiError, apiRequest } from '../api/client'
 import type { KnowledgeBaseListResponse } from '../api/knowledgeBases'
 import { SourceCitationPanel } from '../components/SourceCitationPanel'
 import { sourceStatusLabel } from '../components/sourceStatus'
+import { useNetworkStatus } from '../useNetworkStatus'
 
 const ACTIVE_STATES = new Set(['QUEUED', 'RUNNING', 'STOPPING'])
 const TERMINAL_STATES = new Set(['COMPLETED', 'FAILED', 'STOPPED', 'INTERRUPTED'])
@@ -99,6 +100,8 @@ export default function ChatPage() {
   })
   const generationMode = providerQuery.data?.generation_mode ?? 'mock'
   const onlineGeneration = generationMode === 'deepseek' || generationMode === 'openai_gpt6_sol'
+  const networkOnline = useNetworkStatus()
+  const offlineProviderBlocked = onlineGeneration && !networkOnline
   const budgetQuery = useQuery({
     queryKey: ['ai-budget'],
     queryFn: ({ signal }) => getAiBudgetStatus(signal),
@@ -116,7 +119,8 @@ export default function ChatPage() {
     )
   const budgetLoading = onlineGeneration && (budgetQuery.isLoading || budgetQuery.isError)
   const onlineBlocked = onlineGeneration && (
-    !onlineReady
+    offlineProviderBlocked
+    || !onlineReady
     || !confirmOnlineSend
     || budgetLoading
     || Boolean(budgetQuery.data?.hard_stop_would_block)
@@ -429,6 +433,7 @@ export default function ChatPage() {
               {onlineGeneration ? (
                 <div className="chat-online-gate">
                   <p>{(selectedOnline?.cost_estimate ?? providerQuery.data?.cost_estimate)?.disclaimer ?? '费用估算不是严格美元限额。'} 知识库问题用满本地上限时粗估不超过 {(selectedOnline?.cost_estimate ?? providerQuery.data?.cost_estimate)?.knowledge_question_estimated_usd_ceiling ?? '0.001'} 美元。</p>
+                  {offlineProviderBlocked ? <p className="chat-alert chat-alert--warning" role="alert"><WifiOff size={15} aria-hidden="true" /> 当前设备处于离线状态，不会向在线 Provider 发送请求。恢复网络后请显式重试。</p> : null}
                   {budgetQuery.isError ? <p role="alert">本地预算状态读取失败，暂不能确认是否允许外发。</p> : null}
                   {budgetQuery.data?.hard_stop_block_reason ? <p role="alert">{budgetQuery.data.hard_stop_block_reason}</p> : null}
                   {needsUnknownBudgetConfirmation ? (

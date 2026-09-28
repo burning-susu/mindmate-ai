@@ -3,11 +3,11 @@
 ## 基本信息
 
 - 当前开发分支：`feat/v1-bootstrap`
-- 第六十八批进场：分支 `feat/v1-bootstrap`；LOCAL `b67c6ab20827ef9ce26393cefba02229e9a151e0`，REMOTE `49a3139ff591ee81f54121eb31e4a96eb27f5834`。第六十七批提交在进场时仍未推送；核验日期 `2026-09-28`。
+- 第六十九批进场：分支 `feat/v1-bootstrap`；LOCAL `c0875126e34b9445db025124f862d158358c41ab`，REMOTE `c0875126e34b9445db025124f862d158358c41ab`。第六十七、六十八批已在远端；核验日期 `2026-09-28`。
 - 最后更新时间：`2026-09-28`
 - 当前开发阶段：阶段 8 开发中，状态 `PARTIAL`；阶段 5、阶段 6、阶段 7 继续 `PARTIAL`
 - 交付顺序：Demo 首先完成，完整 V1 以后精进。求职 Demo 优先文件整理/导入、建库、带来源问答、最小学习陪练和重启恢复。Demo 可用性与完整 V1 阶段状态分开报告。
-- 当前批次状态：`LOCAL_BUDGET_RECONCILIATION` `PASS`；`PROVIDER_BILLING_RECONCILIATION` `PENDING`；`LEARNING_ONLINE_CODE` `PASS`；`LEARNING_ONLINE_BROWSER` `PARTIAL`（Chrome 审批服务返回 404，Playwright Chromium 启动返回 `spawn EPERM`）；`REAL_PROVIDER_SMOKE` `PENDING`；`STAGE8_FULL_V1` 仍 `PARTIAL`。第六十七批页面验收继续 `PARTIAL`，第六十六批备份相关 `PASS` 保持有效。求职 Demo 沿用第四十二/六十四批 `PASS`，本批未重跑；阶段 5–7 完整 V1 仍 `PARTIAL`。详见 `docs/test-reports/stage-68-budget-online-browser.md`。
+- 当前批次状态：`GLOBAL_TASK_DRAWER_CODE` `PASS`；`LOCAL_BACKEND_UNAVAILABLE_CODE` `PASS`；`PARTIAL_FAILURE_CODE` `PASS`（既有局部错误能力复用）；`OFFLINE_LOCAL_CODE` `PASS`；`ONLINE_PROVIDER_DISABLED_WHEN_OFFLINE` `PASS`（代码门禁）；`GLOBAL_TASK_DRAWER_BROWSER` `BROWSER_PARTIAL`；`LOCAL_BUDGET_RECONCILIATION` `PASS`；`PROVIDER_BILLING_RECONCILIATION` `PENDING`；`LEARNING_ONLINE_CODE` `PASS`；`LEARNING_ONLINE_BROWSER` `PARTIAL`；`REAL_PROVIDER_SMOKE` `PENDING`；`STAGE8_FULL_V1` 仍 `PARTIAL`。第六十七批日志/诊断/历史页面验收继续 `PARTIAL`，第六十六批备份相关 `PASS` 保持有效。求职 Demo 沿用第四十二/六十四批 `PASS`，本批未重跑；阶段 5–7 完整 V1 仍 `PARTIAL`。详见 `docs/test-reports/stage-69-global-recovery.md`。
 
 ## 已完成阶段
 
@@ -23,6 +23,7 @@
 - 后端：5 类文件导入、托管复制、哈希去重、持久解析 Worker、隔离解析、搜索筛选、文件/文件夹/标签、批量操作、受控内容读取、回收站和永久删除；Folder/Tag 修改、删除与恢复使用数据库原子 `row_version` 乐观锁。
 - 任务与资源安全：复用 `BackgroundTask` 实现文件导入/重新处理及知识库成员准入；解析 Worker 与成员 Worker 按任务类型隔离领取，均使用原子领取、租约、过期恢复、关闭中断与取消状态；Windows 解析子进程使用 Job Object 的 `KILL_ON_JOB_CLOSE` 与进程内存上限，默认 `512 MiB`。
 - 前端：真实 API 文件工作台、嵌套目录、筛选排序、导入与重复决策、详情编辑/预览、文件和文件夹回收站操作；列表查询参数、详情返回后的筛选/排序/滚动恢复；返回前刷新列表避免旧 `row_version` 竞态；版本冲突提示并引导重新加载，不自动覆盖；第二十四批在知识库详情页增加高级“测试检索”区域，调用现有只读 API，展示三种判定、候选定位与排序信号。
+- 第六十九批全局恢复：`AppShell` 顶栏新增跨路由持久任务抽屉，读取真实任务类型/阶段/进度/终态和脱敏失败摘要；只对后端支持的文件导入、索引、知识库成员和模型安装任务显示取消。新增本地 health 直读阻断页、回环网络异常分类、Chat/学习在线模式离线前置守卫，以及知识库/学习会话 404 专用返回状态。自动化回归覆盖任务取消一次、服务断开和错误提示安全边界；普通 Chrome/Edge 页面证据仍 `BROWSER_PARTIAL`。
 - 模型安装：第三十批在知识库详情页增加固定 ONNX 安装入口，显示来源/许可依据/大小/revision/指纹、本机下载、持久真实进度、取消和重试；仅用户主动点击下载，刷新或应用重启后从持久任务恢复。
 - AI 服务凭据：第三十一批增加 `CredentialStorePort`、Windows Credential Manager 实现和隔离假存储；SQLite 只保留非秘密 Provider profile/同意/探测状态；固定 DeepSeek Chat Completions 探测只在用户显式确认后发送短文本，失败不删除 Key，不暴露原始响应。
 - AI 服务设置：第三十一批接入 `/settings`，分开展示 Key 配置、外发同意和连接探测；保存后清空明文输入，不写入 LocalStorage 或前端全局状态；官方 Key/价格入口使用当前复核链接。
@@ -368,3 +369,13 @@
 - 浏览器：test-only 服务使用隔离数据根，Health 200、Provider fixture calls `0`；验证后本批 API/Web 端口已关闭。普通 Chrome tab 创建被自动审批层 `404` 拒绝，Playwright Chromium 在页面打开前 `spawn EPERM`。本批没有页面点击、截图或在线会话，未将 API/pytest 记作浏览器通过；第六十七批页面遗留继续 `PARTIAL`。
 - Git：进场 LOCAL 为 `b67c6ab20827ef9ce26393cefba02229e9a151e0`，进场 REMOTE 为 `49a3139ff591ee81f54121eb31e4a96eb27f5834`；第六十七批提交的进场推送尝试退出码 1 且无诊断，复核远端未变。最终本地/远端 SHA 见本批交付说明。
 - 下一批：先补普通 Chrome/Edge Guest profile 中的双 Provider 在线学习页面走查，再处理全局错误、离线体验和阶段 8 完整 V1 追踪矩阵。不得写成官方账单对账、真实 Provider smoke 或阶段 8 完整验收通过。
+
+## 第六十九批交接
+
+- 状态：`GLOBAL_TASK_DRAWER_CODE`、`LOCAL_BACKEND_UNAVAILABLE_CODE`、`PARTIAL_FAILURE_CODE`、`OFFLINE_LOCAL_CODE`、`ONLINE_PROVIDER_DISABLED_WHEN_OFFLINE` 代码/自动化门禁通过；`GLOBAL_TASK_DRAWER_BROWSER` 为 `BROWSER_PARTIAL`；`STAGE8_FULL_V1` 继续 `PARTIAL`。
+- 实现：新增 `frontend/src/components/GlobalTaskDrawer.tsx` 和 `frontend/src/useNetworkStatus.ts`；`AppShell` 顶栏全局任务按钮读取持久 `/home/overview`，跨路由/刷新保留，关闭不取消；只对后端明确支持的任务显示取消。健康探测改为只读 `/api/v1/health`，断开时显示全页阻断、重连和启动说明。API 客户端新增本地服务异常分类及安全 ProblemDetail 兜底；Chat、学习新建、学习会话在浏览器明确离线时阻断在线 Provider 外发；知识库/学习会话 404 有专用返回状态。
+- 自动化：前端 `16 files / 76 tests passed`；新增全局恢复/客户端组合 `6 passed`；typecheck、lint、build、`git diff --check` 通过。后端 `tests/test_stage8_task_retention.py`、`tests/test_stage8_settings_usage_budget.py`、`tests/test_tasks_backups.py` 使用 `backend/.pytest-stage69` 隔离 basetemp，`16 passed`。默认 `%TEMP%` 枚举权限警告、Starlette/httpx/Alembic 弃用警告未影响结果。
+- 浏览器：本批 `cua.getState()` 仅返回无标签页的 Codex In-app Browser，没有普通 Chrome/Edge 可绑定窗口；未重复此前被审批层拒绝的 Chrome 创建，也未启动 Playwright。没有普通浏览器 URL、profile、截图、页面会话或 Network 计数；不把 API/pytest 作为页面证据。`GLOBAL_TASK_DRAWER_BROWSER`、`OFFLINE_LOCAL_BROWSER` 以及第 67/68 批页面遗留继续 `PARTIAL`。
+- 报告：`docs/test-reports/stage-69-global-recovery.md`，包含阶段 8 逐项追踪矩阵和一页最短人工补验步骤。截图、诊断 JSON、备份和隔离数据根必须留在忽略目录。
+- Git：本批已在本地完成中文提交；推送命令退出码 `128` 且无诊断文本，`origin/feat/v1-bootstrap` 仍为进场 SHA `c0875126e34b9445db025124f862d158358c41ab`。不强推、不修改 `main`；下一次普通 Windows VS Code 终端需重试并核对完整 SHA。
+- 下一批：先在普通 Chrome/Edge Guest profile 按报告步骤核对任务抽屉跨页/刷新、取消一次、本地 API 停止/恢复、外网断开但回环可用、404 详情恢复和第 67/68 批历史页面；再决定阶段 8 是否可标 `PASS`。真实 Provider smoke、官方账单和完整 V1 不属于本批通过范围。
