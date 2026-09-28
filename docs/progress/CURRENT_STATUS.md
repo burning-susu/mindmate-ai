@@ -7,7 +7,7 @@
 - 最后更新时间：`2026-09-28`
 - 当前开发阶段：阶段 8 开发中，状态 `PARTIAL`；阶段 5、阶段 6、阶段 7 继续 `PARTIAL`
 - 交付顺序：Demo 首先完成，完整 V1 以后精进。求职 Demo 优先文件整理/导入、建库、带来源问答、最小学习陪练和重启恢复。Demo 可用性与完整 V1 阶段状态分开报告。
-- 当前批次状态：第六十四批已收到普通浏览器截图；问答正例与资料不足拒答 `PASS`，学习入口字段提示已修复，使用“回收站”主题的学习会话按证据门禁拒答并完成 `0/1`，修复后的学习正例尚未重新点击取证，故 `DEMO_BROWSER=PARTIAL`。`HISTORY_PURGE_BROWSER`、`LEARNING_ONLINE_BROWSER` 继续 `PARTIAL`，`REAL_PROVIDER_SMOKE` 继续 `PENDING`。本批后端定向 pytest `22 passed`、前端 Vitest `67 passed`、typecheck、lint、build 与 Ruff 通过。详见 `docs/test-reports/stage-64-demo-browser-acceptance.md`。
+- 当前批次状态：第六十四批问答正例与资料不足拒答有普通浏览器截图 `PASS`；学习入口字段提示及资料不足反馈已修复。用户对修复后的指定一题 Mock、字段提示、提交反馈、来源、刷新恢复回复“已测试，没问题”，故 `DEMO_BROWSER=PASS（用户报告的人工复测，学习步骤未附新截图）`，求职三分钟 Mock Demo 可按此范围演示。`HISTORY_PURGE_BROWSER`、`LEARNING_ONLINE_BROWSER` 仍 `PARTIAL`，`REAL_PROVIDER_SMOKE` 仍 `PENDING`，完整阶段 7/8 仍 `PARTIAL`。本批已有后端定向 pytest `22 passed`、前端 Vitest `67 passed`、typecheck、lint、build 与 Ruff 通过；用户补录后没有重新执行自动化测试。远端 `feat/v1-bootstrap` 已核实为第六十四批提交 `7b24439d8fc6aa0c2ddb421051b478b4a1a3e056`。详见 `docs/test-reports/stage-64-demo-browser-acceptance.md`。
 
 ## 已完成阶段
 

@@ -5,8 +5,9 @@
 - 浏览器截图证据：知识库问答正例可打开 `服务超时策略.txt` 来源；“磁盘配额”资料外问题严格提示资料不足且无来源按钮，均为 `PASS`。学习入口空白主题/目标时按钮禁用但没有字段错误；填入“回收站 / 回收站学习”后会话 `01a0e5e2-7828-796c-8c8f-24e0f459f550` 因 `VECTOR_SIMILARITY_BELOW_THRESHOLD` 以 `EVIDENCE_INSUFFICIENT` 结束，完成 `0/1`，这是证据门禁拒答而非题目渲染缺陷。
 - 收口：可用文件计数排除回收站/未解析文件；学习范围标出不可用成员；空白主题和目标显示红色字段提示；资料不足失败记录 `EVIDENCE_EXHAUSTED`，结果页显示资料不足提前结束。没有放宽证据门禁，没有真实 Provider 外发。
 - 验证：后端定向 `22 passed`；前端全量 `15 files / 67 tests passed`；typecheck、lint、build、Ruff、`git diff --check` 通过。报告见 `docs/test-reports/stage-64-demo-browser-acceptance.md`。
-- 当前状态：修复后的浏览器正例尚未重启服务并重新点击，`DEMO_BROWSER=PARTIAL`；历史永久删除与在线 test-only Provider 仍 `PARTIAL`，真实 Provider 仍 `PENDING`，阶段 7/8 完整 V1 仍 `PARTIAL`。修复后应使用同一隔离根，以“API 单次请求超时时间 / 记住资料中的请求超时值”完成一题 Mock 学习并记录刷新/重启恢复。
+- 当前状态（补录）：用户对同一隔离根下指定的一题 Mock、字段错误提示、题目、反馈、来源和刷新恢复的回测回复“已测试，没问题”。`DEMO_BROWSER=PASS（用户报告的人工复测；最后一步无新截图）`，求职三分钟 Mock Demo 在该口径下可用；先前两个问答步骤有截图。历史永久删除与在线 test-only Provider 仍 `PARTIAL`，真实 Provider 仍 `PENDING`，阶段 7/8 完整 V1 仍 `PARTIAL`。见第六十四批报告的“用户回测补录”；本补录未新增自动化测试。
 - Git 交付：本批代码与报告初始提交 `6fafe6e0b9b0995e6276b1909867846a3b13d60c`；`git push origin feat/v1-bootstrap` 无输出并以退出码 `1` 失败，远端仍为 `ced681a11f85878d9f924abeb213d2fbee4435b0`，未宣称已推送。之后的本地文档记录提交只补充该阻断信息。
+- Git 状态补录：上述推送失败是当时记录；用户随后推送成功，本次只读核实远端 SHA `7b24439d8fc6aa0c2ddb421051b478b4a1a3e056`，不重复推送旧提交。
 
 ## 当前校准（2026-09-28，阶段 8 宿主走查前）
 
