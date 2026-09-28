@@ -43,6 +43,11 @@ from mindmate.api.system_settings import router as system_settings_router
 from mindmate.api.testing import router as testing_router
 from mindmate.application.backup_worker import BackupCreationWorker
 from mindmate.application.chat_generation import ChatGenerationWorker
+from mindmate.application.diagnostic_log_retention import (
+    DiagnosticLogRetentionWorker,
+    inspect_log_retention,
+    record_diagnostic_event,
+)
 from mindmate.application.embedding_model_install import EmbeddingModelInstallWorker
 from mindmate.application.history_purge_worker import HistoryTrashPurgeWorker
 from mindmate.application.history_search_index import (
@@ -111,6 +116,14 @@ async def lifespan(app: FastAPI):
 
         apply_pending_restore(settings)
         settings.ensure_data_dirs()
+        log_status = inspect_log_retention(settings)
+        if not log_status.available or not log_status.cleanup_complete:
+            record_diagnostic_event(settings, "LOG_RETENTION_FAILED")
+        else:
+            record_diagnostic_event(settings, "APPLICATION_STARTED")
+        app.state.diagnostic_log_retention_worker = DiagnosticLogRetentionWorker(settings)
+        if settings.env != "test":
+            app.state.diagnostic_log_retention_worker.start()
         alembic_config = Config(str(settings.alembic_ini))
         alembic_config.attributes["settings"] = settings
         command.upgrade(alembic_config, "head")
@@ -190,7 +203,14 @@ async def lifespan(app: FastAPI):
         if settings.env != "test":
             app.state.task_retention_worker.start()
         yield
+    except Exception:
+        record_diagnostic_event(settings, "APPLICATION_LIFESPAN_FAILED")
+        raise
     finally:
+        diagnostic_log_worker = getattr(app.state, "diagnostic_log_retention_worker", None)
+        if diagnostic_log_worker is not None:
+            diagnostic_log_worker.stop()
+        record_diagnostic_event(settings, "APPLICATION_STOPPED")
         backup_worker = getattr(app.state, "backup_worker", None)
         if backup_worker is not None:
             backup_worker.stop()

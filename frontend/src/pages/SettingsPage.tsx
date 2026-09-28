@@ -45,6 +45,7 @@ import {
 } from '../api/aiProvider'
 import { getEmbeddingModelStatus } from '../api/knowledgeBases'
 import {
+  clearDiagnosticLogs,
   downloadDiagnostics,
   formatBytes,
   getAiBudgetStatus,
@@ -107,6 +108,8 @@ export default function SettingsPage() {
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false)
   const [diagnosticsMessage, setDiagnosticsMessage] = useState<string | null>(null)
   const [diagnosticsError, setDiagnosticsError] = useState<string | null>(null)
+  const [logCleanupMessage, setLogCleanupMessage] = useState<string | null>(null)
+  const [logCleanupError, setLogCleanupError] = useState<string | null>(null)
 
   const query = useQuery({ queryKey: ['ai-provider'], queryFn: ({ signal }) => getAiProviderStatus(signal) })
   const storageQuery = useQuery({ queryKey: ['system-storage'], queryFn: ({ signal }) => getStorageOverview(signal) })
@@ -270,6 +273,24 @@ export default function SettingsPage() {
     },
     onSuccess: () => setDiagnosticsMessage('诊断包已开始下载，请保存在本机。'),
     onError: (error) => setDiagnosticsError(errorText(error)),
+  })
+  const logCleanupMutation = useMutation({
+    mutationFn: clearDiagnosticLogs,
+    onMutate: () => {
+      setLogCleanupError(null)
+      setLogCleanupMessage(null)
+    },
+    onSuccess: (result) => {
+      setLogCleanupMessage(
+        result.complete
+          ? result.files_removed > 0
+            ? `已清理 ${result.files_removed} 个诊断日志文件，释放 ${formatBytes(result.bytes_removed)}。`
+            : '没有可清理的诊断日志。'
+          : `已清理 ${result.files_removed} 个文件；${result.remaining_files} 个正在使用的文件暂时保留。`,
+      )
+      void queryClient.invalidateQueries({ queryKey: ['system-privacy'] })
+    },
+    onError: (error) => setLogCleanupError(errorText(error)),
   })
 
   async function handleDownloadBackup(backup: BackupRecord) {
@@ -865,6 +886,42 @@ export default function SettingsPage() {
                 <strong>{privacyQuery.data.secrets_policy.message}</strong>
               </li>
             </ul>
+          ) : null}
+          {privacyQuery.data?.log_retention.available ? (
+            <div className="settings-diagnostics" aria-live="polite">
+              <div className="settings-actions">
+                <button
+                  className="quiet-button"
+                  type="button"
+                  disabled={logCleanupMutation.isPending}
+                  onClick={() => {
+                    const confirmed = window.confirm(
+                      '清理会永久删除应用自己的本地结构化诊断日志。会话、任务、业务数据、备份、模型和索引不会受影响。继续吗？',
+                    )
+                    if (confirmed) logCleanupMutation.mutate()
+                  }}
+                >
+                  <Trash2 size={15} aria-hidden="true" />
+                  {logCleanupMutation.isPending ? '正在清理诊断日志' : '清理可清理的诊断日志'}
+                </button>
+                <span className="settings-hint">
+                  当前 {privacyQuery.data.log_retention.file_count} 个文件 /{' '}
+                  {formatBytes(privacyQuery.data.log_retention.bytes_used)}；上限{' '}
+                  {privacyQuery.data.log_retention.retention_days} 天或{' '}
+                  {formatBytes(privacyQuery.data.log_retention.max_bytes)}
+                </span>
+              </div>
+              {logCleanupMessage ? (
+                <p className="settings-success-text" role="status">
+                  <Check size={14} aria-hidden="true" />{logCleanupMessage}
+                </p>
+              ) : null}
+              {logCleanupError ? (
+                <p className="settings-error-text" role="alert">
+                  <CircleAlert size={14} aria-hidden="true" />{logCleanupError}
+                </p>
+              ) : null}
+            </div>
           ) : null}
           {privacyQuery.data?.diagnostics_export.available ? (
             <div className="settings-diagnostics" aria-live="polite">

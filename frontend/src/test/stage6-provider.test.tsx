@@ -59,7 +59,7 @@ const initialStatus: FixtureStatus = {
   pricing_url: 'https://api-docs.deepseek.com/quick_start/pricing',
 }
 
-function settingsAuxiliaryResponse(url: string) {
+function settingsAuxiliaryResponse(url: string, logFileCount = 1) {
   if (url.endsWith('/api/v1/system/storage')) {
     return response({
       data_dir_configured: true,
@@ -106,7 +106,15 @@ function settingsAuxiliaryResponse(url: string) {
   }
   if (url.endsWith('/api/v1/system/privacy')) {
     return response({
-      log_retention: { available: false, message: '日志清理尚未验收' },
+      log_retention: {
+        available: true,
+        message: '受控结构化应用事件：最多保留 30 天或 100 MB。',
+        retention_days: 30,
+        max_bytes: 100 * 1024 * 1024,
+        file_count: logFileCount,
+        bytes_used: logFileCount * 1024,
+        cleanup_complete: true,
+      },
       diagnostics_export: { available: true, message: '可预览并导出安全状态包；仅保存在本机，不自动上传。' },
       storage_migration: { available: false, message: '存储迁移尚未实现' },
       secrets_policy: { api_key_in_sqlite: false, api_key_in_backup: false, message: 'Key 仅存系统凭据' },
@@ -289,6 +297,70 @@ describe('stage 6 AI provider configuration', () => {
     expect(screen.getByRole('button', { name: '取消预览' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '取消预览' }))
     await waitFor(() => expect(screen.queryByText(/包含：应用版本与平台运行状态/)).not.toBeInTheDocument())
+  })
+
+  it('requires confirmation before clearing local diagnostic logs and refreshes the count', async () => {
+    queryClient.clear()
+    window.history.pushState({}, '', '/settings')
+    let logFileCount = 2
+    const clearCalls: string[] = []
+    vi.stubGlobal('confirm', vi.fn(() => false))
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.includes('/system/session')) return response({ status: 'ready' })
+      if (url.endsWith('/api/v1/system/diagnostics/logs/clear')) {
+        clearCalls.push(String(init?.method))
+        logFileCount = 0
+        return response({
+          files_removed: 2,
+          bytes_removed: 2048,
+          remaining_files: 0,
+          remaining_bytes: 0,
+          complete: true,
+        })
+      }
+      const auxiliary = settingsAuxiliaryResponse(url, logFileCount)
+      if (auxiliary) return auxiliary
+      if (url.endsWith('/api/v1/ai/provider')) return response(initialStatus)
+      return response({ status: 'ok', version: '0.1.0' })
+    }))
+
+    render(<BrowserRouter><App /></BrowserRouter>)
+    const clearButton = await screen.findByRole('button', { name: '清理可清理的诊断日志' })
+    fireEvent.click(clearButton)
+    expect(clearCalls).toEqual([])
+
+    vi.mocked(window.confirm).mockReturnValue(true)
+    fireEvent.click(clearButton)
+    await waitFor(() => expect(clearCalls).toEqual(['POST']))
+    expect(await screen.findByText('已清理 2 个诊断日志文件，释放 2.0 KB。')).toBeInTheDocument()
+    expect(await screen.findByText(/当前 0 个文件 \/ 0 B/)).toBeInTheDocument()
+  })
+
+  it('shows a safe error when diagnostic log cleanup fails', async () => {
+    queryClient.clear()
+    window.history.pushState({}, '', '/settings')
+    vi.stubGlobal('confirm', vi.fn(() => true))
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/system/session')) return response({ status: 'ready' })
+      if (url.endsWith('/api/v1/system/diagnostics/logs/clear')) {
+        return response({
+          type: 'about:blank', title: '系统设置失败', status: 503,
+          code: 'LOG_CLEANUP_FAILED', detail: '诊断日志暂时无法清理，请稍后重试。',
+          instance: url, request_id: 'request-safe-1', retryable: true,
+          field_errors: [], actions: [],
+        }, 503)
+      }
+      const auxiliary = settingsAuxiliaryResponse(url)
+      if (auxiliary) return auxiliary
+      if (url.endsWith('/api/v1/ai/provider')) return response(initialStatus)
+      return response({ status: 'ok', version: '0.1.0' })
+    }))
+
+    render(<BrowserRouter><App /></BrowserRouter>)
+    fireEvent.click(await screen.findByRole('button', { name: '清理可清理的诊断日志' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('诊断日志暂时无法清理，请稍后重试。')
   })
 
   it('labels mock chat and blocks online send until the user confirms the estimate', async () => {

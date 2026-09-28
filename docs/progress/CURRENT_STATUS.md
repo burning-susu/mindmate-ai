@@ -3,11 +3,11 @@
 ## 基本信息
 
 - 当前开发分支：`feat/v1-bootstrap`
-- 第六十六批进场本地与远端提交：`feat/v1-bootstrap` → `a5f0cc7fa358983078cc09d9286f351e8bff9816`（2026-09-28 本批进场时核实）
+- 第六十七批进场本地与远端提交：`feat/v1-bootstrap` → `49a3139ff591ee81f54121eb31e4a96eb27f5834`（2026-09-28 本批进场时核实）
 - 最后更新时间：`2026-09-28`
 - 当前开发阶段：阶段 8 开发中，状态 `PARTIAL`；阶段 5、阶段 6、阶段 7 继续 `PARTIAL`
 - 交付顺序：Demo 首先完成，完整 V1 以后精进。求职 Demo 优先文件整理/导入、建库、带来源问答、最小学习陪练和重启恢复。Demo 可用性与完整 V1 阶段状态分开报告。
-- 当前批次状态：`BACKUP_WORKER_CODE`、`BACKUP_WORKER_BROWSER`、`BACKUP_RESTORE_REGRESSION` 均 `PASS`；`STAGE8_FULL_V1` 继续 `PARTIAL`。求职 Demo 沿用第四十二/六十四批 `PASS` 证据，本批未重跑完整 Demo。`LOG_RETENTION`、`BUDGET_RECONCILIATION`、`DIAGNOSTICS_PREVIEW_EXPORT`、`HISTORY_PURGE_BROWSER`、`HISTORY_MULTISTEP_BROWSER`、`LEARNING_ONLINE_BROWSER` 仍 `PARTIAL`；真实 DeepSeek/OpenAI 冒烟仍 `PENDING`。详见 `docs/test-reports/stage-66-backup-worker.md`。
+- 当前批次状态：`LOG_RETENTION_CODE` `PASS`；普通浏览器 `LOG_RETENTION_BROWSER`、`DIAGNOSTICS_PREVIEW_EXPORT_BROWSER`、`HISTORY_PURGE_BROWSER`、`HISTORY_MULTISTEP_BROWSER` 均 `PARTIAL`，因此整体 `LOG_RETENTION` 与 `DIAGNOSTICS_PREVIEW_EXPORT` 继续 `PARTIAL`，`STAGE8_FULL_V1` 仍 `PARTIAL`。第六十六批 `BACKUP_WORKER_CODE`、`BACKUP_WORKER_BROWSER`、`BACKUP_RESTORE_REGRESSION` 的 `PASS` 保持有效；求职 Demo 沿用第四十二/六十四批 `PASS`，本批未重跑。`BUDGET_RECONCILIATION`、`LEARNING_ONLINE_BROWSER` 仍 `PARTIAL`，真实 DeepSeek/OpenAI 冒烟仍 `PENDING`。详见 `docs/test-reports/stage-67-log-retention-history-browser.md`。
 
 ## 已完成阶段
 

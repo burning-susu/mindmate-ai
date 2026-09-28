@@ -287,6 +287,27 @@
         }
       }
     },
+    "/api/v1/system/diagnostics/logs/clear": {
+      "post": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Clear Local Diagnostic Logs",
+        "operationId": "clear_local_diagnostic_logs_api_v1_system_diagnostics_logs_clear_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiagnosticLogClearResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/system/diagnostics/preview": {
       "get": {
         "tags": [
@@ -7145,6 +7166,39 @@
           "type"
         ],
         "title": "CredentialStoreResponse"
+      },
+      "DiagnosticLogClearResponse": {
+        "properties": {
+          "files_removed": {
+            "type": "integer",
+            "title": "Files Removed"
+          },
+          "bytes_removed": {
+            "type": "integer",
+            "title": "Bytes Removed"
+          },
+          "remaining_files": {
+            "type": "integer",
+            "title": "Remaining Files"
+          },
+          "remaining_bytes": {
+            "type": "integer",
+            "title": "Remaining Bytes"
+          },
+          "complete": {
+            "type": "boolean",
+            "title": "Complete"
+          }
+        },
+        "type": "object",
+        "required": [
+          "files_removed",
+          "bytes_removed",
+          "remaining_files",
+          "remaining_bytes",
+          "complete"
+        ],
+        "title": "DiagnosticLogClearResponse"
       },
       "DuplicateDecision": {
         "properties": {

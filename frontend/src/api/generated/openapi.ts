@@ -272,6 +272,13 @@ export interface components {
     "type": string;
     "error_code"?: string | null
   };
+  "DiagnosticLogClearResponse": {
+    "files_removed": number;
+    "bytes_removed": number;
+    "remaining_files": number;
+    "remaining_bytes": number;
+    "complete": boolean
+  };
   "DuplicateDecision": {
     "item_index": number;
     "decision": string
@@ -991,6 +998,9 @@ export interface operations {
   };
   "GET /api/v1/system/privacy": {
     operationId: "get_privacy_status_api_v1_system_privacy_get"
+  };
+  "POST /api/v1/system/diagnostics/logs/clear": {
+    operationId: "clear_local_diagnostic_logs_api_v1_system_diagnostics_logs_clear_post"
   };
   "GET /api/v1/system/diagnostics/preview": {
     operationId: "get_diagnostics_preview_api_v1_system_diagnostics_preview_get"

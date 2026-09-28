@@ -83,7 +83,15 @@ export type BudgetStatus = {
 }
 
 export type PrivacyStatus = {
-  log_retention: { available: boolean; message: string }
+  log_retention: {
+    available: boolean
+    message: string
+    retention_days: number
+    max_bytes: number
+    file_count: number
+    bytes_used: number
+    cleanup_complete: boolean
+  }
   diagnostics_export: { available: boolean; message: string }
   storage_migration: { available: boolean; message: string }
   secrets_policy: {
@@ -186,6 +194,21 @@ export function updateAiBudget(payload: {
 
 export function getPrivacyStatus(signal?: AbortSignal) {
   return apiRequest<PrivacyStatus>('/api/v1/system/privacy', { signal })
+}
+
+export type DiagnosticLogClearResult = {
+  files_removed: number
+  bytes_removed: number
+  remaining_files: number
+  remaining_bytes: number
+  complete: boolean
+}
+
+export function clearDiagnosticLogs() {
+  return apiRequest<DiagnosticLogClearResult>('/api/v1/system/diagnostics/logs/clear', {
+    method: 'POST',
+    body: JSON.stringify({}),
+  })
 }
 
 export function getDiagnosticsPreview(signal?: AbortSignal) {

@@ -95,7 +95,7 @@ def test_diagnostics_requires_session_and_allowed_origin(tmp_path: Path) -> None
         assert forbidden.json()["code"] == "ORIGIN_NOT_ALLOWED"
 
 
-def test_privacy_status_marks_only_diagnostics_export_available(tmp_path: Path) -> None:
+def test_privacy_status_exposes_verified_log_retention_and_diagnostics_export(tmp_path: Path) -> None:
     client = _make_client(tmp_path)
     with client:
         _session_headers(client)
@@ -103,7 +103,9 @@ def test_privacy_status_marks_only_diagnostics_export_available(tmp_path: Path) 
         assert response.status_code == 200
         body = response.json()
         assert body["diagnostics_export"]["available"] is True
-        assert body["log_retention"]["available"] is False
+        assert body["log_retention"]["available"] is True
+        assert body["log_retention"]["retention_days"] == 30
+        assert body["log_retention"]["max_bytes"] == 100 * 1024 * 1024
         assert body["storage_migration"]["available"] is False
 
         # The JSON download must remain valid and contain no hidden raw fields.
@@ -125,4 +127,4 @@ def test_diagnostics_export_failure_returns_safe_problem_without_partial_file(
         assert response.status_code == 503
         assert response.json()["code"] == "DIAGNOSTICS_BUILD_FAILED"
         assert "private" not in response.text
-        assert not list(tmp_path.rglob("*diagnostic*"))
+        assert not list(tmp_path.rglob("mindmate-diagnostics-*.json"))

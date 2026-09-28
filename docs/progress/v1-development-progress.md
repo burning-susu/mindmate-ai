@@ -604,3 +604,14 @@
 - 自动化：备份 Worker、备份导出、完整恢复和任务测试组合 `22 passed`；前端 Vitest `15 files / 69 tests passed`；TypeScript、lint、production build、Ruff、定向 Pyright（`0 errors`）、OpenAPI 3.1/生成类型、Alembic head 和 `git diff --check` 均通过。build 保留既有 `518.47 kB` JS chunk 提示。pytest 使用仓库 `backend/build` 隔离 basetemp，因为默认 `%TEMP%` 在本机不可枚举。
 - 保留缺口：`LOG_RETENTION`、`BUDGET_RECONCILIATION`、第六十五批 `DIAGNOSTICS_PREVIEW_EXPORT`、`HISTORY_PURGE_BROWSER`、`HISTORY_MULTISTEP_BROWSER` 与 `LEARNING_ONLINE_BROWSER` 仍 `PARTIAL`；真实 DeepSeek/OpenAI 付费冒烟 `PENDING`。阶段 8 和完整 V1 均未整体通过。
 - 详细报告：`docs/test-reports/stage-66-backup-worker.md`。本批未使用真实 Key 或调用在线 Provider。
+
+### 第六十七批：阶段 8 日志保留清理与历史、诊断浏览器验收
+
+- 状态：`LOG_RETENTION_CODE` `PASS`；`LOG_RETENTION_BROWSER` `PARTIAL`；`DIAGNOSTICS_PREVIEW_EXPORT_BROWSER`、`HISTORY_PURGE_BROWSER`、`HISTORY_MULTISTEP_BROWSER` 均 `PARTIAL`；整体 `LOG_RETENTION`、`DIAGNOSTICS_PREVIEW_EXPORT` 与 `STAGE8_FULL_V1` 继续 `PARTIAL`。普通 Chrome/Edge 页面点击未完成，未将 API 或自动化测试冒充浏览器证据。
+- 实现：新增应用自有的白名单结构化 JSONL 事件存储，固定于应用数据根 `logs/diagnostic-events`。只记录固定运行/日志维护事件码与必要安全字段，不接管或复制 Python、Uvicorn、第三方异常文本。每段最多 10 MiB，总量最多 100 MiB，按日志文件创建时间保留最多 30 天；启动和隐私状态读取时维护，非测试运行每 6 小时再维护。写入/清理使用线程锁和跨进程文件锁，文件句柄只在单次写入中短暂打开。只清理严格命名的普通应用日志文件；目录重解析点、符号链接和硬链接不会跟随或清理。
+- 设置页与 API：新增本地会话和 Origin 保护的 `POST /api/v1/system/diagnostics/logs/clear`，没有路径/通配符/字段参数。设置页展示当前文件数与体积、30 天/100 MB 上限、清理确认、成功/占用/失败反馈，并刷新状态。清理不触及 `logs` 下其他文件、SQLite/WAL、任务、业务对象、备份、模型或索引。诊断预览/导出仍排除日志，新测试确认不会泄出结构化事件或原始日志。
+- 安全范围：应用拥有的结构化本地事件具备有界保留和清理；外部启动器/运行时的标准输出与标准错误仍不受该服务控制，因此整体 `LOG_RETENTION` 保持 `PARTIAL`，报告未将终端输出声称为可清理文件。
+- 自动化：后端日志保留、诊断安全状态和设置预算定向组合 `19 passed, 1 skipped`；Windows 独占文件句柄清理测试通过。重解析点创建用例因当前环境无法创建目录 junction 而跳过，外部目标未写入或删除。Ruff、定向 Pyright（0 errors）、前端 Vitest `15 files / 71 tests`、TypeScript、lint、production build、OpenAPI/生成类型与 `git diff --check` 通过；OpenAPI 为 `111 schemas / 120 operations`。生产构建保留既有的 500 KB chunk 提示，当前主 chunk `520.14 kB`。
+- 浏览器：当前可用界面仅显示没有标签页的 Codex 内置浏览器。枚举普通窗口时审批层返回 `404 Not Found`，错误为当前模型账户不支持 `gpt-5.6-luna`（request id `023bfe13-d0a2-4735-b0da-de80d2d1b305`）。没有重试审批，没有创建普通 Chrome/Edge 页面点击，没有下载诊断包、永久删除数据或生成截图。`LOG_RETENTION_BROWSER`、`DIAGNOSTICS_PREVIEW_EXPORT_BROWSER`、`HISTORY_PURGE_BROWSER`、`HISTORY_MULTISTEP_BROWSER` 均保持 `PARTIAL`。
+- 保留缺口：第六十六批备份 Worker、浏览器及恢复回归 `PASS` 不变；`BUDGET_RECONCILIATION` 与 `LEARNING_ONLINE_BROWSER` 仍 `PARTIAL`，真实 Provider 冒烟 `PENDING`。求职 Demo 既有 `PASS` 与完整 V1 阶段 5–8 的 `PARTIAL` 分开记录。
+- 详细报告：`docs/test-reports/stage-67-log-retention-history-browser.md`。下一批仍需本地周期用量/预算账目核对及 test-only 在线 Provider 页面走查；本地估算不等于 DeepSeek/OpenAI 官方实际账单。

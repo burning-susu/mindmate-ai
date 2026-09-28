@@ -155,7 +155,9 @@ def test_storage_usage_budget_and_privacy_endpoints(tmp_path: Path) -> None:
 
         privacy = client.get("/api/v1/system/privacy")
         assert privacy.status_code == 200
-        assert privacy.json()["log_retention"]["available"] is False
+        assert privacy.json()["log_retention"]["available"] is True
+        assert privacy.json()["log_retention"]["retention_days"] == 30
+        assert privacy.json()["log_retention"]["max_bytes"] == 100 * 1024 * 1024
         assert "Key" in privacy.json()["secrets_policy"]["message"]
 
         budget = client.put(

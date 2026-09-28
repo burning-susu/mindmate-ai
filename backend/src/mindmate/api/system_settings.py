@@ -8,6 +8,11 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from mindmate.api.files import get_session
+from mindmate.application.diagnostic_log_retention import (
+    DiagnosticLogError,
+    clear_diagnostic_logs,
+    inspect_log_retention,
+)
 from mindmate.application.diagnostics import (
     build_diagnostics_document,
     diagnostics_preview,
@@ -82,6 +87,14 @@ class BudgetUpdateRequest(BaseModel):
     unknown_usage_policy: Literal["deny", "confirm"] = "deny"
 
 
+class DiagnosticLogClearResponse(BaseModel):
+    files_removed: int
+    bytes_removed: int
+    remaining_files: int
+    remaining_bytes: int
+    complete: bool
+
+
 def _settings(request: Request) -> Settings:
     return request.app.state.settings
 
@@ -132,8 +145,62 @@ def put_ai_budget(
 
 
 @router.get("/privacy")
-def get_privacy_status() -> dict[str, Any]:
-    return privacy_diagnostics_status()
+def get_privacy_status(request: Request) -> dict[str, Any]:
+    result = privacy_diagnostics_status()
+    retention = inspect_log_retention(_settings(request))
+    if retention.available:
+        state = (
+            f"当前 {retention.file_count} 个文件 / {retention.bytes_used} 字节"
+            if retention.cleanup_complete
+            else f"有文件暂未清理；当前 {retention.file_count} 个文件 / {retention.bytes_used} 字节"
+        )
+        message = (
+            "受控结构化应用事件：最多保留 30 天或 100 MB（先达到者清理）；"
+            f"外部终端输出不在清理范围。{state}。"
+        )
+    else:
+        message = "应用诊断日志目录暂不可安全访问，未提供清理操作。"
+    result["log_retention"] = {
+        "available": retention.available,
+        "message": message,
+        "retention_days": retention.retention_days,
+        "max_bytes": retention.max_bytes,
+        "file_count": retention.file_count,
+        "bytes_used": retention.bytes_used,
+        "cleanup_complete": retention.cleanup_complete,
+    }
+    return result
+
+
+@router.post("/diagnostics/logs/clear", response_model=DiagnosticLogClearResponse)
+def clear_local_diagnostic_logs(
+    request: Request,
+) -> DiagnosticLogClearResponse:
+    _require_local_session(request)
+    try:
+        result = clear_diagnostic_logs(_settings(request))
+    except DiagnosticLogError as exc:
+        if exc.code == "LOG_DIRECTORY_UNSAFE":
+            detail = "诊断日志目录结构异常，为保护应用外数据，本次未执行清理。"
+        elif exc.code == "LOG_LOCK_UNAVAILABLE":
+            detail = "诊断日志正在使用或暂不可访问，请稍后重试。"
+        else:
+            detail = "诊断日志暂时无法清理，请稍后重试。"
+        raise SystemSettingsApiError("LOG_CLEANUP_FAILED", detail, 503, retryable=True) from exc
+    except OSError as exc:
+        raise SystemSettingsApiError(
+            "LOG_CLEANUP_FAILED",
+            "诊断日志暂时无法清理，请稍后重试。",
+            503,
+            retryable=True,
+        ) from exc
+    return DiagnosticLogClearResponse(
+        files_removed=result.files_removed,
+        bytes_removed=result.bytes_removed,
+        remaining_files=result.remaining_files,
+        remaining_bytes=result.remaining_bytes,
+        complete=result.complete,
+    )
 
 
 @router.get("/diagnostics/preview")
