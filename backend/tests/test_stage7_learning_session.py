@@ -391,6 +391,7 @@ def test_insufficient_unavailable_and_conflict_create_no_question(tmp_path: Path
         assert refused.json()["failure_code"] == "EVIDENCE_INSUFFICIENT"
         assert refused.json()["topic"] == TOPIC
         assert refused.json()["current_question_id"] is None
+        assert refused.json()["result"]["end_reason"] == "EVIDENCE_EXHAUSTED"
         missing = client.get(
             f"/api/v1/learning-sessions/{refused.json()['learning_session_id']}/current-question"
         )

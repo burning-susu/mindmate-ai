@@ -1,5 +1,13 @@
 # V1 开发进度
 
+## 第六十四批：求职 Demo 浏览器验收与学习入口收口（2026-09-28）
+
+- 浏览器截图证据：知识库问答正例可打开 `服务超时策略.txt` 来源；“磁盘配额”资料外问题严格提示资料不足且无来源按钮，均为 `PASS`。学习入口空白主题/目标时按钮禁用但没有字段错误；填入“回收站 / 回收站学习”后会话 `01a0e5e2-7828-796c-8c8f-24e0f459f550` 因 `VECTOR_SIMILARITY_BELOW_THRESHOLD` 以 `EVIDENCE_INSUFFICIENT` 结束，完成 `0/1`，这是证据门禁拒答而非题目渲染缺陷。
+- 收口：可用文件计数排除回收站/未解析文件；学习范围标出不可用成员；空白主题和目标显示红色字段提示；资料不足失败记录 `EVIDENCE_EXHAUSTED`，结果页显示资料不足提前结束。没有放宽证据门禁，没有真实 Provider 外发。
+- 验证：后端定向 `22 passed`；前端全量 `15 files / 67 tests passed`；typecheck、lint、build、Ruff、`git diff --check` 通过。报告见 `docs/test-reports/stage-64-demo-browser-acceptance.md`。
+- 当前状态：修复后的浏览器正例尚未重启服务并重新点击，`DEMO_BROWSER=PARTIAL`；历史永久删除与在线 test-only Provider 仍 `PARTIAL`，真实 Provider 仍 `PENDING`，阶段 7/8 完整 V1 仍 `PARTIAL`。修复后应使用同一隔离根，以“API 单次请求超时时间 / 记住资料中的请求超时值”完成一题 Mock 学习并记录刷新/重启恢复。
+- Git 交付：本地提交 `2b9fb2e96cac6c601d5e0e50007df9b9df5aefe3`；`git push origin feat/v1-bootstrap` 无输出并以退出码 `1` 失败，远端仍为 `ced681a11f85878d9f924abeb213d2fbee4435b0`，未宣称已推送。
+
 ## 当前校准（2026-09-28，阶段 8 宿主走查前）
 
 - 运行时 Git 核验：当前分支 `feat/v1-bootstrap` 的本地 HEAD 与 `origin/feat/v1-bootstrap` 均为 `c11e8fe038d9d901bded048a8a6237925c8adf57`，提交信息为 `验收：整理阶段八演示验收记录与宿主交接`。第六十一批报告记录的进场 SHA `0b6fccef85dd83f6773a92dcddc66e004545882d`、推送挂起和本地领先状态是当时的历史观察，不在本节改写。

@@ -347,6 +347,46 @@ def test_failed_rebuild_status_keeps_the_active_index_available(knowledge_client
     ]
 
 
+def test_available_file_count_excludes_trashed_members(knowledge_client) -> None:
+    client, _ = knowledge_client
+    knowledge_base = create_kb(client, "可用文件计数")
+    file_id = import_text(client, "可用性验证.txt", "活动资料。".encode(), "available-count-source")
+    membership_task = client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base['knowledge_base_id']}/files",
+        headers=write_headers("available-count-member"),
+        json={"file_ids": [file_id]},
+    ).json()
+    assert wait_for_task(client, membership_task["task_id"])["status"] == "COMPLETED"
+    with client.app.state.session_factory() as session:
+        member = session.scalar(
+            select(KnowledgeBaseFile).where(
+                KnowledgeBaseFile.knowledge_base_id == knowledge_base["knowledge_base_id"],
+                KnowledgeBaseFile.file_id == file_id,
+            )
+        )
+        assert member is not None
+        member.index_state = "READY"
+        session.commit()
+
+    before_trash = client.get(
+        f"/api/v1/knowledge-bases/{knowledge_base['knowledge_base_id']}"
+    ).json()
+    assert before_trash["file_count"] == 1
+    assert before_trash["available_file_count"] == 1
+
+    file = client.get(f"/api/v1/files/{file_id}").json()
+    trashed = client.delete(
+        f"/api/v1/files/{file_id}?expected_version={file['row_version']}",
+        headers=write_headers("available-count-trash"),
+    )
+    assert trashed.status_code == 200
+    after_trash = client.get(
+        f"/api/v1/knowledge-bases/{knowledge_base['knowledge_base_id']}"
+    ).json()
+    assert after_trash["file_count"] == 1
+    assert after_trash["available_file_count"] == 0
+
+
 def test_rebuild_is_full_and_rejects_empty_or_trashed_inputs(knowledge_client) -> None:
     client, _ = knowledge_client
     empty = create_kb(client, "不可重建空库")

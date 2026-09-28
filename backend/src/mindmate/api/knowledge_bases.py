@@ -327,10 +327,14 @@ def _counts(session: Session, knowledge_base_id: str) -> tuple[int, int]:
         session.scalar(
             select(func.count())
             .select_from(KnowledgeBaseFile)
+            .join(FileRecord, FileRecord.file_id == KnowledgeBaseFile.file_id)
             .where(
                 KnowledgeBaseFile.knowledge_base_id == knowledge_base_id,
                 KnowledgeBaseFile.membership_status == "ACTIVE",
+                KnowledgeBaseFile.removed_at.is_(None),
                 KnowledgeBaseFile.index_state == "READY",
+                FileRecord.deleted_at.is_(None),
+                FileRecord.status == "PARSED",
             )
         )
         or 0

@@ -221,6 +221,30 @@ describe.sequential('stage 7 learning demo', () => {
     expect(screen.queryByText('answer_key')).not.toBeInTheDocument()
   })
 
+  it('explains required fields and unavailable learning scope files', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/system/session')) return response({ status: 'ready' })
+      if (url.endsWith('/api/v1/knowledge-bases/kb-1/files')) {
+        return response({ items: [
+          { file_id: 'file-1', display_name: '服务超时策略.txt', document_type: 'TXT', file_status: 'PARSED', membership_status: 'ACTIVE', index_state: 'READY', available_for_retrieval: true, unavailable_reason: null, added_at: '2026-09-26T00:00:00Z', knowledge_base_file_id: 'member-1' },
+          { file_id: 'file-2', display_name: '回收站范围验证.txt', document_type: 'TXT', file_status: 'IN_TRASH', membership_status: 'ACTIVE', index_state: 'READY', available_for_retrieval: false, unavailable_reason: '文件位于回收站', added_at: '2026-09-26T00:00:00Z', knowledge_base_file_id: 'member-2' },
+        ] })
+      }
+      if (url.endsWith('/api/v1/knowledge-bases/kb-1')) return response(knowledgeBase)
+      if (url.endsWith('/api/v1/learning/provider-plan')) return response({ requires_charge_confirmation: false, outbound_summary: '当前是 Mock。' })
+      return response({ status: 'ok', version: '0.1.0' })
+    }))
+
+    renderAt('/learning/new?knowledge_base_id=kb-1')
+    expect(await screen.findByText('服务超时策略.txt')).toBeInTheDocument()
+    expect(screen.getByText('不可用：文件位于回收站')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: '学习主题' })).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByText('请输入学习主题。')).toBeInTheDocument()
+    expect(screen.getByText('请输入学习目标。')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '创建并开始' })).toBeDisabled()
+  })
+
   it('creates one session from a ready knowledge base and keeps the same request id', async () => {
     const bodies: unknown[] = []
     const keys: string[] = []

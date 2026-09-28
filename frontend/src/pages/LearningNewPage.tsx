@@ -47,8 +47,18 @@ export default function LearningNewPage() {
     retry: false,
   })
   const online = planQuery.data?.requires_charge_confirmation === true
-  const topicReady = topic.trim().length > 0 && topic.trim().length <= 80
-  const goalReady = goalText.trim().length > 0 && goalText.trim().length <= 200
+  const topicError = topic.trim().length === 0
+    ? '请输入学习主题。'
+    : topic.trim().length > 80
+      ? '学习主题不能超过 80 个字符。'
+      : ''
+  const goalError = goalText.trim().length === 0
+    ? '请输入学习目标。'
+    : goalText.trim().length > 200
+      ? '学习目标不能超过 200 个字符。'
+      : ''
+  const topicReady = !topicError
+  const goalReady = !goalError
   const canSubmit = Boolean(knowledgeBaseId) && ready && topicReady && goalReady && !knowledgeBaseQuery.isLoading && !membersQuery.isLoading && !planQuery.isLoading && !submitting && (!online || chargeConfirmed)
 
   const submit = async (event: FormEvent) => {
@@ -144,15 +154,41 @@ export default function LearningNewPage() {
           )}
           {membersQuery.data && (
             <ul className="learning-scope-list" aria-label="已选资料">
-              {(membersQuery.data.items ?? []).map((member) => <li key={member.file_id}>{member.display_name}</li>)}
+              {(membersQuery.data.items ?? []).map((member) => (
+                <li key={member.file_id}>
+                  <span>{member.display_name}</span>
+                  {!member.available_for_retrieval && (
+                    <span className="learning-scope-list__status">
+                      不可用：{member.unavailable_reason ?? '当前资料不可用于检索'}
+                    </span>
+                  )}
+                </li>
+              ))}
             </ul>
           )}
           {!ready && <div className="inline-error" role="alert">当前知识库没有可用索引或可用文件，不能开始学习。</div>}
           <label>学习主题
-            <input aria-label="学习主题" maxLength={80} value={topic} onChange={(event) => setTopic(event.target.value)} />
+            <input
+              aria-label="学习主题"
+              aria-describedby="learning-topic-error"
+              aria-invalid={Boolean(topicError)}
+              maxLength={80}
+              value={topic}
+              onChange={(event) => setTopic(event.target.value)}
+            />
+            {topicError && <span className="field-error" id="learning-topic-error" role="alert">{topicError}</span>}
           </label>
           <label>学习目标
-            <textarea aria-label="学习目标" maxLength={200} rows={3} value={goalText} onChange={(event) => setGoalText(event.target.value)} />
+            <textarea
+              aria-label="学习目标"
+              aria-describedby="learning-goal-error"
+              aria-invalid={Boolean(goalError)}
+              maxLength={200}
+              rows={3}
+              value={goalText}
+              onChange={(event) => setGoalText(event.target.value)}
+            />
+            {goalError && <span className="field-error" id="learning-goal-error" role="alert">{goalError}</span>}
           </label>
           <label>计划题数
             <select

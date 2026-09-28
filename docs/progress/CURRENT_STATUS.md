@@ -7,7 +7,7 @@
 - 最后更新时间：`2026-09-28`
 - 当前开发阶段：阶段 8 开发中，状态 `PARTIAL`；阶段 5、阶段 6、阶段 7 继续 `PARTIAL`
 - 交付顺序：Demo 首先完成，完整 V1 以后精进。求职 Demo 优先文件整理/导入、建库、带来源问答、最小学习陪练和重启恢复。Demo 可用性与完整 V1 阶段状态分开报告。
-- 当前批次状态：第六十三批 `ENVIRONMENT_READY=PASS`、`DEMO_STARTUP=PASS`；普通 Chrome/Edge 页面操作仍为 `PARTIAL`，`HISTORY_PURGE_BROWSER`、`LEARNING_ONLINE_BROWSER` 为 `PARTIAL`，`REAL_PROVIDER_SMOKE` 为 `PENDING`。本批使用项目内 Python 3.12.14 重建环境，后端关键 pytest `29 passed`、前端 Vitest `66 passed`、typecheck 与 build 通过。求职 Demo 可用性仅确认服务与页面资源启动；等待用户浏览器点击证据。阶段 7/8 完整 V1 继续 `PARTIAL`，详见 `docs/test-reports/stage-63-host-startup-and-demo.md`。
+- 当前批次状态：第六十四批已收到普通浏览器截图；问答正例与资料不足拒答 `PASS`，学习入口字段提示已修复，使用“回收站”主题的学习会话按证据门禁拒答并完成 `0/1`，修复后的学习正例尚未重新点击取证，故 `DEMO_BROWSER=PARTIAL`。`HISTORY_PURGE_BROWSER`、`LEARNING_ONLINE_BROWSER` 继续 `PARTIAL`，`REAL_PROVIDER_SMOKE` 继续 `PENDING`。本批后端定向 pytest `22 passed`、前端 Vitest `67 passed`、typecheck、lint、build 与 Ruff 通过。详见 `docs/test-reports/stage-64-demo-browser-acceptance.md`。
 
 ## 已完成阶段
 

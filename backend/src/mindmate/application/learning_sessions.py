@@ -1392,6 +1392,7 @@ def _fail(
     record.status = "FAILED"
     record.failure_code = code[:80]
     record.failure_detail = detail[:500]
+    record.end_reason = "EVIDENCE_EXHAUSTED" if code == "EVIDENCE_INSUFFICIENT" else None
     finish_learning_plan(session, record)
     record.pending_question_request_id = None
     record.pending_question_request_hash = None
