@@ -9,6 +9,7 @@ import time
 import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any, cast
 from uuid import uuid4
 
 import httpx
@@ -439,6 +440,7 @@ def test_locked_database_and_interrupted_switch_keep_original(tmp_path: Path, mo
         confirmed = _execute(client, precheck.json()["precheck_id"])
         assert confirmed.status_code == 200, confirmed.text
 
+    cast(Any, client.app).state.engine.dispose()
     holder = sqlite3.connect(settings.database_path.as_posix())
     holder.execute("BEGIN IMMEDIATE")
     try:
@@ -463,6 +465,7 @@ def test_locked_database_and_interrupted_switch_keep_original(tmp_path: Path, mo
         confirmed2 = _execute(client2, precheck2.json()["precheck_id"])
         assert confirmed2.status_code == 200, confirmed2.text
 
+    cast(Any, client2.app).state.engine.dispose()
     calls = {"n": 0}
     original = swap_tree
 
@@ -473,8 +476,8 @@ def test_locked_database_and_interrupted_switch_keep_original(tmp_path: Path, mo
         original(live, staged, aside)
 
     monkeypatch.setattr("mindmate.application.local_restore.swap_tree", boom)
-    apply_pending_restore(settings2)
-    assert calls["n"] >= 2
+    interrupted = apply_pending_restore(settings2)
+    assert calls["n"] >= 2, f"恢复状态：{interrupted!r}"
     assert (settings2.resolved_data_dir / relative).read_bytes() == payload
     quick = sqlite3.connect(settings2.database_path.as_posix())
     try:

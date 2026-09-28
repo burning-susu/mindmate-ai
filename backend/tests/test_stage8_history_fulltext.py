@@ -8,6 +8,7 @@ from typing import Any, cast
 
 from alembic import command
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, func, select, text
 
@@ -303,8 +304,9 @@ def test_history_projection_migration_is_reversible(tmp_path: Path) -> None:
     config.attributes["settings"] = settings
     command.upgrade(config, "head")
     engine = create_engine(f"sqlite:///{settings.database_path.as_posix()}")
+    current_head = ScriptDirectory.from_config(config).get_current_head()
     with engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "d17a5e9c4b20"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == current_head
         assert connection.scalar(
             text("SELECT status FROM history_search_state WHERE state_key = 'projection'")
         ) == "PENDING"

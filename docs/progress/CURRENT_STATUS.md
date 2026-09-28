@@ -3,11 +3,11 @@
 ## 基本信息
 
 - 当前开发分支：`feat/v1-bootstrap`
-- 第六十九批进场：分支 `feat/v1-bootstrap`；LOCAL `c0875126e34b9445db025124f862d158358c41ab`，REMOTE `c0875126e34b9445db025124f862d158358c41ab`。第六十七、六十八批已在远端；核验日期 `2026-09-28`。
+- 第七十批进场：分支 `feat/v1-bootstrap`；LOCAL `ae4432ea38670fb0dac020c5c488ee4ad9d22102`，REMOTE `ae4432ea38670fb0dac020c5c488ee4ad9d22102`；核验日期 `2026-09-28`。
 - 最后更新时间：`2026-09-28`
 - 当前开发阶段：阶段 8 开发中，状态 `PARTIAL`；阶段 5、阶段 6、阶段 7 继续 `PARTIAL`
 - 交付顺序：Demo 首先完成，完整 V1 以后精进。求职 Demo 优先文件整理/导入、建库、带来源问答、最小学习陪练和重启恢复。Demo 可用性与完整 V1 阶段状态分开报告。
-- 当前批次状态：`GLOBAL_TASK_DRAWER_CODE` `PASS`；`LOCAL_BACKEND_UNAVAILABLE_CODE` `PASS`；`PARTIAL_FAILURE_CODE` `PASS`（既有局部错误能力复用）；`OFFLINE_LOCAL_CODE` `PASS`；`ONLINE_PROVIDER_DISABLED_WHEN_OFFLINE` `PASS`（代码门禁）；`GLOBAL_TASK_DRAWER_BROWSER` `BROWSER_PARTIAL`；`LOCAL_BUDGET_RECONCILIATION` `PASS`；`PROVIDER_BILLING_RECONCILIATION` `PENDING`；`LEARNING_ONLINE_CODE` `PASS`；`LEARNING_ONLINE_BROWSER` `PARTIAL`；`REAL_PROVIDER_SMOKE` `PENDING`；`STAGE8_FULL_V1` 仍 `PARTIAL`。第六十七批日志/诊断/历史页面验收继续 `PARTIAL`，第六十六批备份相关 `PASS` 保持有效。求职 Demo 沿用第四十二/六十四批 `PASS`，本批未重跑；阶段 5–7 完整 V1 仍 `PARTIAL`。详见 `docs/test-reports/stage-69-global-recovery.md`。
+- 当前批次状态：`AC-GLOBAL-004` 代码回归 `CODE_PASS`（新增知识库/学习会话 404 专用页面回归）；阶段 8 全量仍 `STAGE8_FULL_V1=PARTIAL`，普通 Chrome/Edge 页面未亲测。学习总结持久化/展示/搜索、回收站删除联动任务取消、任务并发下调配置未完成；外部启动器/runtime stdout/stderr 不受日志保留服务控制。阶段 8 浏览器缺口、每项 AC 映射及人工验收卡见 `docs/test-reports/stage-70-stage8-browser-acceptance.md`。本批前端 `16 files / 78 tests`、typecheck、lint、build 通过；后端组合初跑 `74 passed, 1 skipped, 3 failed`，已分别隔离重跑并记录 Windows/FTS 波动，不冒称组合全绿。`LOCAL_BUDGET_RECONCILIATION` 沿用第 68 批 `PASS`，Provider 官方账单和真实 Provider smoke 仍 `PENDING`。求职 Demo 沿用第四十二/六十四批 `PASS`，本批未重跑；阶段 5–7 完整 V1 继续 `PARTIAL`。
 
 ## 已完成阶段
 

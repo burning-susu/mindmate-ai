@@ -49,6 +49,52 @@ afterEach(() => {
 })
 
 describe('stage 8 global recovery', () => {
+  it.each([
+    {
+      path: '/knowledge-bases/missing-kb',
+      endpoint: '/api/v1/knowledge-bases/missing-kb',
+      text: '这个知识库已被删除或当前本地数据中不存在，未执行任何写入。',
+    },
+    {
+      path: '/learning/session/missing-session',
+      endpoint: '/api/v1/learning-sessions/missing-session',
+      text: '这个学习会话不存在或已进入回收站，未提交新的答案。',
+    },
+  ])('shows a specific recoverable state for missing route $path', async ({ path, endpoint, text }) => {
+    const calls: Array<{ url: string; method: string }> = []
+    window.history.pushState({}, '', path)
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      calls.push({ url, method })
+      if (url.includes('/system/session')) return response({ status: 'ready' })
+      if (url.endsWith('/api/v1/health')) return response({ status: 'ok', version: '0.1.0' })
+      if (url.includes('/home/overview')) {
+        return response(overview({
+          task_id: 'completed-task',
+          task_type: 'FILE_IMPORT',
+          status: 'COMPLETED',
+          phase: 'COMPLETED',
+          progress_percent: 100,
+          failure_code: null,
+          failure_summary: null,
+          updated_at: '2026-09-28T12:00:00Z',
+        }))
+      }
+      if (url.endsWith(endpoint)) {
+        return response({ status: 404, title: 'Not Found', detail: 'Resource not found', code: 'NOT_FOUND' }, 404)
+      }
+      return response({ items: [], next_cursor: null })
+    }))
+
+    render(<BrowserRouter><App /></BrowserRouter>)
+
+    expect(await screen.findByText(text)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '返回知识库' })).toHaveAttribute('href', '/knowledge-bases')
+    expect(window.location.pathname).toBe(path)
+    expect(calls.filter((call) => call.method === 'POST' && !call.url.includes('/system/session'))).toEqual([])
+  })
+
   it('keeps a persisted task visible outside home and cancels it once through the supported API', async () => {
     let cancelled = false
     const calls: Array<{ url: string; method: string }> = []

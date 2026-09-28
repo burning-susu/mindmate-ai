@@ -635,3 +635,13 @@
 - 自动化：前端全量 `16 files / 76 tests passed`，新增全局恢复/客户端组合 `6 passed`；typecheck、lint、build 和 `git diff --check` 通过。后端任务保留、预算、备份组合在仓库隔离 basetemp `16 passed`。默认 `%TEMP%` pytest 根目录权限问题已记录，未影响隔离重跑。
 - 浏览器：本批 `cua.getState()` 仅返回无标签页的 Codex In-app Browser，没有普通 Chrome/Edge 可绑定窗口；未重复审批失败或 Playwright `spawn EPERM`。没有截图、URL、profile、页面会话或 Network 计数，因此全局任务抽屉、离线断网和第 67/68 批页面验收不得写成普通浏览器 `PASS`。
 - 报告：`docs/test-reports/stage-69-global-recovery.md`，含阶段 8 AC 追踪矩阵、自动化证据、浏览器边界与最短人工补验步骤。下一批先补普通浏览器页面证据，再决定阶段 8 是否可收口；不以矩阵文档替代功能或验收。
+
+### 第七十批：阶段 8 宿主浏览器验收与需求追踪收口
+
+- 进场：`feat/v1-bootstrap`；本地与远端完整 SHA 均为 `ae4432ea38670fb0dac020c5c488ee4ad9d22102`；工作区干净。
+- 阶段状态：`STAGE8_FULL_V1=PARTIAL`。`AC-GLOBAL-004` 404 页面代码回归 `CODE_PASS`；普通 Chrome/Edge 未在当前会话中暴露，所有本批缺少真实页面操作的行保持 `BROWSER_PARTIAL`。求职 Demo 仍沿用旧 `PASS`；阶段 5–7 完整 V1 继续 `PARTIAL`。
+- 本批实现：为知识库/学习会话无效详情 URL 增加专用页面回归；历史全文搜索迁移测试动态对照当前 Alembic head；恢复测试关闭 TestClient Engine，提升 Windows 目录交换隔离稳定性。没有改业务代码、数据库 schema、API 契约或 Provider 行为。
+- 自动化：前端全量 `16 files / 78 tests passed`；typecheck、lint、build、Ruff、定向 Pyright、OpenAPI 3.1/生成类型和 `git diff --check` 通过。后端阶段 8 组合初跑 `74 passed, 1 skipped, 3 failed`；修正 head 断言后迁移单测通过，恢复整文件 `6 passed`，FTS/历史 purge 单项隔离通过。组合运行的 Windows 目录句柄时序和 FTS checksum 波动保留记录，未写成全组通过。
+- 未完成事实：学习完成总结不存在持久化/展示/检索路径；文件/知识库软删除没有调用 `cancel_task`；未找到 `TASK-AC-05` 可下调并发的设置/API；stdout/stderr 超出应用结构化日志控制范围。各项与对应验收行、测试证据及下一动作见 `docs/test-reports/stage-70-stage8-browser-acceptance.md`。
+- 外部验收状态：test-only 在线学习 MockTransport 代码证据沿用第 68 批；本批没有页面调用摘要。Provider 官方账单核对、真实 Provider smoke 均 `PENDING`。第 53/66 批备份/恢复页面证据按原范围继承，不计成本批亲测。
+- Git：交付分支、中文提交信息、最终本地/远端完整 SHA 记于本批交付说明；不修改 `main`，不强推。
