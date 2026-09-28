@@ -287,6 +287,48 @@
         }
       }
     },
+    "/api/v1/system/diagnostics/preview": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Get Diagnostics Preview",
+        "operationId": "get_diagnostics_preview_api_v1_system_diagnostics_preview_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Get Diagnostics Preview Api V1 System Diagnostics Preview Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/system/diagnostics/export": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Export Diagnostics",
+        "operationId": "export_diagnostics_api_v1_system_diagnostics_export_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/backups": {
       "post": {
         "tags": [

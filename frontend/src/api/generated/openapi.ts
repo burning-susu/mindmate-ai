@@ -992,6 +992,12 @@ export interface operations {
   "GET /api/v1/system/privacy": {
     operationId: "get_privacy_status_api_v1_system_privacy_get"
   };
+  "GET /api/v1/system/diagnostics/preview": {
+    operationId: "get_diagnostics_preview_api_v1_system_diagnostics_preview_get"
+  };
+  "GET /api/v1/system/diagnostics/export": {
+    operationId: "export_diagnostics_api_v1_system_diagnostics_export_get"
+  };
   "POST /api/v1/backups": {
     operationId: "create_backup_endpoint_api_v1_backups_post"
   };

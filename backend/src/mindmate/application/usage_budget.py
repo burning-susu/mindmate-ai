@@ -367,8 +367,8 @@ def privacy_diagnostics_status() -> dict[str, Any]:
             "message": "日志保留与清理服务尚未验收，当前仅展示说明。",
         },
         "diagnostics_export": {
-            "available": False,
-            "message": "诊断包导出尚未提供；不会返回文档全文、Prompt 或 Key。",
+            "available": True,
+            "message": "可预览并导出安全状态包；仅保存在本机，不自动上传。",
         },
         "storage_migration": {
             "available": False,

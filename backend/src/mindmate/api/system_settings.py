@@ -3,11 +3,16 @@ from __future__ import annotations
 # ruff: noqa: B008
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from mindmate.api.files import get_session
+from mindmate.application.diagnostics import (
+    build_diagnostics_document,
+    diagnostics_preview,
+    serialize_diagnostics,
+)
 from mindmate.application.storage_stats import storage_overview
 from mindmate.application.usage_budget import (
     budget_status,
@@ -16,6 +21,7 @@ from mindmate.application.usage_budget import (
     summarize_usage,
 )
 from mindmate.config import Settings
+from mindmate.security.session import SESSION_COOKIE
 
 router = APIRouter(prefix="/api/v1/system", tags=["system"])
 
@@ -80,6 +86,16 @@ def _settings(request: Request) -> Settings:
     return request.app.state.settings
 
 
+def _require_local_session(request: Request) -> None:
+    local = getattr(request.app.state, "session", None)
+    if local is None or not local.matches(request.cookies.get(SESSION_COOKIE)):
+        raise SystemSettingsApiError(
+            "LOCAL_SESSION_REQUIRED",
+            "请从当前 MindMate 应用页面重新建立本地会话。",
+            401,
+        )
+
+
 @router.get("/storage", response_model=StorageOverviewResponse)
 def get_storage_overview(request: Request) -> dict[str, Any]:
     return storage_overview(_settings(request))
@@ -118,6 +134,47 @@ def put_ai_budget(
 @router.get("/privacy")
 def get_privacy_status() -> dict[str, Any]:
     return privacy_diagnostics_status()
+
+
+@router.get("/diagnostics/preview")
+def get_diagnostics_preview(
+    request: Request,
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    _require_local_session(request)
+    try:
+        document = build_diagnostics_document(session, _settings(request))
+        return diagnostics_preview(document)
+    except Exception as exc:  # noqa: BLE001 - never expose private diagnostics errors
+        raise SystemSettingsApiError(
+            "DIAGNOSTICS_BUILD_FAILED",
+            "诊断预览暂时无法生成，请重试。",
+            503,
+            retryable=True,
+        ) from exc
+
+
+@router.get("/diagnostics/export")
+def export_diagnostics(request: Request, session: Session = Depends(get_session)) -> Response:
+    _require_local_session(request)
+    try:
+        document = build_diagnostics_document(session, _settings(request))
+        content = serialize_diagnostics(document)
+    except Exception as exc:  # noqa: BLE001 - no partial file is created
+        raise SystemSettingsApiError(
+            "DIAGNOSTICS_BUILD_FAILED",
+            "诊断包生成失败，未创建文件，请重试。",
+            503,
+            retryable=True,
+        ) from exc
+    generated_at = str(document["generated_at"]).replace(":", "").replace("-", "")[:15]
+    response = Response(content=content, media_type="application/json")
+    response.headers["Content-Disposition"] = (
+        f'attachment; filename="mindmate-diagnostics-{generated_at}.json"'
+    )
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 def _budget_error_detail(code: str) -> str:

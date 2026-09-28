@@ -350,3 +350,10 @@
 - 文件详情：`GET /api/v1/files/{file_id}/knowledge-bases` 显式返回生成类型 `FileKnowledgeBaseResponse.status`，详情页按知识库状态标签渲染，不再使用不存在的 `index_state`，空列表和未知状态均不输出 `undefined`。
 - 自动化证据：前端全量 `15 files / 66 tests passed`；typecheck、lint、production build 通过（保留既有 500 kB chunk warning）；后端改动文件 Ruff、compileall、OpenAPI JSON/生成类型和 `git diff --check` 通过。后端 pytest 目标已执行但当前仓库 `.venv` 指向不可访问的 Python 解释器，进程创建失败，记为 `BACKEND_PYTEST=BLOCKED`。
 - 浏览器与 Git：本批未重复第 58 批被阻断的浏览器工具调用，真实页面点击保持 `PARTIAL`，未伪造截图或验收。当前工作区包含本批代码、测试和文档改动，状态为 `UNCOMMITTED / NOT_PUSHED`；`git add` 创建 `.git/index.lock` 时返回 `Permission denied`，未改 ACL、未提权、未强推。待环境恢复后按报告中的 VS Code 清单逐文件审阅、中文提交并推送；不改 `main`。
+
+## 第六十五批交接
+
+- 状态：诊断预览/导出已实现并完成后端安全回归、前端交互回归、OpenAPI/生成类型同步；浏览器审批创建标签页时返回 `404 Not Found`，本批没有普通 Chrome/Edge 点击证据，`DIAGNOSTICS_PREVIEW_EXPORT`、`HISTORY_PURGE_BROWSER`、`HISTORY_MULTISTEP_BROWSER` 均保持 `PARTIAL`。`LOG_RETENTION`、`BACKUP_WORKER`、`BUDGET_RECONCILIATION`、`LEARNING_ONLINE_BROWSER` 继续 `PARTIAL`，阶段 8 完整 V1 继续 `PARTIAL`。
+- 诊断：新增本地会话保护的 `/api/v1/system/diagnostics/preview` 与 `/api/v1/system/diagnostics/export`。服务端只返回版本/平台、非秘密配置状态、SQLite 可读写状态、有限任务状态、脱敏错误码/诊断 ID/计数；不读取原始日志、数据库快照、备份、文件正文、Prompt、问题/回答、模型响应、向量、Embedding、Cookie、Key 或完整路径。设置页可预览、取消和下载 JSON，失败不留下临时文件。
+- 自动化：诊断后端 `4 passed`；阶段 8 相关组合测试报告 `33 passed`，另有既有历史边界用例在组合顺序中一次波动，隔离重跑通过；前端全量 `15 files / 68 tests passed`，typecheck、lint、build、Ruff、OpenAPI/生成类型和 `git diff --check` 通过。隔离 Mock Demo 准备与启动核对 READY 通过，未调用真实 Provider。
+- 详细报告：`docs/test-reports/stage-65-diagnostics-history-acceptance.md`。普通 Windows 操作者需按报告最短清单补齐设置页诊断下载、历史永久删除确认和三题定位页面证据。

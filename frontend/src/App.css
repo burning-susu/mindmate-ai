@@ -379,6 +379,18 @@
 .settings-stat-list li { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface-subtle); }
 .settings-stat-list li span { color: var(--muted); font-size: 11px; }
 .settings-stat-list li strong { color: var(--text); font-size: 11px; font-weight: 600; text-align: right; overflow-wrap: anywhere; }
+.settings-diagnostics { display: grid; gap: 10px; padding-top: 4px; }
+.settings-diagnostics__preview { display: grid; gap: 10px; padding: 12px; border: 1px solid #cde0e3; border-radius: 7px; background: #f7fbfc; }
+.settings-diagnostics__preview .settings-stat-list > div { display: flex; justify-content: space-between; gap: 12px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); }
+.settings-diagnostics__preview .settings-stat-list span { color: var(--muted); font-size: 11px; }
+.settings-diagnostics__preview .settings-stat-list strong { color: var(--text); font-size: 11px; text-align: right; overflow-wrap: anywhere; }
+.settings-diagnostics__preview details { display: grid; gap: 8px; color: var(--text); font-size: 12px; }
+.settings-diagnostics__preview summary { cursor: pointer; font-weight: 650; }
+.settings-diagnostics__tasks { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
+.settings-diagnostics__tasks li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); }
+.settings-diagnostics__tasks li span { min-width: 0; color: var(--muted); overflow-wrap: anywhere; }
+.settings-diagnostics__tasks li strong { color: var(--text); font-size: 11px; text-align: right; }
+.settings-diagnostics__tasks li small { grid-column: 1 / -1; color: var(--muted); font-size: 10px; }
 
 @media (max-width: 840px) {
   .settings-grid { grid-template-columns: 1fr; }

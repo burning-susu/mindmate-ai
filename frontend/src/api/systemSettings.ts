@@ -1,4 +1,6 @@
-import { apiRequest } from './client'
+import { v7 as uuidv7 } from 'uuid'
+
+import { ApiError, ensureLocalSession, apiRequest, type ProblemDetail } from './client'
 
 export type StorageCategory = {
   key: string
@@ -91,6 +93,72 @@ export type PrivacyStatus = {
   }
 }
 
+export type DiagnosticsTask = {
+  diagnostic_id: string
+  task_type: string
+  status: string
+  phase: string | null
+  progress: number | null
+  created_at: string | null
+  started_at: string | null
+  completed_at: string | null
+  error_code: string | null
+}
+
+export type DiagnosticsProjection = {
+  schema_version: string
+  included_categories: string[]
+  excluded_categories: string[]
+  application: {
+    version: string
+    runtime: string
+    platform: string
+    platform_release: string
+    architecture: string
+    python_version: string
+  }
+  configuration: {
+    provider_mode: string
+    provider_model: string
+    data_directory_configured: boolean
+  }
+  storage: {
+    database: string
+    database_present: boolean
+    database_readable: boolean
+    data_directory_writable: boolean
+  }
+  tasks: {
+    total_count: number
+    status_counts: Record<string, number>
+    recent_count: number
+    truncated: boolean
+    time_range: { from: string | null; to: string | null }
+    items: DiagnosticsTask[]
+  }
+  privacy: {
+    local_only: boolean
+    auto_upload: boolean
+    notice: string
+  }
+}
+
+export type DiagnosticsPreview = {
+  schema_version: string
+  generated_at: string
+  estimated_size_bytes: number
+  included_categories: string[]
+  excluded_categories: string[]
+  time_range: { from: string | null; to: string | null }
+  task_summary: {
+    total_count: number
+    recent_count: number
+    truncated: boolean
+    status_counts: Record<string, number>
+  }
+  projection: DiagnosticsProjection
+}
+
 export function getStorageOverview(signal?: AbortSignal) {
   return apiRequest<StorageOverview>('/api/v1/system/storage', { signal })
 }
@@ -118,6 +186,46 @@ export function updateAiBudget(payload: {
 
 export function getPrivacyStatus(signal?: AbortSignal) {
   return apiRequest<PrivacyStatus>('/api/v1/system/privacy', { signal })
+}
+
+export function getDiagnosticsPreview(signal?: AbortSignal) {
+  return apiRequest<DiagnosticsPreview>('/api/v1/system/diagnostics/preview', { signal })
+}
+
+export async function downloadDiagnostics(filenameHint = 'mindmate-diagnostics.json') {
+  await ensureLocalSession()
+  const response = await fetch('/api/v1/system/diagnostics/export', {
+    method: 'GET',
+    credentials: 'same-origin',
+    cache: 'no-store',
+    headers: { 'X-Request-ID': uuidv7() },
+  })
+  if (!response.ok) {
+    let problem: ProblemDetail
+    try {
+      problem = (await response.json()) as ProblemDetail
+    } catch {
+      throw new Error('导出诊断包失败，请重试。')
+    }
+    throw new ApiError(response.status, problem)
+  }
+  const blob = await response.blob()
+  const disposition = response.headers.get('Content-Disposition') || ''
+  const match = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(disposition)
+  const rawName = match?.[1] || match?.[2]
+  const filename = rawName ? decodeURIComponent(rawName) : filenameHint
+  const url = URL.createObjectURL(blob)
+  try {
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = filename
+    anchor.rel = 'noopener'
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+  } finally {
+    URL.revokeObjectURL(url)
+  }
 }
 
 export function formatBytes(value: number | null | undefined) {

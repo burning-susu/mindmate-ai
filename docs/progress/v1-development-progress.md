@@ -585,3 +585,11 @@
 - Demo 可用性：隔离根为 `%TEMP%\mindmate-ai-stage63-isolated-demo-20260928`，API/Web 端口 `8014/5182`，Provider 为 Mock 且 `deepseek_called=false`；固定 READY 数据含 9 个文件、4 个知识库。主库 `01a0e5b3-defc-7aff-972e-28e980580771` 与索引版本 `01a0e5b3-ee6e-7876-ae04-cb6df0faab9e` 在同根重启后保持一致，准备计数不变；health、ready 与页面资源分别返回 `ok/200/200`。
 - 页面验收：自动 HTTP 请求只证明端口及页面资源可达，不代替 Chrome/Edge 点击。用户仍需完成来源问答、资料不足拒答、Mock 学习、刷新/重启恢复；之后再走查历史永久删除、多题定位与 test-only Provider。真实 DeepSeek/OpenAI 调用未执行，阶段 7/8 完整验收不因本批环境修复和自动测试而改变。
 - 报告：`docs/test-reports/stage-63-host-startup-and-demo.md`。用户级 Python 路径在当前执行沙箱中不可访问；仓库本地虚拟环境与 Demo 已验证可运行。
+
+### 第六十五批：本地诊断导出与历史页面验收交接
+
+- 状态：设置页诊断安全状态包的预览/主动导出已完成代码、契约和自动化回归；没有新的普通浏览器点击证据，因此 `DIAGNOSTICS_PREVIEW_EXPORT` 仍为 `PARTIAL`。历史永久删除 `HISTORY_PURGE_BROWSER`、三题定位 `HISTORY_MULTISTEP_BROWSER`、在线学习页面 `LEARNING_ONLINE_BROWSER`、日志保留 `LOG_RETENTION`、独立备份 Worker `BACKUP_WORKER`、周期费用对账 `BUDGET_RECONCILIATION` 均按真实范围保持 `PARTIAL`，阶段 8 完整 V1 仍 `PARTIAL`。
+- 实现：新增本地会话保护的 `GET /api/v1/system/diagnostics/preview` 与 `GET /api/v1/system/diagnostics/export`。两者共用一份白名单投影，包含版本/平台、非秘密 Provider/模型状态、SQLite 可读写状态、最近有限任务的类型/状态/阶段/时间/进度、脱敏错误码与诊断 ID/计数；明确排除日志、数据库快照、备份、文件正文、Prompt、问题/回答、模型响应、向量、Embedding、Key、Cookie、完整路径和 HTTP 原始请求。JSON 下载在内存中生成，失败不留下临时文件。
+- 前端：设置页新增预览、取消和导出交互，展示包含/排除类别、预计体积、任务摘要和“保存在本机，不自动上传”；`log_retention`、`storage_migration` 仍显示不可用，不提供假按钮。OpenAPI 与 `frontend/src/api/generated/openapi.ts` 已同步。
+- 验收：诊断后端 `4 passed`；前端全量 `15 files / 68 tests passed`；typecheck、lint、build、Ruff、OpenAPI 生成和 `git diff --check` 通过。阶段 8 相关后端组合测试报告 `33 passed`，另有既有历史边界用例在组合顺序中一次波动，隔离重跑通过；本批未修改历史删除实现。隔离 Mock Demo 准备与启动核对 READY 通过，未调用真实 Provider。
+- 浏览器：创建 Codex 内置浏览器标签页时审批层返回 `404 Not Found`（当前模型账户不支持 `gpt-5.6-luna`），未重复尝试，也未把 HTTP/pytest 当页面证据。详细报告见 `docs/test-reports/stage-65-diagnostics-history-acceptance.md`，普通 Windows 操作者需按报告最短清单补齐页面截图、合成 ID 和 Network 证据。

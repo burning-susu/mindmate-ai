@@ -3,6 +3,7 @@ import {
   Check,
   CircleAlert,
   Database,
+  Download,
   ExternalLink,
   Eye,
   EyeOff,
@@ -43,9 +44,11 @@ import {
 } from '../api/aiProvider'
 import { getEmbeddingModelStatus } from '../api/knowledgeBases'
 import {
+  downloadDiagnostics,
   formatBytes,
   getAiBudgetStatus,
   getAiUsageSummary,
+  getDiagnosticsPreview,
   getPrivacyStatus,
   getStorageOverview,
   updateAiBudget,
@@ -100,6 +103,9 @@ export default function SettingsPage() {
   const [budgetEnabled, setBudgetEnabled] = useState<boolean | null>(null)
   const [hardStop, setHardStop] = useState<string | null>(null)
   const [softRemind, setSoftRemind] = useState<string | null>(null)
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false)
+  const [diagnosticsMessage, setDiagnosticsMessage] = useState<string | null>(null)
+  const [diagnosticsError, setDiagnosticsError] = useState<string | null>(null)
 
   const query = useQuery({ queryKey: ['ai-provider'], queryFn: ({ signal }) => getAiProviderStatus(signal) })
   const storageQuery = useQuery({ queryKey: ['system-storage'], queryFn: ({ signal }) => getStorageOverview(signal) })
@@ -113,6 +119,12 @@ export default function SettingsPage() {
     queryFn: ({ signal }) => getAiBudgetStatus(signal),
   })
   const privacyQuery = useQuery({ queryKey: ['system-privacy'], queryFn: ({ signal }) => getPrivacyStatus(signal) })
+  const diagnosticsPreviewQuery = useQuery({
+    queryKey: ['system-diagnostics-preview'],
+    queryFn: ({ signal }) => getDiagnosticsPreview(signal),
+    enabled: false,
+    retry: false,
+  })
   const backupsQuery = useQuery({
     queryKey: ['system-backups'],
     queryFn: ({ signal }) => listBackups(signal),
@@ -224,6 +236,15 @@ export default function SettingsPage() {
     onError: (error) => {
       setBackupError(errorText(error))
     },
+  })
+  const diagnosticsDownloadMutation = useMutation({
+    mutationFn: () => downloadDiagnostics(),
+    onMutate: () => {
+      setDiagnosticsError(null)
+      setDiagnosticsMessage(null)
+    },
+    onSuccess: () => setDiagnosticsMessage('诊断包已开始下载，请保存在本机。'),
+    onError: (error) => setDiagnosticsError(errorText(error)),
   })
 
   async function handleDownloadBackup(backup: BackupRecord) {
@@ -817,6 +838,94 @@ export default function SettingsPage() {
                 <strong>{privacyQuery.data.secrets_policy.message}</strong>
               </li>
             </ul>
+          ) : null}
+          {privacyQuery.data?.diagnostics_export.available ? (
+            <div className="settings-diagnostics" aria-live="polite">
+              <p className="settings-hint">
+                诊断包只包含安全状态投影；预览与下载内容一致，保存在本机，不会自动上传。
+              </p>
+              <div className="settings-actions">
+                <button
+                  className="quiet-button"
+                  type="button"
+                  onClick={() => {
+                    if (diagnosticsOpen) {
+                      setDiagnosticsOpen(false)
+                      void queryClient.cancelQueries({ queryKey: ['system-diagnostics-preview'] })
+                      return
+                    }
+                    setDiagnosticsError(null)
+                    setDiagnosticsOpen(true)
+                    void diagnosticsPreviewQuery.refetch()
+                  }}
+                >
+                  <Eye size={15} aria-hidden="true" />
+                  {diagnosticsOpen ? '关闭诊断预览' : '预览诊断内容'}
+                </button>
+                <button
+                  className="primary-button"
+                  type="button"
+                  disabled={diagnosticsDownloadMutation.isPending}
+                  onClick={() => diagnosticsDownloadMutation.mutate()}
+                >
+                  <Download size={15} aria-hidden="true" />
+                  {diagnosticsDownloadMutation.isPending ? '正在准备诊断包' : '导出诊断包'}
+                </button>
+              </div>
+              {diagnosticsOpen && diagnosticsPreviewQuery.isFetching ? (
+                <LoadingBlock label="正在生成安全诊断预览" />
+              ) : null}
+              {diagnosticsOpen && diagnosticsPreviewQuery.isError ? (
+                <p className="settings-error-text" role="alert">
+                  {errorText(diagnosticsPreviewQuery.error)}
+                </p>
+              ) : null}
+              {diagnosticsOpen && diagnosticsPreviewQuery.data ? (
+                <div className="settings-diagnostics__preview">
+                  <div className="settings-stat-list">
+                    <div>
+                      <span>预计体积</span>
+                      <strong>{formatBytes(diagnosticsPreviewQuery.data.estimated_size_bytes)}</strong>
+                    </div>
+                    <div>
+                      <span>任务记录</span>
+                      <strong>
+                        {diagnosticsPreviewQuery.data.task_summary.recent_count} /{' '}
+                        {diagnosticsPreviewQuery.data.task_summary.total_count}
+                        {diagnosticsPreviewQuery.data.task_summary.truncated ? '（仅最近 50 条）' : ''}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>生成时间</span>
+                      <strong>{formatTime(diagnosticsPreviewQuery.data.generated_at)}</strong>
+                    </div>
+                  </div>
+                  <p className="settings-hint">包含：{diagnosticsPreviewQuery.data.included_categories.join('；')}</p>
+                  <p className="settings-hint">明确排除：{diagnosticsPreviewQuery.data.excluded_categories.join('；')}</p>
+                  <details>
+                    <summary>查看脱敏任务状态</summary>
+                    {diagnosticsPreviewQuery.data.projection.tasks.items.length > 0 ? (
+                      <ul className="settings-diagnostics__tasks">
+                        {diagnosticsPreviewQuery.data.projection.tasks.items.map((task) => (
+                          <li key={task.diagnostic_id}>
+                            <span>{task.task_type}</span>
+                            <strong>{task.status}{task.phase ? ` · ${task.phase}` : ''}</strong>
+                            {task.error_code ? <small>原因码：{task.error_code}</small> : null}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="settings-hint">暂无任务记录。</p>
+                    )}
+                  </details>
+                  <button className="quiet-button" type="button" onClick={() => setDiagnosticsOpen(false)}>
+                    取消预览
+                  </button>
+                </div>
+              ) : null}
+              {diagnosticsMessage ? <p className="settings-success-text"><Check size={14} aria-hidden="true" />{diagnosticsMessage}</p> : null}
+              {diagnosticsError ? <p className="settings-error-text" role="alert"><CircleAlert size={14} aria-hidden="true" />{diagnosticsError}</p> : null}
+            </div>
           ) : null}
         </section>
 

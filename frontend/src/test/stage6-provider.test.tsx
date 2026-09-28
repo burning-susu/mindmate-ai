@@ -107,9 +107,30 @@ function settingsAuxiliaryResponse(url: string) {
   if (url.endsWith('/api/v1/system/privacy')) {
     return response({
       log_retention: { available: false, message: '日志清理尚未验收' },
-      diagnostics_export: { available: false, message: '诊断导出尚未提供' },
+      diagnostics_export: { available: true, message: '可预览并导出安全状态包；仅保存在本机，不自动上传。' },
       storage_migration: { available: false, message: '存储迁移尚未实现' },
       secrets_policy: { api_key_in_sqlite: false, api_key_in_backup: false, message: 'Key 仅存系统凭据' },
+    })
+  }
+  if (url.endsWith('/api/v1/system/diagnostics/preview')) {
+    return response({
+      schema_version: 'mindmate-diagnostics.v1',
+      generated_at: '2026-09-28T10:00:00Z',
+      estimated_size_bytes: 640,
+      included_categories: ['应用版本与平台运行状态', '非秘密 Provider/模型配置状态'],
+      excluded_categories: ['原始日志、数据库快照、备份、文件与解析正文'],
+      time_range: { from: null, to: null },
+      task_summary: { total_count: 0, recent_count: 0, truncated: false, status_counts: {} },
+      projection: {
+        schema_version: 'mindmate-diagnostics.v1',
+        included_categories: ['应用版本与平台运行状态', '非秘密 Provider/模型配置状态'],
+        excluded_categories: ['原始日志、数据库快照、备份、文件与解析正文'],
+        application: { version: '0.1.0', runtime: 'local', platform: 'Windows', platform_release: '11', architecture: 'AMD64', python_version: '3.12.0' },
+        configuration: { provider_mode: 'mock', provider_model: 'deepseek-flash', data_directory_configured: true },
+        storage: { database: 'sqlite', database_present: true, database_readable: true, data_directory_writable: true },
+        tasks: { total_count: 0, status_counts: {}, recent_count: 0, truncated: false, time_range: { from: null, to: null }, items: [] },
+        privacy: { local_only: true, auto_upload: false, notice: '保存在本机，不自动上传。' },
+      },
     })
   }
   if (url.endsWith('/api/v1/embedding-model')) {
@@ -247,6 +268,27 @@ describe('stage 6 AI provider configuration', () => {
     await waitFor(() => expect(calls).toEqual([JSON.stringify({ mode: 'deepseek' })]))
     expect(await screen.findByText('DeepSeek 在线生成、会外发当前问题与必要的少量证据。')).toBeInTheDocument()
     expect(calls.some((body) => body.includes('api_key'))).toBe(false)
+  })
+
+  it('previews the safe diagnostics projection and lets the user cancel it', async () => {
+    queryClient.clear()
+    window.history.pushState({}, '', '/settings')
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/system/session')) return response({ status: 'ready' })
+      const auxiliary = settingsAuxiliaryResponse(url)
+      if (auxiliary) return auxiliary
+      if (url.endsWith('/api/v1/ai/provider')) return response(initialStatus)
+      return response({ status: 'ok', version: '0.1.0' })
+    }))
+
+    render(<BrowserRouter><App /></BrowserRouter>)
+    const preview = await screen.findByRole('button', { name: '预览诊断内容' })
+    fireEvent.click(preview)
+    expect(await screen.findByText(/包含：应用版本与平台运行状态；非秘密 Provider\/模型配置状态/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '取消预览' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '取消预览' }))
+    await waitFor(() => expect(screen.queryByText(/包含：应用版本与平台运行状态/)).not.toBeInTheDocument())
   })
 
   it('labels mock chat and blocks online send until the user confirms the estimate', async () => {
