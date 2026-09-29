@@ -390,3 +390,14 @@
 - 自动化：前端全量 `16 files / 84 tests passed`，typecheck、lint、build 通过；后端阶段 4 文件测试 `13 passed`，阶段 5 知识库测试 `13 passed`，Ruff、compileall、`git diff --check` 通过。构建主 JS `590.42 kB`，保留既有 chunk warning。
 - 门禁：`KNOWLEDGE_BASE_INTAKE_CODE=PASS`、`KNOWLEDGE_BASE_INTAKE_FRONTEND=PASS`、`KNOWLEDGE_BASE_INTAKE_BACKEND=PASS`；`DEMO_STABLE=PASS` 仅沿用第 42/64 批，本批未做普通浏览器复测，`KNOWLEDGE_BASE_INTAKE_BROWSER=BROWSER_PARTIAL`；`STAGE8_FULL_V1=PARTIAL`。没有真实 Key、Provider 请求、费用或模型下载。
 - 报告与变更：[stage-77-knowledge-base-intake.md](../test-reports/stage-77-knowledge-base-intake.md)、[CHG-20260929-KNOWLEDGE-BASE-INTAKE.md](../project/changes/CHG-20260929-KNOWLEDGE-BASE-INTAKE.md)。本轮收尾后按最终交付命令核对中文提交和远端 SHA；下一批唯一优先主题是普通 Windows Chrome/Edge Guest profile 复测建库混合导入、三种重复决策、刷新恢复和索引等待提示。
+
+## 第七十八批交接
+
+- 本批目标：完成求职 Demo 最终隔离走查，补齐 Windows 一页式演示说明，并只修复影响主链路的真实故障。
+- 进场分支 `feat/v1-bootstrap`，本地与 `origin/feat/v1-bootstrap` 均为 `e3d42d8e8dd08b1e6a8dfbf4f3f64a6132d355b0`；第 77 批提交已在本地和远端，无待补推送。
+- 隔离运行：`build/stage78-demo`、API `127.0.0.1:8018`、Web `127.0.0.1:5188`，固定本地 ONNX 为 `READY`，Provider 为 Mock；无真实 Key、外部请求、费用或模型下载。空库、混合建库、已有文件成员、两次上传、索引 READY、正例引用、资料外拒答、1 题学习/反馈/总结和同根重启证据见 `docs/test-reports/stage-78-demo-final-walkthrough.md`。
+- 真实修复：重复决策接口原地改写 JSON 检查点，刷新后仍显示 `PENDING_DECISION`。`backend/src/mindmate/api/files.py` 现在对决策上下文和 item 深拷贝后持久化并递增检查点版本；阶段 4 文件契约新增刷新回归，复用和跳过均在新任务上通过。
+- 自动化：前端 `16 files / 84 tests passed`，typecheck/lint/build 通过；后端阶段 4 文件测试 `13 passed`，Ruff、compileall、`git diff --check` 通过。Web 根路径 `200`、API health `ok`。
+- 浏览器：普通 Chrome/Edge 无法绑定；内置浏览器标签页创建被审批服务 `404` 拒绝，未绕过或重复提权。`STAGE78_DEMO_BROWSER=BROWSER_PARTIAL`、最终人工状态 `READY_FOR_USER_BROWSER_CHECK`，不把 API/自动化记为 `BROWSER_PASS`。
+- 交付物：[第七十八批 Windows 本机求职 Demo 说明](../demo/第七十八批Windows本机求职Demo说明.md)、[第七十八批最终走查报告](../test-reports/stage-78-demo-final-walkthrough.md)。完整 V1 仍 `PARTIAL`：Windows 恢复锁、Credential Manager、打包入口、完整复习计划、真实 Provider smoke 和账单对账未改变。
+- 第 79 批建议：不需要。只有普通浏览器人工短卡发现具体阻断时，才按该故障单独回补；不自动开始阶段 9/10。

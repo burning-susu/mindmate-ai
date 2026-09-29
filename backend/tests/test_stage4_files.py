@@ -154,6 +154,12 @@ def test_knowledge_base_import_reuses_source_and_persists_membership(file_client
     )
     assert decided.status_code == 200
     assert decided.json()["items"][0]["file_id"] == first_file_id
+    refreshed_decided = client.get(f"/api/v1/file-imports/{duplicate_payload['import_id']}")
+    assert refreshed_decided.status_code == 200
+    assert refreshed_decided.json()["status"] == "COMPLETED"
+    assert refreshed_decided.json()["items"][0]["status"] == "REUSED"
+    assert refreshed_decided.json()["items"][0]["duplicate_status"] == "REUSED"
+    assert refreshed_decided.json()["items"][0]["file_id"] == first_file_id
 
     members = client.get(f"/api/v1/knowledge-bases/{knowledge_base_id}/files")
     assert members.status_code == 200
@@ -169,6 +175,29 @@ def test_knowledge_base_import_reuses_source_and_persists_membership(file_client
     assert direct.status_code == 202
     direct_file_id = direct.json()["items"][0]["file_id"]
     assert direct_file_id != first_file_id
+    assert {item["file_id"] for item in client.get(f"/api/v1/knowledge-bases/{knowledge_base_id}/files").json()["items"]} == {first_file_id, direct_file_id}
+
+    skipped = client.post(
+        "/api/v1/file-imports",
+        headers=write_headers("import-context-skip"),
+        data={"knowledge_base_id": knowledge_base_id},
+        files={"files": ("skip.txt", b"shared-source", "text/plain")},
+    )
+    assert skipped.status_code == 202
+    skipped_payload = skipped.json()
+    assert skipped_payload["status"] == "BLOCKED"
+    skipped_decision = client.post(
+        f"/api/v1/file-imports/{skipped_payload['import_id']}/duplicate-decisions",
+        headers=write_headers("import-context-skip-decision"),
+        json={"decisions": [{"item_index": 0, "decision": "SKIP"}]},
+    )
+    assert skipped_decision.status_code == 200
+    refreshed_skipped = client.get(f"/api/v1/file-imports/{skipped_payload['import_id']}")
+    assert refreshed_skipped.status_code == 200
+    assert refreshed_skipped.json()["status"] == "COMPLETED"
+    assert refreshed_skipped.json()["items"][0]["status"] == "SKIPPED"
+    assert refreshed_skipped.json()["items"][0]["duplicate_status"] == "SKIPPED"
+    assert refreshed_skipped.json()["items"][0]["file_id"] is None
     assert {item["file_id"] for item in client.get(f"/api/v1/knowledge-bases/{knowledge_base_id}/files").json()["items"]} == {first_file_id, direct_file_id}
 
 

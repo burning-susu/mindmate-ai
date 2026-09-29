@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import mimetypes
 from collections.abc import Iterator
+from copy import deepcopy
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -1014,9 +1015,12 @@ def decide_duplicates(
         raise FileApiError("IMPORT_NOT_FOUND", "导入任务不存在。", 404)
     if task.status != "BLOCKED":
         return _task_payload(task)
-    checkpoint = task.checkpoint_json if isinstance(task.checkpoint_json, dict) else {}
-    context = checkpoint.get("context", {})
-    items = _task_items(task)
+    checkpoint = deepcopy(task.checkpoint_json) if isinstance(task.checkpoint_json, dict) else {}
+    context = deepcopy(checkpoint.get("context", {}))
+    # The item dictionaries are nested inside the SQLAlchemy JSON value. Work
+    # on a detached copy so the old attribute value remains distinguishable
+    # when the resolved decision is persisted after refresh.
+    items = deepcopy(_task_items(task))
     decisions = {decision.item_index: decision.decision for decision in payload.decisions}
     for item in items:
         if item.get("duplicate_status") != "PENDING_DECISION":
@@ -1085,6 +1089,7 @@ def decide_duplicates(
         item.get("status") == "IMPORTED" and item.get("file_id") for item in items
     )
     task.checkpoint_json = {"context": context, "items": items}
+    task.checkpoint_version += 1
     if pending:
         task.status = "BLOCKED"
         task.phase = "WAITING_DUPLICATE_DECISION"
