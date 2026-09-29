@@ -644,6 +644,12 @@ export interface components {
     "created_at": string;
     "updated_at": string;
     "row_version": number;
+    "summary_available"?: boolean;
+    "summary_text"?: string | null;
+    "end_reason"?: string | null;
+    "correct_count"?: number;
+    "partial_count"?: number;
+    "incorrect_count"?: number;
     "locations"?: Array<components["HistoryLocation"]>
   };
   "LearningHistoryListResponse": {
@@ -737,7 +743,8 @@ export interface components {
     "plan": components["LearningPlanResponse"] | null;
     "question": components["LearningQuestionResponse"] | null;
     "questions": Array<components["LearningQuestionResponse"]>;
-    "result": components["LearningSessionResultResponse"] | null
+    "result": components["LearningSessionResultResponse"] | null;
+    "summary": components["LearningSessionSummaryResponse"] | null
   };
   "LearningSessionResultResponse": {
     "planned_question_count": number;
@@ -746,6 +753,75 @@ export interface components {
     "incorrect_count": number;
     "unjudged_count": number;
     "end_reason": string | null
+  };
+  "LearningSessionSummaryResponse": {
+    "summary_version": number;
+    "snapshot_origin": string;
+    "summary_text": string;
+    "topic": string;
+    "goal_text": string;
+    "goal_type": string;
+    "scope": components["LearningSummaryScopeResponse"];
+    "started_at": string | null;
+    "ended_at": string | null;
+    "end_reason": string | null;
+    "planned_question_count": number;
+    "completed_question_count": number;
+    "correct_count": number;
+    "partial_count": number;
+    "incorrect_count": number;
+    "skipped_count": number;
+    "unjudged_count": number;
+    "unanswered_count": number;
+    "hints_used": number;
+    "hints_by_level": Record<string, unknown>;
+    "retry_count": number;
+    "knowledge_points": Array<components["LearningSummaryKnowledgePointResponse"]>;
+    "citations": Array<components["LearningSummaryCitationResponse"]>;
+    "review_plan": components["LearningSummaryReviewPlanResponse"];
+    "next_step": string;
+    "generated_at": string
+  };
+  "LearningSummaryCitationResponse": {
+    "citation_id": string;
+    "question_id": string;
+    "feedback_id": string;
+    "display_number": number;
+    "file_name": string;
+    "file_id": string | null;
+    "chunk_id": string | null;
+    "line_start": number | null;
+    "line_end": number | null;
+    "page_start": number | null;
+    "page_end": number | null;
+    "excerpt": string | null;
+    "source_status": string;
+    "can_open_source": boolean
+  };
+  "LearningSummaryFileResponse": {
+    "file_id": string;
+    "file_name": string;
+    "source_status": string
+  };
+  "LearningSummaryKnowledgePointResponse": {
+    "knowledge_point_id": string;
+    "title": string;
+    "question_count": number;
+    "result_counts": Record<string, unknown>;
+    "status": string
+  };
+  "LearningSummaryReviewPlanResponse": {
+    "status": string;
+    "intervals_days": Array<number>;
+    "message": string
+  };
+  "LearningSummaryScopeResponse": {
+    "knowledge_base_id": string;
+    "knowledge_base_name": string;
+    "index_version_id": string | null;
+    "source_set_hash": string | null;
+    "file_ids": Array<string>;
+    "files": Array<components["LearningSummaryFileResponse"]>
   };
   "MessageCreateRequest": {
     "content": string;

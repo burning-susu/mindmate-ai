@@ -784,6 +784,28 @@ class LearningSession(Base):
     )
 
 
+class LearningSessionSummary(Base):
+    """Immutable, local summary snapshot for a completed learning session."""
+
+    __tablename__ = "learning_session_summaries"
+    __table_args__ = (
+        UniqueConstraint(
+            "learning_session_id", name="uq_learning_session_summary_session"
+        ),
+        Index("ix_learning_session_summaries_session", "learning_session_id"),
+    )
+
+    summary_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    learning_session_id: Mapped[str] = mapped_column(
+        ForeignKey("learning_sessions.learning_session_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    summary_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    snapshot_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class LearningScope(Base):
     __tablename__ = "learning_scopes"
     __table_args__ = (

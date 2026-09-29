@@ -9683,6 +9683,48 @@
             "type": "integer",
             "title": "Row Version"
           },
+          "summary_available": {
+            "type": "boolean",
+            "title": "Summary Available",
+            "default": false
+          },
+          "summary_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary Text"
+          },
+          "end_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Reason"
+          },
+          "correct_count": {
+            "type": "integer",
+            "title": "Correct Count",
+            "default": 0
+          },
+          "partial_count": {
+            "type": "integer",
+            "title": "Partial Count",
+            "default": 0
+          },
+          "incorrect_count": {
+            "type": "integer",
+            "title": "Incorrect Count",
+            "default": 0
+          },
           "locations": {
             "items": {
               "$ref": "#/components/schemas/HistoryLocation"
@@ -10279,6 +10321,16 @@
                 "type": "null"
               }
             ]
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LearningSessionSummaryResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -10304,7 +10356,8 @@
           "plan",
           "question",
           "questions",
-          "result"
+          "result",
+          "summary"
         ],
         "title": "LearningSessionResponse"
       },
@@ -10352,6 +10405,445 @@
           "end_reason"
         ],
         "title": "LearningSessionResultResponse"
+      },
+      "LearningSessionSummaryResponse": {
+        "properties": {
+          "summary_version": {
+            "type": "integer",
+            "title": "Summary Version"
+          },
+          "snapshot_origin": {
+            "type": "string",
+            "title": "Snapshot Origin"
+          },
+          "summary_text": {
+            "type": "string",
+            "title": "Summary Text"
+          },
+          "topic": {
+            "type": "string",
+            "title": "Topic"
+          },
+          "goal_text": {
+            "type": "string",
+            "title": "Goal Text"
+          },
+          "goal_type": {
+            "type": "string",
+            "title": "Goal Type"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/LearningSummaryScopeResponse"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "end_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Reason"
+          },
+          "planned_question_count": {
+            "type": "integer",
+            "title": "Planned Question Count"
+          },
+          "completed_question_count": {
+            "type": "integer",
+            "title": "Completed Question Count"
+          },
+          "correct_count": {
+            "type": "integer",
+            "title": "Correct Count"
+          },
+          "partial_count": {
+            "type": "integer",
+            "title": "Partial Count"
+          },
+          "incorrect_count": {
+            "type": "integer",
+            "title": "Incorrect Count"
+          },
+          "skipped_count": {
+            "type": "integer",
+            "title": "Skipped Count"
+          },
+          "unjudged_count": {
+            "type": "integer",
+            "title": "Unjudged Count"
+          },
+          "unanswered_count": {
+            "type": "integer",
+            "title": "Unanswered Count"
+          },
+          "hints_used": {
+            "type": "integer",
+            "title": "Hints Used"
+          },
+          "hints_by_level": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Hints By Level"
+          },
+          "retry_count": {
+            "type": "integer",
+            "title": "Retry Count"
+          },
+          "knowledge_points": {
+            "items": {
+              "$ref": "#/components/schemas/LearningSummaryKnowledgePointResponse"
+            },
+            "type": "array",
+            "title": "Knowledge Points"
+          },
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/LearningSummaryCitationResponse"
+            },
+            "type": "array",
+            "title": "Citations"
+          },
+          "review_plan": {
+            "$ref": "#/components/schemas/LearningSummaryReviewPlanResponse"
+          },
+          "next_step": {
+            "type": "string",
+            "title": "Next Step"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "summary_version",
+          "snapshot_origin",
+          "summary_text",
+          "topic",
+          "goal_text",
+          "goal_type",
+          "scope",
+          "started_at",
+          "ended_at",
+          "end_reason",
+          "planned_question_count",
+          "completed_question_count",
+          "correct_count",
+          "partial_count",
+          "incorrect_count",
+          "skipped_count",
+          "unjudged_count",
+          "unanswered_count",
+          "hints_used",
+          "hints_by_level",
+          "retry_count",
+          "knowledge_points",
+          "citations",
+          "review_plan",
+          "next_step",
+          "generated_at"
+        ],
+        "title": "LearningSessionSummaryResponse"
+      },
+      "LearningSummaryCitationResponse": {
+        "properties": {
+          "citation_id": {
+            "type": "string",
+            "title": "Citation Id"
+          },
+          "question_id": {
+            "type": "string",
+            "title": "Question Id"
+          },
+          "feedback_id": {
+            "type": "string",
+            "title": "Feedback Id"
+          },
+          "display_number": {
+            "type": "integer",
+            "title": "Display Number"
+          },
+          "file_name": {
+            "type": "string",
+            "title": "File Name"
+          },
+          "file_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Id"
+          },
+          "chunk_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunk Id"
+          },
+          "line_start": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line Start"
+          },
+          "line_end": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line End"
+          },
+          "page_start": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Start"
+          },
+          "page_end": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page End"
+          },
+          "excerpt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Excerpt"
+          },
+          "source_status": {
+            "type": "string",
+            "title": "Source Status"
+          },
+          "can_open_source": {
+            "type": "boolean",
+            "title": "Can Open Source"
+          }
+        },
+        "type": "object",
+        "required": [
+          "citation_id",
+          "question_id",
+          "feedback_id",
+          "display_number",
+          "file_name",
+          "file_id",
+          "chunk_id",
+          "line_start",
+          "line_end",
+          "page_start",
+          "page_end",
+          "excerpt",
+          "source_status",
+          "can_open_source"
+        ],
+        "title": "LearningSummaryCitationResponse"
+      },
+      "LearningSummaryFileResponse": {
+        "properties": {
+          "file_id": {
+            "type": "string",
+            "title": "File Id"
+          },
+          "file_name": {
+            "type": "string",
+            "title": "File Name"
+          },
+          "source_status": {
+            "type": "string",
+            "title": "Source Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file_id",
+          "file_name",
+          "source_status"
+        ],
+        "title": "LearningSummaryFileResponse"
+      },
+      "LearningSummaryKnowledgePointResponse": {
+        "properties": {
+          "knowledge_point_id": {
+            "type": "string",
+            "title": "Knowledge Point Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "question_count": {
+            "type": "integer",
+            "title": "Question Count"
+          },
+          "result_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Result Counts"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "knowledge_point_id",
+          "title",
+          "question_count",
+          "result_counts",
+          "status"
+        ],
+        "title": "LearningSummaryKnowledgePointResponse"
+      },
+      "LearningSummaryReviewPlanResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "intervals_days": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Intervals Days"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "intervals_days",
+          "message"
+        ],
+        "title": "LearningSummaryReviewPlanResponse"
+      },
+      "LearningSummaryScopeResponse": {
+        "properties": {
+          "knowledge_base_id": {
+            "type": "string",
+            "title": "Knowledge Base Id"
+          },
+          "knowledge_base_name": {
+            "type": "string",
+            "title": "Knowledge Base Name"
+          },
+          "index_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Index Version Id"
+          },
+          "source_set_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Set Hash"
+          },
+          "file_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "File Ids"
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/LearningSummaryFileResponse"
+            },
+            "type": "array",
+            "title": "Files"
+          }
+        },
+        "type": "object",
+        "required": [
+          "knowledge_base_id",
+          "knowledge_base_name",
+          "index_version_id",
+          "source_set_hash",
+          "file_ids",
+          "files"
+        ],
+        "title": "LearningSummaryScopeResponse"
       },
       "MessageCreateRequest": {
         "properties": {

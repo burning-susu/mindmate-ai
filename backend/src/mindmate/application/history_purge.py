@@ -33,6 +33,7 @@ from mindmate.infrastructure.models import (
     LearningScope,
     LearningScopeFile,
     LearningSession,
+    LearningSessionSummary,
     Message,
     QuestionEvidence,
 )
@@ -568,6 +569,11 @@ def _purge_learning_session(
         _maybe_delete_knowledge_point(session, point_id)
 
     _clear_owner(session, OWNER_LEARNING, learning_session_id)
+    session.execute(
+        delete(LearningSessionSummary).where(
+            LearningSessionSummary.learning_session_id == learning_session_id
+        )
+    )
     deleted = session.execute(
         delete(LearningSession).where(
             LearningSession.learning_session_id == learning_session_id,

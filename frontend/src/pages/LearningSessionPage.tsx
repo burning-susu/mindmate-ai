@@ -70,6 +70,7 @@ export default function LearningSessionPage() {
   const [searchParams] = useSearchParams()
   const focusQuestionId = searchParams.get('question') ?? ''
   const focusFeedback = searchParams.get('focus') === 'feedback'
+  const focusSummary = searchParams.get('focus') === 'summary'
   const queryClient = useQueryClient()
   const sessionQuery = useQuery({
     queryKey: ['learning-session', sessionId],
@@ -150,14 +151,16 @@ export default function LearningSessionPage() {
     }
   }, [sessionQuestionId, sessionStatus])
   useEffect(() => {
-    if (!focusQuestionId) return
-    const targetId = focusFeedback
+    if (!focusQuestionId && !focusSummary) return
+    const targetId = focusSummary
+      ? 'learning-summary'
+      : focusFeedback
       ? `learning-feedback-${focusQuestionId}`
       : `learning-question-${focusQuestionId}`
     const node = document.getElementById(targetId)
     node?.scrollIntoView({ block: 'center' })
     node?.classList.add('history-target')
-  }, [focusFeedback, focusQuestionId, question])
+  }, [focusFeedback, focusQuestionId, focusSummary, question, session?.summary])
   const feedback = question?.feedback ?? pendingFeedback
   const answered = Boolean(feedback)
   const blocked = session
@@ -533,6 +536,44 @@ export default function LearningSessionPage() {
                 </article>
               )
             })}
+        </section>
+      )}
+      {session.summary && (
+        <section className="detail-section learning-session-summary" id="learning-summary" aria-label="学习总结" tabIndex={-1}>
+          <h2>学习总结</h2>
+          <p>{session.summary.summary_text}</p>
+          <p>
+            时间：{session.summary.started_at ? new Date(session.summary.started_at).toLocaleString('zh-CN', { hour12: false }) : '暂无数据'}
+            {' · '}
+            结束：{session.summary.ended_at ? new Date(session.summary.ended_at).toLocaleString('zh-CN', { hour12: false }) : '暂无数据'}
+            {' · '}{endReasonLabel(session.summary.end_reason)}
+          </p>
+          <p>
+            正确 {session.summary.correct_count} · 部分正确 {session.summary.partial_count}
+            {' · '}错误 {session.summary.incorrect_count} · 跳过 {session.summary.skipped_count}
+            {' · '}无法判定 {session.summary.unjudged_count} · 未作答 {session.summary.unanswered_count}
+          </p>
+          <p>提示 {session.summary.hints_used} 次 · 重试 {session.summary.retry_count} 次</p>
+          <h3>知识点</h3>
+          {session.summary.knowledge_points.length > 0 ? (
+            <ul>
+              {session.summary.knowledge_points.map((point) => (
+                <li key={point.knowledge_point_id}>{point.title}：{point.status}（{point.question_count} 题）</li>
+              ))}
+            </ul>
+          ) : <p>暂无可确认知识点。</p>}
+          <h3>关键引用</h3>
+          {session.summary.citations.length > 0 ? (
+            <div className="citation-strip">
+              {session.summary.citations.map((citation) => (
+                <button className="citation-chip" type="button" key={citation.citation_id} onClick={() => setSelectedCitation(citation)}>
+                  [{citation.display_number}] {citation.file_name} · {citation.source_status === 'AVAILABLE' ? '可打开' : '历史来源已失效'}
+                </button>
+              ))}
+            </div>
+          ) : <p>暂无已保存引用。</p>}
+          <p>下一步：{session.summary.next_step}</p>
+          <p>复习安排：{session.summary.review_plan.message}</p>
         </section>
       )}
       {session.result && (

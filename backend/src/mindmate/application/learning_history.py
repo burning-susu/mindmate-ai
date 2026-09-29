@@ -28,6 +28,7 @@ from mindmate.infrastructure.models import (
     LearningScope,
     LearningScopeFile,
     LearningSession,
+    LearningSessionSummary,
 )
 
 _AVAILABLE = "AVAILABLE"
@@ -221,6 +222,12 @@ def _item(session: Session, record: LearningSession) -> dict[str, object]:
             or 0
         )
     status = "SOURCE_INVALID" if source_status != _AVAILABLE else record.status
+    summary = session.scalar(
+        select(LearningSessionSummary).where(
+            LearningSessionSummary.learning_session_id == record.learning_session_id
+        )
+    )
+    snapshot = summary.snapshot_json if summary is not None else {}
     return {
         "learning_session_id": record.learning_session_id,
         "topic": record.topic,
@@ -234,6 +241,12 @@ def _item(session: Session, record: LearningSession) -> dict[str, object]:
         "created_at": record.created_at,
         "updated_at": record.updated_at,
         "row_version": record.row_version,
+        "summary_available": record.status in {"COMPLETED", "FAILED", "SOURCE_INVALID"},
+        "summary_text": snapshot.get("summary_text"),
+        "end_reason": record.end_reason,
+        "correct_count": int(snapshot.get("correct_count", 0) or 0),
+        "partial_count": int(snapshot.get("partial_count", 0) or 0),
+        "incorrect_count": int(snapshot.get("incorrect_count", 0) or 0),
         "locations": [],
     }
 

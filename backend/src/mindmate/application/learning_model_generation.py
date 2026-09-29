@@ -54,6 +54,7 @@ from mindmate.application.learning_sessions import (
     update_learning_plan_after_attempt,
     utc_now,
 )
+from mindmate.application.learning_summary import ensure_learning_summary
 from mindmate.application.provider_configuration import (
     DEEPSEEK_SECRET_REFERENCE,
     OPENAI_PROVIDER_ID,
@@ -232,6 +233,13 @@ def recover_dispatched_learning_operations(session: Session) -> int:
             record.updated_at = now
             record.row_version += 1
     if rows or pending:
+        for terminal in session.scalars(
+            select(LearningSession).where(
+                LearningSession.status.in_(["COMPLETED", "FAILED", "SOURCE_INVALID"])
+            )
+        ):
+            ensure_learning_summary(session, terminal)
+            sync_learning_search(session, terminal.learning_session_id)
         session.commit()
     return len(rows) + len(pending)
 
@@ -852,6 +860,7 @@ def submit_provider_learning_attempt(
         session.commit()
     if not excerpts:
         feedback.explanation = UNAVAILABLE_MODEL
+        ensure_learning_summary(session, record)
         session.commit()
         return attempt
     user_text = _feedback_user_text(
@@ -1482,6 +1491,7 @@ def _bind_score_citations(
         if item.source_snapshot_id
     ]
     if not snapshots:
+        ensure_learning_summary(session, record)
         session.commit()
         return
     try:
@@ -1494,6 +1504,7 @@ def _bind_score_citations(
     except CitationBindingError:
         session.rollback()
         return
+    ensure_learning_summary(session, record)
     sync_learning_search(session, record.learning_session_id)
     session.commit()
 

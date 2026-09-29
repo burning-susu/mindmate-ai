@@ -77,6 +77,12 @@ class LearningHistoryItem(BaseModel):
     created_at: datetime
     updated_at: datetime
     row_version: int
+    summary_available: bool = False
+    summary_text: str | None = None
+    end_reason: str | None = None
+    correct_count: int = 0
+    partial_count: int = 0
+    incorrect_count: int = 0
     locations: list[HistoryLocation] = Field(default_factory=list)
 
 
@@ -111,7 +117,13 @@ _CONVERSATION_SOURCES = {
     "PARTIAL_SOURCE",
     "SOURCE_OUT_OF_SCOPE",
 }
-_LEARNING_STATUSES = {"PREPARING", "IN_PROGRESS", "FAILED", "SOURCE_INVALID"}
+_LEARNING_STATUSES = {
+    "PREPARING",
+    "IN_PROGRESS",
+    "COMPLETED",
+    "FAILED",
+    "SOURCE_INVALID",
+}
 _LEARNING_SOURCES = {
     "AVAILABLE",
     "SOURCE_DELETED",

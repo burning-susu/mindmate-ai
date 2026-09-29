@@ -39,6 +39,7 @@ const LEARNING_STATUSES = [
   ['', '全部状态'],
   ['IN_PROGRESS', '进行中'],
   ['PREPARING', '准备中'],
+  ['COMPLETED', '已完成'],
   ['FAILED', '未能出题'],
   ['SOURCE_INVALID', '来源失效'],
 ] as const
@@ -83,6 +84,7 @@ function learningStatusLabel(status: string, answeredCount: number): string {
   if (status === 'SOURCE_INVALID') return '资料范围已失效'
   if (status === 'FAILED') return '未能出题'
   if (status === 'PREPARING') return '准备中'
+  if (status === 'COMPLETED') return '已完成'
   if (answeredCount > 0) return '已作答'
   if (status === 'IN_PROGRESS') return '未作答'
   return status
@@ -179,6 +181,9 @@ function locationHref(kind: 'conversation' | 'learning', ownerId: string, locati
   }
   if (location.section === 'knowledge_point') {
     return `/learning/session/${ownerId}#learning-knowledge-point`
+  }
+  if (location.section === 'summary') {
+    return `/learning/session/${ownerId}?focus=summary`
   }
   return `/learning/session/${ownerId}`
 }
@@ -690,11 +695,16 @@ function LearningHistory({ trash }: { trash: boolean }) {
     setSearchParams(next, { replace: true })
   }
 
-  const openSession = (learningSessionId: string) => {
+  const openSession = (item: LearningHistoryItem) => {
+    const learningSessionId = item.learning_session_id
     if (openingRef.current === learningSessionId) return
     openingRef.current = learningSessionId
     setOpeningId(learningSessionId)
-    navigate(`/learning/session/${learningSessionId}`)
+    navigate(
+      item.status === 'COMPLETED'
+        ? `/learning/session/${learningSessionId}?focus=summary`
+        : `/learning/session/${learningSessionId}`,
+    )
   }
 
   const confirmTrash = async () => {
@@ -815,7 +825,7 @@ function LearningHistory({ trash }: { trash: boolean }) {
               className="history-item__open"
               type="button"
               disabled={openingId === item.learning_session_id}
-              onClick={() => openSession(item.learning_session_id)}
+              onClick={() => openSession(item)}
             >
               <GraduationCap size={16} aria-hidden="true" />
               <span>
@@ -826,6 +836,7 @@ function LearningHistory({ trash }: { trash: boolean }) {
               <span className="history-item__meta">
                 <em>{learningStatusLabel(item.status, item.answered_count)} · {sourceStatusLabel(item.source_status)}</em>
                 <em>已作答 {item.answered_count} / {item.target_question_count}</em>
+                {item.status === 'COMPLETED' ? <em>查看总结</em> : null}
                 <em>{formatTime(item.updated_at)}</em>
               </span>
               {openingId === item.learning_session_id ? <span>正在打开</span> : <History size={14} aria-hidden="true" />}

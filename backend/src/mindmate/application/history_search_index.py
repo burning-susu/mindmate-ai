@@ -27,6 +27,7 @@ from mindmate.infrastructure.models import (
     LearningFeedback,
     LearningQuestion,
     LearningSession,
+    LearningSessionSummary,
     Message,
 )
 
@@ -47,10 +48,11 @@ _SECTION_RANK = {
     "question": 2,
     "submitted_answer": 3,
     "feedback": 4,
-    "title": 5,
-    "topic": 6,
-    "goal": 7,
-    "knowledge_point": 8,
+    "summary": 5,
+    "title": 6,
+    "topic": 7,
+    "goal": 8,
+    "knowledge_point": 9,
 }
 
 _INSTALLED = False
@@ -270,6 +272,8 @@ def _before_commit(session: Session) -> None:
             conversations.add(obj.conversation_id)
         elif isinstance(obj, (LearningSession, LearningQuestion, LearningAttempt)):
             learning.add(obj.learning_session_id)
+        elif isinstance(obj, LearningSessionSummary):
+            learning.add(obj.learning_session_id)
         elif isinstance(obj, LearningFeedback):
             attempt = session.get(LearningAttempt, obj.attempt_id)
             if attempt is not None:
@@ -327,6 +331,23 @@ def _learning_documents(
     session: Session, record: LearningSession
 ) -> list[tuple[str, str, str, str]]:
     documents: list[tuple[str, str, str, str]] = []
+    summary = session.scalar(
+        select(LearningSessionSummary).where(
+            LearningSessionSummary.learning_session_id == record.learning_session_id
+        )
+    )
+    if summary is not None:
+        snapshot = summary.snapshot_json
+        public_parts = [str(snapshot.get("summary_text") or "").strip()]
+        public_parts.append(str(snapshot.get("next_step") or "").strip())
+        public_parts.extend(
+            str(item.get("title") or "").strip()
+            for item in snapshot.get("knowledge_points", [])
+            if isinstance(item, dict)
+        )
+        summary_text = " ".join(item for item in public_parts if item)
+        if summary_text:
+            documents.append(("summary", summary.summary_id, summary.summary_id, summary_text))
     if record.topic.strip():
         documents.append(("topic", record.learning_session_id, record.learning_session_id, record.topic))
     if record.goal_text.strip():

@@ -655,3 +655,14 @@
 - 证据：`backend/tests/test_stage71_trash_task_concurrency.py` `7 passed`，包含两个独立进程争抢和真实 Worker 领取；受影响阶段 4/5/6/任务/迁移隔离组合通过。前端 Vitest `16 files / 78 tests passed`、typecheck、lint、build 通过；OpenAPI `113 schemas / 122 operations` 与生成类型同步；Ruff/compileall/`git diff --check` 通过。完整后端集合另有宿主编码、Windows Credential Manager、Provider/budget、目录句柄和 FTS5 波动，未冒称全量通过。
 - 浏览器与费用：当前会话没有普通 Chrome/Edge 标签页，无截图、URL、Network 计数；未使用真实 Key、未访问真实 Provider、未产生付费调用。阶段 8 仍不可写成 `PASS`。
 - 报告：`docs/test-reports/stage-71-trash-task-concurrency.md`。下一批目标为学习会话完成总结的持久化、展示和历史检索定位。
+
+### 第七十二批：阶段 8 学习总结与历史检索闭环
+
+- 进场核验：`feat/v1-bootstrap` 工作区干净；本地和 `origin/feat/v1-bootstrap` 均为 `3310a762d6d24f92f8ec7f2d13c2894e1f4e2439`。
+- 状态：学习总结持久化、结束路径、历史 `summary` 索引与总结焦点定位为 `CODE_PASS`；`HISTORY-AC-04/06` 的普通浏览器证据为 `BROWSER_PARTIAL`；`AC-LEARN-006` 继续 `PARTIAL`，因为 1/3/7/14/30 天完整复习模型尚未实现；`STAGE8_FULL_V1` 继续 `PARTIAL`。
+- 数据与事务：新增 Alembic `h72a1b2c3d4e5` 和 `LearningSessionSummary` 一对一快照表。用户结束、题量完成、资料耗尽、资料失效和失败结束路径从已保存题目/Attempt/Feedback/Scope/Citation 生成确定性 JSON；快照使用唯一会话键和版本号幂等，旧终态会话读取时本地回填，不调用模型或产生费用。
+- API/页面：`LearningSessionResponse.summary` 返回主题、范围、时间、结束原因、各类结果计数、提示/重试、知识点、动态引用状态、下一步和“未建立复习安排”；旧 `result` DTO 保持兼容。完成历史显示“查看总结”，进入 `?focus=summary`；题目/反馈定位、回收站来源状态和只读打开行为保持原边界。
+- 搜索/清理：历史 FTS 增加公开总结文本、知识点和下一步，命中 section 为 `summary`；不写入答案键、Prompt、路径、Key 或错误堆栈。软删除/恢复保留快照，永久删除只清理会话自有总结和投影。
+- 证据：新增 `backend/tests/test_stage72_learning_summary.py` 3 项，覆盖自动完成、0 题主动结束、旧快照确定性回填、总结关键词定位、Citation 失效、软删除/恢复/永久清理；阶段 7/8 定向回归、多题回归和迁移回归通过。前端 `16 files / 78 tests passed`，typecheck、lint、build、OpenAPI 生成、Ruff、定向 Pyright、compileall、`git diff --check` 通过。
+- 全量边界：后端全量集合保留既有 Windows PowerShell stdout、Credential Manager `WinError 1312`、OpenAI fixture、备份目录句柄等失败，未写成全量通过；详见 `docs/test-reports/stage-72-learning-summary-history.md`。
+- 浏览器与交接：当前会话没有普通 Chrome/Edge 标签页，因此没有截图、URL 或 Network 证据；报告附最短人工复测卡。Demo 可用性沿用既有 `PASS`，阶段 5–7、设置迁移、外部 stdout/stderr、Provider 账单和真实 Provider smoke 独立保持原状态。

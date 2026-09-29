@@ -18,6 +18,7 @@ from mindmate.application.history_purge import (
     HistoryPurgeError,
     purge_learning_session_permanent,
 )
+from mindmate.application.history_search_index import sync_learning_search
 from mindmate.application.hybrid_search import HybridCandidateQuery
 from mindmate.application.learning_question_draft import MOCK_MODEL, MOCK_PROVIDER
 from mindmate.application.learning_sessions import (
@@ -40,6 +41,8 @@ from mindmate.application.learning_sessions import (
     submit_learning_attempt,
     trash_learning_session,
 )
+from mindmate.application.learning_summary import ensure_learning_summary
+from mindmate.infrastructure.models import Citation, LearningSessionSummary
 from mindmate.infrastructure.vector_store import SqliteVecAdapter
 
 router = APIRouter(prefix="/api/v1")
@@ -170,6 +173,81 @@ class LearningSessionResultResponse(BaseModel):
     end_reason: str | None
 
 
+class LearningSummaryFileResponse(BaseModel):
+    file_id: str
+    file_name: str
+    source_status: str
+
+
+class LearningSummaryScopeResponse(BaseModel):
+    knowledge_base_id: str
+    knowledge_base_name: str
+    index_version_id: str | None
+    source_set_hash: str | None
+    file_ids: list[str]
+    files: list[LearningSummaryFileResponse]
+
+
+class LearningSummaryKnowledgePointResponse(BaseModel):
+    knowledge_point_id: str
+    title: str
+    question_count: int
+    result_counts: dict[str, int]
+    status: str
+
+
+class LearningSummaryCitationResponse(BaseModel):
+    citation_id: str
+    question_id: str
+    feedback_id: str
+    display_number: int
+    file_name: str
+    file_id: str | None
+    chunk_id: str | None
+    line_start: int | None
+    line_end: int | None
+    page_start: int | None
+    page_end: int | None
+    excerpt: str | None
+    source_status: str
+    can_open_source: bool
+
+
+class LearningSummaryReviewPlanResponse(BaseModel):
+    status: str
+    intervals_days: list[int]
+    message: str
+
+
+class LearningSessionSummaryResponse(BaseModel):
+    summary_version: int
+    snapshot_origin: str
+    summary_text: str
+    topic: str
+    goal_text: str
+    goal_type: str
+    scope: LearningSummaryScopeResponse
+    started_at: datetime | None
+    ended_at: datetime | None
+    end_reason: str | None
+    planned_question_count: int
+    completed_question_count: int
+    correct_count: int
+    partial_count: int
+    incorrect_count: int
+    skipped_count: int
+    unjudged_count: int
+    unanswered_count: int
+    hints_used: int
+    hints_by_level: dict[str, int]
+    retry_count: int
+    knowledge_points: list[LearningSummaryKnowledgePointResponse]
+    citations: list[LearningSummaryCitationResponse]
+    review_plan: LearningSummaryReviewPlanResponse
+    next_step: str
+    generated_at: datetime
+
+
 class LearningSessionResponse(BaseModel):
     learning_session_id: str
     topic: str
@@ -197,6 +275,7 @@ class LearningSessionResponse(BaseModel):
     question: LearningQuestionResponse | None
     questions: list[LearningQuestionResponse]
     result: LearningSessionResultResponse | None
+    summary: LearningSessionSummaryResponse | None
 
 
 def _command_error(exc: LearningCommandError) -> LearningApiError:
@@ -307,6 +386,47 @@ def _question_payload(session: Session, question: Any) -> dict[str, Any]:
     ).model_dump(mode="json")
 
 
+def _summary_payload(session: Session, record: Any) -> dict[str, Any] | None:
+    existing = session.scalar(
+        select(LearningSessionSummary).where(
+            LearningSessionSummary.learning_session_id == record.learning_session_id
+        )
+    )
+    summary = ensure_learning_summary(session, record)
+    if summary is None:
+        return None
+    if existing is None:
+        # A legacy completed session is backfilled once from local rows.  This
+        # is a local write only; no model or network call is involved.
+        sync_learning_search(session, record.learning_session_id)
+        session.commit()
+    payload = dict(summary.snapshot_json)
+    citations: list[dict[str, Any]] = []
+    for item in payload.get("citations", []):
+        citation = session.get(Citation, item.get("citation_id"))
+        current = citation_payload(session, citation) if citation is not None else None
+        if current is None:
+            citations.append({**item, "source_status": "SOURCE_DELETED", "can_open_source": False})
+        else:
+            citations.append(
+                {
+                    **item,
+                    "file_name": current["file_name"],
+                    "file_id": current["file_id"],
+                    "chunk_id": current["chunk_id"],
+                    "line_start": current["line_start"],
+                    "line_end": current["line_end"],
+                    "page_start": current["page_start"],
+                    "page_end": current["page_end"],
+                    "excerpt": current["excerpt"],
+                    "source_status": current["source_status"],
+                    "can_open_source": current["can_open_source"],
+                }
+            )
+    payload["citations"] = citations
+    return LearningSessionSummaryResponse.model_validate(payload).model_dump(mode="json")
+
+
 def _session_payload(session: Session, record: Any) -> dict[str, Any]:
     scope = load_scope(session, record.learning_session_id)
     plan = load_plan(session, record.learning_session_id)
@@ -354,8 +474,18 @@ def _session_payload(session: Session, record: Any) -> dict[str, Any]:
             ),
             prompt_template_version=plan.prompt_template_version,
         )
+    summary_payload = _summary_payload(session, record)
     result_payload = None
-    if record.status in {"COMPLETED", "FAILED", "SOURCE_INVALID"}:
+    if summary_payload is not None:
+        result_payload = LearningSessionResultResponse(
+            planned_question_count=summary_payload["planned_question_count"],
+            completed_question_count=summary_payload["completed_question_count"],
+            correct_count=summary_payload["correct_count"],
+            incorrect_count=summary_payload["incorrect_count"],
+            unjudged_count=summary_payload["unjudged_count"],
+            end_reason=summary_payload["end_reason"],
+        )
+    elif record.status in {"COMPLETED", "FAILED", "SOURCE_INVALID"}:
         result_payload = LearningSessionResultResponse(
             planned_question_count=record.target_question_count,
             completed_question_count=len(completed_payloads),
@@ -395,6 +525,11 @@ def _session_payload(session: Session, record: Any) -> dict[str, Any]:
         question=question_payload,
         questions=question_payloads,
         result=result_payload,
+        summary=(
+            LearningSessionSummaryResponse.model_validate(summary_payload)
+            if summary_payload is not None
+            else None
+        ),
     ).model_dump(mode="json")
 
 

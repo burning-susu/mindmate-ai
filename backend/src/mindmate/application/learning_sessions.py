@@ -27,6 +27,7 @@ from mindmate.application.learning_question_draft import (
     draft_single_choice,
     feedback_copy,
 )
+from mindmate.application.learning_summary import ensure_learning_summary
 from mindmate.application.source_snapshots import (
     SourceSnapshotCreated,
     SourceSnapshotError,
@@ -358,6 +359,8 @@ def create_next_learning_question(
         record.completed_at = record.completed_at or utc_now()
         record.updated_at = utc_now()
         record.row_version += 1
+        finish_learning_plan(session, record)
+        ensure_learning_summary(session, record)
         session.commit()
         return record
     if record.status in {"COMPLETED", "FAILED", "SOURCE_INVALID"}:
@@ -676,6 +679,7 @@ def _stop_question_generation(
     record.row_version += 1
     if status in {"COMPLETED", "FAILED", "SOURCE_INVALID"}:
         finish_learning_plan(session, record)
+        ensure_learning_summary(session, record)
     session.commit()
 
 
@@ -760,6 +764,7 @@ def get_learning_session(session: Session, learning_session_id: str) -> Learning
         record.updated_at = now
         record.row_version += 1
         finish_learning_plan(session, record)
+        ensure_learning_summary(session, record)
         session.commit()
     return record
 
@@ -772,6 +777,8 @@ def finish_learning_session(
 ) -> LearningSession:
     record = get_learning_session(session, learning_session_id)
     if record.status == "COMPLETED":
+        ensure_learning_summary(session, record)
+        session.commit()
         return record
     if record.status == "PREPARING":
         raise LearningCommandError(
@@ -817,6 +824,7 @@ def finish_learning_session(
         )
     session.expire(record)
     session.refresh(record)
+    ensure_learning_summary(session, record)
     sync_learning_search(session, learning_session_id)
     session.commit()
     session.expire(record)
@@ -1000,6 +1008,7 @@ def submit_learning_attempt(
     update_learning_plan_after_attempt(session, record, question)
     record.updated_at = now
     record.row_version += 1
+    ensure_learning_summary(session, record)
     try:
         session.commit()
     except IntegrityError:
@@ -1377,6 +1386,7 @@ def _refresh_source_state(session: Session, record: LearningSession) -> None:
     finish_learning_plan(session, record)
     record.updated_at = utc_now()
     record.row_version += 1
+    ensure_learning_summary(session, record)
     session.commit()
 
 
@@ -1403,6 +1413,7 @@ def _fail(
         record.resolved_model = None
     record.updated_at = now
     record.row_version += 1
+    ensure_learning_summary(session, record)
     session.commit()
     return record
 
