@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { BrowserRouter } from 'react-router-dom'
 
@@ -218,11 +218,25 @@ describe('conversation history', () => {
     expect(await screen.findByRole('button', { name: /超时时间/ })).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('模式'), { target: { value: 'KNOWLEDGE_CHAT' } })
     await waitFor(() => expect(calls.some((call) => call.includes('mode=KNOWLEDGE_CHAT'))).toBe(true))
-    fireEvent.click(screen.getByRole('button', { name: '移入回收站' }))
-    expect(screen.getByRole('dialog')).toHaveTextContent('文件和知识库不会被删除')
+    const trashButton = screen.getByRole('button', { name: '移入回收站' })
+    trashButton.focus()
+    fireEvent.click(trashButton)
+    let dialog = await screen.findByRole('dialog', { name: '移入回收站' })
+    expect(dialog).toHaveTextContent('超时时间')
+    expect(dialog).toHaveTextContent('保留 30 天')
+    expect(dialog).toHaveTextContent('可以从回收站恢复')
+    expect(dialog).toHaveTextContent('不会删除来源文件或知识库')
+    expect(dialog.contains(document.activeElement)).toBe(true)
     expect(calls.some((call) => call.startsWith('DELETE'))).toBe(false)
-    fireEvent.click(screen.getByRole('button', { name: '确认移入回收站' }))
-    await waitFor(() => expect(calls.some((call) => call.startsWith('DELETE') && call.includes('expected_version=4'))).toBe(true))
+    fireEvent.click(within(dialog).getByRole('button', { name: '取消' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(trashButton).toHaveFocus()
+    expect(calls.some((call) => call.startsWith('DELETE'))).toBe(false)
+
+    fireEvent.click(trashButton)
+    dialog = await screen.findByRole('dialog', { name: '移入回收站' })
+    fireEvent.click(within(dialog).getByRole('button', { name: '移入回收站' }))
+    await waitFor(() => expect(calls.filter((call) => call.startsWith('DELETE') && call.includes('expected_version=4')).length).toBe(1))
   })
 
   it('links a body hit with text highlighting', async () => {
@@ -249,7 +263,7 @@ describe('conversation history', () => {
     expect(link.querySelector('script')).toBeNull()
   })
 
-  it('requires the exact phrase before permanently deleting a trashed conversation', async () => {
+  it('closes a permanent-delete dialog without a request and submits once without a phrase', async () => {
     window.history.pushState({}, '', '/history?view=trash')
     const calls: string[] = []
     let finishDelete: ((response: Response) => void) | undefined
@@ -267,23 +281,62 @@ describe('conversation history', () => {
 
     render(<BrowserRouter><App /></BrowserRouter>)
     fireEvent.click(await screen.findByRole('button', { name: '永久删除' }))
-    fireEvent.keyDown(window, { key: 'Escape' })
+    let dialog = await screen.findByRole('dialog', { name: '确认永久删除' })
+    expect(dialog).toHaveTextContent('待清理对话')
+    expect(dialog).toHaveTextContent('此操作无法撤销')
+    expect(dialog).toHaveTextContent('只删除对应历史记录')
+    expect(dialog).toHaveTextContent('不会删除来源文件或知识库')
+    expect(screen.queryByLabelText('确认词')).not.toBeInTheDocument()
+    fireEvent.keyDown(document.activeElement ?? dialog, { key: 'Escape' })
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(calls.some((call) => call.startsWith('DELETE'))).toBe(false)
 
     fireEvent.click(screen.getByRole('button', { name: '永久删除' }))
-    const dialog = screen.getByRole('dialog')
-    expect(dialog).toHaveTextContent('仅清除此对话，不会删除来源文件与知识库')
-    const confirmButton = screen.getAllByRole('button', { name: '永久删除' }).at(-1)
-    expect(confirmButton).toBeDisabled()
-    fireEvent.change(screen.getByLabelText('确认词'), { target: { value: '永久删除' } })
-    expect(confirmButton).toBeEnabled()
+    dialog = await screen.findByRole('dialog', { name: '确认永久删除' })
+    fireEvent.click(within(dialog).getByRole('button', { name: '关闭' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(calls.some((call) => call.startsWith('DELETE'))).toBe(false)
+
+    fireEvent.click(screen.getByRole('button', { name: '永久删除' }))
+    dialog = await screen.findByRole('dialog', { name: '确认永久删除' })
+    const confirmButton = within(dialog).getByRole('button', { name: '永久删除' })
     fireEvent.click(confirmButton as HTMLElement)
-    await waitFor(() => expect(calls.some((call) => call.startsWith('DELETE') && call.includes('expected_version=7') && call.includes('confirmed=true'))).toBe(true))
-    expect(confirmButton).toBeDisabled()
     fireEvent.click(confirmButton as HTMLElement)
-    expect(calls.filter((call) => call.startsWith('DELETE')).length).toBe(1)
+    await waitFor(() => expect(calls.filter((call) => call.startsWith('DELETE') && call.includes('expected_version=7') && call.includes('confirmed=true')).length).toBe(1))
+    expect(confirmButton).toBeDisabled()
+    fireEvent.keyDown(document.activeElement ?? dialog, { key: 'Escape' })
+    expect(screen.getByRole('dialog', { name: '确认永久删除' })).toBeInTheDocument()
     finishDelete?.(response({ conversation_id: 'conversation-trash-1', status: 'PURGED' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+
+  it('refreshes trashed conversations and reports a row-version conflict after permanent delete', async () => {
+    window.history.pushState({}, '', '/history?view=trash')
+    const calls: string[] = []
+    let trashLoads = 0
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      calls.push(`${method} ${url}`)
+      if (url.includes('/system/session')) return response({ status: 'ready' })
+      if (url.includes('/history/trash') && url.includes('object_type=conversation')) {
+        trashLoads += 1
+        return response({ items: [{ object_type: 'conversation', object_id: 'conversation-conflict', title: '版本冲突对话', deleted_at: '2026-09-27T00:00:00Z', row_version: 8 }], next_cursor: null })
+      }
+      if (method === 'DELETE' && url.includes('/conversations/conversation-conflict/permanent')) {
+        return response({ status: 412, code: 'RESOURCE_VERSION_CONFLICT', detail: '版本已变化' }, 412)
+      }
+      return response({ status: 'ok', version: '0.1.0' })
+    }))
+
+    render(<BrowserRouter><App /></BrowserRouter>)
+    fireEvent.click(await screen.findByRole('button', { name: '永久删除' }))
+    const dialog = await screen.findByRole('dialog', { name: '确认永久删除' })
+    fireEvent.click(within(dialog).getByRole('button', { name: '永久删除' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('这条对话已经发生变化，回收站列表已刷新。')
+    await waitFor(() => expect(trashLoads).toBeGreaterThan(1))
+    expect(calls.filter((call) => call.startsWith('DELETE'))).toHaveLength(1)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 })
 
@@ -451,7 +504,32 @@ describe('learning history', () => {
     await waitFor(() => expect(screen.queryByText('还没有可找回的学习会话。从知识库开始的一题会保留在这里。')).not.toBeInTheDocument())
   })
 
-  it('uses the learning-session permanent-delete endpoint from the trash view', async () => {
+  it('confirms moving a learning record to trash without touching background tasks', async () => {
+    window.history.pushState({}, '', '/history?tab=learning')
+    const calls: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      calls.push(`${method} ${url}`)
+      if (url.includes('/system/session')) return response({ status: 'ready' })
+      if (url.includes('/history/learning-sessions')) return response({ items: [{ ...learningHistoryItem, row_version: 9, locations: [] }], next_cursor: null })
+      if (method === 'DELETE' && url.includes('/learning-sessions/learn-1?')) return response({ learning_session_id: 'learn-1', topic: learningHistoryItem.topic, row_version: 10 })
+      return response({ status: 'ok', version: '0.1.0' })
+    }))
+
+    render(<BrowserRouter><App /></BrowserRouter>)
+    const trigger = await screen.findByRole('button', { name: '移入回收站' })
+    fireEvent.click(trigger)
+    const dialog = await screen.findByRole('dialog', { name: '移入回收站' })
+    expect(dialog).toHaveTextContent('超时时间')
+    expect(dialog).toHaveTextContent('不会删除来源文件或知识库')
+    expect(calls.filter((call) => call.startsWith('DELETE'))).toHaveLength(0)
+    fireEvent.click(within(dialog).getByRole('button', { name: '移入回收站' }))
+    await waitFor(() => expect(calls.filter((call) => call.startsWith('DELETE') && call.includes('/learning-sessions/learn-1?expected_version=9')).length).toBe(1))
+    expect(calls.some((call) => /\/(tasks|knowledge-bases)\//.test(call) && /^(POST|PUT|PATCH|DELETE) /.test(call))).toBe(false)
+  })
+
+  it('shows the learning permanent-delete modal and uses its versioned endpoint without a phrase', async () => {
     window.history.pushState({}, '', '/history?tab=learning&view=trash')
     const calls: string[] = []
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -469,10 +547,47 @@ describe('learning history', () => {
 
     render(<BrowserRouter><App /></BrowserRouter>)
     fireEvent.click(await screen.findByRole('button', { name: '永久删除' }))
-    fireEvent.change(screen.getByLabelText('确认词'), { target: { value: '永久删除' } })
-    const buttons = screen.getAllByRole('button', { name: '永久删除' })
-    fireEvent.click(buttons[buttons.length - 1])
-    await waitFor(() => expect(calls.some((call) => call.startsWith('DELETE') && call.includes('/learning-sessions/learn-trash-1/permanent') && call.includes('expected_version=11') && call.includes('confirmed=true'))).toBe(true))
+    let dialog = await screen.findByRole('dialog', { name: '确认永久删除' })
+    expect(dialog).toHaveTextContent('待清理学习')
+    expect(dialog).toHaveTextContent('只删除对应历史记录')
+    expect(screen.queryByLabelText('确认词')).not.toBeInTheDocument()
+    fireEvent.click(within(dialog).getByRole('button', { name: '取消' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(calls.some((call) => call.startsWith('DELETE'))).toBe(false)
+
+    fireEvent.click(screen.getByRole('button', { name: '永久删除' }))
+    dialog = await screen.findByRole('dialog', { name: '确认永久删除' })
+    fireEvent.click(within(dialog).getByRole('button', { name: '永久删除' }))
+    await waitFor(() => expect(calls.filter((call) => call.startsWith('DELETE') && call.includes('/learning-sessions/learn-trash-1/permanent') && call.includes('expected_version=11') && call.includes('confirmed=true')).length).toBe(1))
+  })
+
+  it('refreshes trashed learning history and reports an unknown purge result', async () => {
+    window.history.pushState({}, '', '/history?tab=learning&view=trash')
+    let trashLoads = 0
+    const calls: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      calls.push(`${method} ${url}`)
+      if (url.includes('/system/session')) return response({ status: 'ready' })
+      if (url.includes('/history/trash') && url.includes('object_type=learning_session')) {
+        trashLoads += 1
+        return response({ items: [{ object_type: 'learning_session', object_id: 'learn-purge-fail', title: '失败学习记录', deleted_at: '2026-09-27T00:00:00Z', row_version: 12 }], next_cursor: null })
+      }
+      if (method === 'DELETE' && url.includes('/learning-sessions/learn-purge-fail/permanent')) {
+        return response({ status: 500, code: 'PURGE_FAILED', detail: '未完成' }, 500)
+      }
+      return response({ status: 'ok', version: '0.1.0' })
+    }))
+
+    render(<BrowserRouter><App /></BrowserRouter>)
+    fireEvent.click(await screen.findByRole('button', { name: '永久删除' }))
+    const dialog = await screen.findByRole('dialog', { name: '确认永久删除' })
+    fireEvent.click(within(dialog).getByRole('button', { name: '永久删除' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('永久删除结果未知，回收站列表已重新读取；请确认记录状态后再操作。')
+    await waitFor(() => expect(trashLoads).toBeGreaterThan(1))
+    expect(calls.filter((call) => call.startsWith('DELETE'))).toHaveLength(1)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 })
 

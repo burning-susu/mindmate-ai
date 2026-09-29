@@ -50,7 +50,7 @@
 | `HISTORY-AC-06` | HistoryPage 完成记录进入 `/learning/session/:id?focus=summary`；会话 API 返回版本化持久总结、题目记录和动态引用状态；未完成仍恢复当前题 | `test_stage8_learning_history.py`、`stage8-history.test.tsx`、`stage8-home-learning.test.tsx`、`test_stage72_learning_summary.py` | 第 49 批有已作答会话局部证据；本批没有普通浏览器完成/刷新/重启页面证据 | `CODE_PASS / BROWSER_PARTIAL` | 人工卡完成 0/1/多题会话，核总结字段、题目记录、刷新/后端重启一致、来源失效/恢复提示；未把 API 证据写成浏览器通过 |
 | `HISTORY-AC-07` | `learning_history.py` 来源状态投影，失效时阻止继续提交 | `test_stage8_learning_history.py`、`stage8-home-learning.test.tsx` | 第 49 批看到来源失效说明及未答会话无提交按钮 | `CODE_PASS / BROWSER_PASS (沿用第 49 批该路径证据)` | 无需重复代码；人工卡确认另一类失效来源和返回入口 |
 | `HISTORY-AC-08` | `conversation_lifecycle.py`、`learning_sessions.py` 软删除/恢复与 30 天 `purge_after` | `test_stage8_history_query_trash.py`、`test_stage8_conversation_history.py`、`test_stage8_learning_history.py` | 第 49 批核了回收站显示/恢复；移入回收站确认操作当时未取得完整点击证据 | `CODE_PASS / BROWSER_PARTIAL (沿用部分恢复证据)` | 分别走取消、Esc、确认软删除、恢复并核对同一 ID/上下文 |
-| `HISTORY-AC-09` | `history_purge.py` 仅清理会话自有行并保留共享来源 | `test_stage8_history_purge.py` 覆盖对话/学习保留文件、知识库、共享点 | 本批未点击永久删除或核 Network DELETE | `CODE_PASS / BROWSER_PARTIAL` | 仅用隔离合成记录做取消/Esc/错误词零请求，再由操作者确认正确词并核一次 DELETE |
+| `HISTORY-AC-09` | `history_purge.py` 仅清理会话自有行并保留共享来源 | `test_stage8_history_purge.py` 覆盖对话/学习保留文件、知识库、共享点 | 本批没有真实普通浏览器 Network 证据；第76批用户口述六步完成不含逐项请求计数 | `CODE_PASS / BROWSER_PARTIAL` | 按本文件“第七十六批人工回写与第六项修订”分别验证软删除/恢复、永久删除、一次请求和来源保留；不再使用确认词步骤 |
 
 ### 任务与备份验收
 
@@ -168,6 +168,20 @@ $dataDir = Join-Path $env:TEMP 'mindmate-ai-stage75-demo-mock-b3978231600c4a3c85
 | 6. 历史删除和任务 | 只选本次合成历史记录，确认前取消/Escape/错误词均为 0 个 DELETE，正确确认恰为 1 个 DELETE；核对回收站关联任务 ID 与终态 | 历史/任务 ID、DELETE 次数、任务状态、URL、Network 次数、截图路径 |
 
 回传日期、浏览器及 Guest profile、隔离根、各对象 ID、URL、Network 次数和本机截图目录。页面项在收到真实点击证据前一律保持 `BROWSER_PARTIAL`；用户回传只标注“用户报告的人工复测”，不记为代理亲测。其它追踪矩阵行不因本卡更新。
+
+## 第七十六批人工回写与第六项修订
+
+2026-09-29 用户回报第七十五批六步均已完成、未发现功能问题；唯一提出的体验问题是第六项历史删除确认界面。此记录是用户口述的人工复测结果，不是代理亲测。回报没有逐项对象 ID、完整 URL、Network 请求次数或可读取的截图路径，因此不提升相关浏览器门禁，也不写成 `STAGE8_FULL_V1=PASS`。阶段 75 报告与原六步卡作为历史记录保留，不改写其当时证据。
+
+第七十六批代码已将历史软删除和永久删除改为共享居中模态。以下内容只修订第七十五批卡的第六项，取代旧卡中的“错误词”步骤；第 1–5 项仍按原卡执行或引用用户已回报结果。
+
+| 操作 | 复核要求 | 记录 |
+| --- | --- | --- |
+| 对话与学习软删除 | 分别选择一个合成历史对象；弹窗显示正确名称、30 天可恢复范围且说明不删除来源文件/知识库。取消、关闭按钮、Escape 各为 0 次 DELETE；确认后恰为 1 次带正确 `expected_version` 的 DELETE；随后用同一对象 ID 从回收站恢复。 | 类型、对象 ID、打开/回收站 URL、各动作 DELETE 数、恢复结果、Network 记录、截图路径 |
+| 对话与学习永久删除 | 分别从回收站打开弹窗；确认对象名和“不可恢复、只删除历史记录”的说明。取消、关闭按钮、Escape 各为 0 次 DELETE；不输入确认词，快速连点红色按钮只发 1 次带正确 `expected_version` 与 `confirmed=true` 的 DELETE；确认后核对目标历史 ID 消失，源文件和知识库仍在。 | 类型、对象 ID、回收站 URL、各动作 DELETE 数、来源 ID/状态、Network 记录、截图路径 |
+| 后台任务状态 | 单独选一个有关联的文件或知识库任务，记录该 `task_id` 和操作前状态；执行历史回收/删除后再次读取同一任务及状态。不得把历史删除当成任务取消，也不得为了验证而从历史页发起文件或知识库任务取消。 | `task_id`、操作前/后状态、各任务请求、Network 记录、截图路径 |
+
+第七十六批尝试启动本地 Playwright Chromium 时，系统在页面打开前返回 `spawn EPERM`；没有产生新截图或页面 Network 证据。提权重试因自动审批服务返回 `404 Not Found` 而未执行；本轮不绕过审批。故本卡仍需在普通 Windows Chrome/Edge Guest profile 中完成新弹窗复核。旧的用户报告只支持“第七十五批六步已完成”的口述记录，不能替代这次 UI 改动后的新证据。
 
 ## 第七十四批自动化增量证据
 

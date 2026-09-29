@@ -695,3 +695,14 @@
 - 验证：最终定向 pytest `2 passed`；Ruff、compileall、Alembic head、`git diff --check` 通过。改动只涉及测试和报告，无生产逻辑、数据库或 API 契约变更；前端未改动未重跑。两份受影响测试文件定向 Pyright 有 `35` 个既有 `TestClient.app.state`/`zipfile.crc32` 类型诊断，没有本批新增诊断；全量 Pyright `59 errors` 沿用第74批记录，本批未重跑。
 - 状态与交接：`DEMO_STABLE` 沿用第42/64批 `PASS` 并注明本批 API/HTTP 实测、未做页面验收；`STAGE8_FULL_V1`、阶段 5–7 保持 `PARTIAL`；浏览器相关行均为 `BROWSER_PARTIAL`。第七十批文档已将旧卡收敛为上传/索引、引用/拒答、学习总结、重启、设置日志及历史/任务六步优先卡；人工结果返回前不提升页面门禁。
 - 报告：`docs/test-reports/stage-75-windows-stability-handoff.md`。
+
+### 第七十六批：阶段 8 人工验收回写与历史删除弹窗优化
+
+- 进场：`feat/v1-bootstrap`，LOCAL / REMOTE 均为 `ca58c4e936196555e0a495dcfef84bd66dd1dbf6`，工作区干净。
+- 用户报告：2026-09-29 用户回报第七十五批六步均已完成且无功能问题；唯一反馈为第六项历史删除确认界面体验。没有逐项对象 ID、URL、Network 次数和可读取截图，记录为 `USER_REPORTED_PASS`，不计为代理亲测或浏览器证据。
+- UI 决定：新增 `CHG-20260929-HISTORY-DELETE-DIALOG`。对话/学习历史软删除与永久删除使用共享居中模态，说明对象、影响和恢复边界；移除确认词，红色危险按钮明确确认。保持服务端 `confirmed=true` 与 `expected_version` 契约，无 API、OpenAPI、后端或数据库变更；任务取消、文件、知识库、备份及整库危险交互不变。
+- 并发与焦点：Radix Dialog 限定模态焦点、关闭后返回触发按钮；忙碌期间不能关窗，软/硬删除确认使用同步锁阻止重复请求。保留现有冲突、失败/未知结果刷新逻辑。
+- 自动化：`frontend/src/test/stage8-history.test.tsx` `15 passed`；`npm run typecheck`、`npm run lint`、`npm run build` 通过。build 主 JS 为 `579.74 kB`，Vite 发出既有类别的 500 kB chunk 提醒。后端/API 未改，未运行后端测试和生成类型。
+- 浏览器边界：新增 `frontend/e2e/stage76-history-delete.spec.ts`，但 Playwright 在页面打开前启动 Chromium 返回 `spawn EPERM`。提权复跑因自动审批服务 `404 Not Found` 未执行，未绕过审核。当前没有普通 Chrome/Edge 标签页；本批没有新截图、URL 或 Network 计数。历史相关浏览器门禁继续 `BROWSER_PARTIAL`。
+- 阶段状态：`DEMO_STABLE=PASS` 仅沿用第 42/64 批证据；`STAGE8_FULL_V1=PARTIAL`。第七十五批备份恢复 `WinError 5 / RESTORE_DATABASE_LOCKED` 和 Credential Manager `WinError 1312`、`PACKAGED_LAUNCHER_PARTIAL`、`AC-LEARN-006=PARTIAL`、真实 Provider 与账单 `PENDING` 维持原状态。
+- 报告与下一优先级：结果见 `docs/test-reports/stage-76-history-delete-dialog.md`；第七十批文档新增第六项修订卡。下一步在普通 Windows Chrome/Edge Guest profile 对新模态复测，用合成历史对象分别验证恢复、不可恢复删除各请求一次、源文件/知识库不受影响，并单独核对后台任务状态；记录对象 ID、URL、Network 与截图后再更新浏览器门禁。不要把旧用户回报转写为新 UI 证据。

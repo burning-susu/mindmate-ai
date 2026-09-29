@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import * as Dialog from '@radix-ui/react-dialog'
 import { GraduationCap, History, LoaderCircle, MessageSquare, X } from 'lucide-react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
@@ -306,77 +307,63 @@ function FilterBar({
   )
 }
 
-function TrashConfirm({
-  title,
-  busy,
-  onCancel,
-  onConfirm,
-}: {
-  title: string
-  busy: boolean
-  onCancel: () => void
-  onConfirm: () => void
-}) {
-  return (
-    <div className="history-dialog" role="dialog" aria-modal="true" aria-labelledby="history-trash-title">
-      <h2 id="history-trash-title">移入回收站</h2>
-      <p>确定把「{title}」移入回收站？</p>
-      <p>它会保留 30 天，之后可以从回收站恢复。文件和知识库不会被删除。</p>
-      <div className="history-dialog__actions">
-        <button className="quiet-button" type="button" onClick={onCancel} disabled={busy}>取消</button>
-        <button type="button" onClick={onConfirm} disabled={busy}>{busy ? '正在移入' : '确认移入回收站'}</button>
-      </div>
-    </div>
-  )
-}
-
-function PurgeConfirm({
+function HistoryDeleteConfirm({
+  action,
   kind,
   title,
   busy,
+  returnFocusRef,
   onCancel,
   onConfirm,
 }: {
+  action: 'trash' | 'purge'
   kind: '对话' | '学习记录'
   title: string
   busy: boolean
+  returnFocusRef: { current: HTMLButtonElement | null }
   onCancel: () => void
   onConfirm: () => void
 }) {
-  const [phrase, setPhrase] = useState('')
-  const inputRef = useRef<HTMLInputElement>(null)
-  const matches = phrase === '永久删除'
-
-  useEffect(() => {
-    inputRef.current?.focus()
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !busy) onCancel()
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [busy, onCancel])
+  const isPurge = action === 'purge'
+  const dialogTitle = isPurge ? '确认永久删除' : '移入回收站'
 
   return (
-    <div className="history-dialog" role="dialog" aria-modal="true" aria-labelledby="history-purge-title" aria-describedby="history-purge-description">
-      <div className="history-dialog__heading">
-        <h2 id="history-purge-title">确认永久删除</h2>
-        <button className="quiet-button history-dialog__close" type="button" aria-label="关闭" onClick={onCancel} disabled={busy}>
-          <X size={16} aria-hidden="true" />
-        </button>
-      </div>
-      <p id="history-purge-description">将永久删除{kind}「{title}」。操作无法撤销；仅清除此{kind}，不会删除来源文件与知识库。</p>
-      <p>请输入确认词“永久删除”后继续。</p>
-      <form onSubmit={(event) => { event.preventDefault(); if (matches && !busy) onConfirm() }}>
-        <label>
-          确认词
-          <input ref={inputRef} value={phrase} onChange={(event) => setPhrase(event.target.value)} placeholder="永久删除" autoComplete="off" />
-        </label>
-        <div className="history-dialog__actions">
-          <button className="quiet-button" type="button" onClick={onCancel} disabled={busy}>取消</button>
-          <button className="danger-button" type="submit" disabled={!matches || busy}>{busy ? '正在删除…' : '永久删除'}</button>
-        </div>
-      </form>
-    </div>
+    <Dialog.Root open onOpenChange={(open) => { if (!open && !busy) onCancel() }}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="history-dialog-overlay" />
+        <Dialog.Content
+          className="history-dialog"
+          onCloseAutoFocus={(event) => {
+            event.preventDefault()
+            returnFocusRef.current?.focus()
+          }}
+          onEscapeKeyDown={(event) => { if (busy) event.preventDefault() }}
+          onPointerDownOutside={(event) => { if (busy) event.preventDefault() }}
+        >
+          <div className="history-dialog__heading">
+            <Dialog.Title className="history-dialog__title">{dialogTitle}</Dialog.Title>
+            <Dialog.Close asChild>
+              <button className="quiet-button history-dialog__close" type="button" aria-label="关闭" disabled={busy}>
+                <X size={16} aria-hidden="true" />
+              </button>
+            </Dialog.Close>
+          </div>
+          <Dialog.Description className="history-dialog__description">
+            {isPurge
+              ? `将永久删除${kind}「${title}」。此操作无法撤销；只删除对应历史记录，不会删除来源文件或知识库。`
+              : `「${title}」将移入回收站并保留 30 天，你可以从回收站恢复。不会删除来源文件或知识库。`}
+          </Dialog.Description>
+          <div className="history-dialog__actions">
+            <Dialog.Close asChild>
+              <button className="quiet-button" type="button" disabled={busy}>取消</button>
+            </Dialog.Close>
+            <button className="danger-button history-dialog__confirm" type="button" onClick={onConfirm} disabled={busy}>
+              {busy ? (isPurge ? '正在删除…' : '正在移入…') : (isPurge ? '永久删除' : '移入回收站')}
+            </button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   )
 }
 
@@ -410,6 +397,8 @@ function ConversationHistory({ trash }: { trash: boolean }) {
   const [pendingPurge, setPendingPurge] = useState<HistoryTrashItem | null>(null)
   const [actionError, setActionError] = useState('')
   const [busy, setBusy] = useState(false)
+  const actionLock = useRef(false)
+  const returnFocusRef = useRef<HTMLButtonElement | null>(null)
   const openingRef = useRef('')
   const [openingId, setOpeningId] = useState('')
   const historyQuery = useQuery({
@@ -467,7 +456,8 @@ function ConversationHistory({ trash }: { trash: boolean }) {
   }
 
   const confirmTrash = async () => {
-    if (!pending?.row_version) return
+    if (actionLock.current || !pending?.row_version) return
+    actionLock.current = true
     setBusy(true)
     setActionError('')
     try {
@@ -484,6 +474,7 @@ function ConversationHistory({ trash }: { trash: boolean }) {
       }
       setActionError(isHistoryConflict(error) ? '这条对话已经发生变化，列表已刷新，请重新确认。' : '移入回收站没有完成，列表已重新读取，请确认状态后重试。')
     } finally {
+      actionLock.current = false
       setBusy(false)
     }
   }
@@ -509,7 +500,8 @@ function ConversationHistory({ trash }: { trash: boolean }) {
   }
 
   const purge = async () => {
-    if (!pendingPurge?.row_version) return
+    if (actionLock.current || !pendingPurge?.row_version) return
+    actionLock.current = true
     setBusy(true)
     setActionError('')
     try {
@@ -527,6 +519,7 @@ function ConversationHistory({ trash }: { trash: boolean }) {
       }
       setActionError(isHistoryConflict(error) ? '这条对话已经发生变化，回收站列表已刷新。' : '永久删除结果未知，回收站列表已重新读取；请确认记录状态后再操作。')
     } finally {
+      actionLock.current = false
       setBusy(false)
     }
   }
@@ -575,7 +568,7 @@ function ConversationHistory({ trash }: { trash: boolean }) {
             </span>
              <div className="history-item__actions">
                <button type="button" disabled={busy} onClick={() => void restore(item)}>恢复</button>
-               <button className="danger-button" type="button" disabled={busy} onClick={() => setPendingPurge(item)}>永久删除</button>
+               <button className="danger-button" type="button" disabled={busy} onClick={(event) => { returnFocusRef.current = event.currentTarget; setPendingPurge(item) }}>永久删除</button>
              </div>
           </div>
         )) : visibleItems.map((item) => (
@@ -600,7 +593,7 @@ function ConversationHistory({ trash }: { trash: boolean }) {
               {openingId === item.conversation_id ? <span>正在打开</span> : <History size={14} aria-hidden="true" />}
             </button>
             <HistoryHits kind="conversation" ownerId={item.conversation_id} keyword={filters.q ?? ''} locations={item.locations} />
-            <button type="button" disabled={!item.row_version || busy} onClick={() => setPending(item)}>移入回收站</button>
+            <button type="button" disabled={!item.row_version || busy} onClick={(event) => { returnFocusRef.current = event.currentTarget; setPending(item) }}>移入回收站</button>
           </div>
         ))}
       </div>
@@ -620,10 +613,10 @@ function ConversationHistory({ trash }: { trash: boolean }) {
         </button>
       ) : null}
       {pending ? (
-        <TrashConfirm title={pending.title || pending.summary || '未命名对话'} busy={busy} onCancel={() => setPending(null)} onConfirm={() => void confirmTrash()} />
+        <HistoryDeleteConfirm action="trash" kind="对话" title={pending.title || pending.summary || '未命名对话'} busy={busy} returnFocusRef={returnFocusRef} onCancel={() => setPending(null)} onConfirm={() => void confirmTrash()} />
       ) : null}
       {pendingPurge ? (
-        <PurgeConfirm kind="对话" title={pendingPurge.title || '未命名对话'} busy={busy} onCancel={() => setPendingPurge(null)} onConfirm={() => void purge()} />
+        <HistoryDeleteConfirm action="purge" kind="对话" title={pendingPurge.title || '未命名对话'} busy={busy} returnFocusRef={returnFocusRef} onCancel={() => setPendingPurge(null)} onConfirm={() => void purge()} />
       ) : null}
     </div>
   )
@@ -646,6 +639,8 @@ function LearningHistory({ trash }: { trash: boolean }) {
   const [pendingPurge, setPendingPurge] = useState<HistoryTrashItem | null>(null)
   const [actionError, setActionError] = useState('')
   const [busy, setBusy] = useState(false)
+  const actionLock = useRef(false)
+  const returnFocusRef = useRef<HTMLButtonElement | null>(null)
   const openingRef = useRef('')
   const [openingId, setOpeningId] = useState('')
   const historyQuery = useQuery({
@@ -708,7 +703,8 @@ function LearningHistory({ trash }: { trash: boolean }) {
   }
 
   const confirmTrash = async () => {
-    if (!pending?.row_version) return
+    if (actionLock.current || !pending?.row_version) return
+    actionLock.current = true
     setBusy(true)
     setActionError('')
     try {
@@ -725,6 +721,7 @@ function LearningHistory({ trash }: { trash: boolean }) {
       }
       setActionError(isHistoryConflict(error) ? '这条学习记录已经发生变化，列表已刷新，请重新确认。' : '移入回收站没有完成，列表已重新读取，请确认状态后重试。')
     } finally {
+      actionLock.current = false
       setBusy(false)
     }
   }
@@ -750,7 +747,8 @@ function LearningHistory({ trash }: { trash: boolean }) {
   }
 
   const purge = async () => {
-    if (!pendingPurge?.row_version) return
+    if (actionLock.current || !pendingPurge?.row_version) return
+    actionLock.current = true
     setBusy(true)
     setActionError('')
     try {
@@ -768,6 +766,7 @@ function LearningHistory({ trash }: { trash: boolean }) {
       }
       setActionError(isHistoryConflict(error) ? '这条学习记录已经发生变化，回收站列表已刷新。' : '永久删除结果未知，回收站列表已重新读取；请确认记录状态后再操作。')
     } finally {
+      actionLock.current = false
       setBusy(false)
     }
   }
@@ -816,7 +815,7 @@ function LearningHistory({ trash }: { trash: boolean }) {
             </span>
              <div className="history-item__actions">
                <button type="button" disabled={busy} onClick={() => void restore(item)}>恢复</button>
-               <button className="danger-button" type="button" disabled={busy} onClick={() => setPendingPurge(item)}>永久删除</button>
+               <button className="danger-button" type="button" disabled={busy} onClick={(event) => { returnFocusRef.current = event.currentTarget; setPendingPurge(item) }}>永久删除</button>
              </div>
           </div>
         )) : visibleItems.map((item) => (
@@ -842,7 +841,7 @@ function LearningHistory({ trash }: { trash: boolean }) {
               {openingId === item.learning_session_id ? <span>正在打开</span> : <History size={14} aria-hidden="true" />}
             </button>
             <HistoryHits kind="learning" ownerId={item.learning_session_id} keyword={filters.q ?? ''} locations={item.locations} />
-            <button type="button" disabled={!item.row_version || busy} onClick={() => setPending(item)}>移入回收站</button>
+            <button type="button" disabled={!item.row_version || busy} onClick={(event) => { returnFocusRef.current = event.currentTarget; setPending(item) }}>移入回收站</button>
           </div>
         ))}
       </div>
@@ -862,10 +861,10 @@ function LearningHistory({ trash }: { trash: boolean }) {
         </button>
       ) : null}
       {pending ? (
-        <TrashConfirm title={pending.topic || '未命名学习'} busy={busy} onCancel={() => setPending(null)} onConfirm={() => void confirmTrash()} />
+        <HistoryDeleteConfirm action="trash" kind="学习记录" title={pending.topic || '未命名学习'} busy={busy} returnFocusRef={returnFocusRef} onCancel={() => setPending(null)} onConfirm={() => void confirmTrash()} />
       ) : null}
       {pendingPurge ? (
-        <PurgeConfirm kind="学习记录" title={pendingPurge.title || '未命名学习'} busy={busy} onCancel={() => setPendingPurge(null)} onConfirm={() => void purge()} />
+        <HistoryDeleteConfirm action="purge" kind="学习记录" title={pendingPurge.title || '未命名学习'} busy={busy} returnFocusRef={returnFocusRef} onCancel={() => setPendingPurge(null)} onConfirm={() => void purge()} />
       ) : null}
     </div>
   )
