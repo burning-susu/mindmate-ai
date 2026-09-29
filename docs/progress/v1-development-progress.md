@@ -685,3 +685,13 @@
 - 回归：后端全量一次 `335 passed, 9 failed, 1 skipped`；失败包括 Credential Manager `WinError 1312`、OpenAI 预算标识（已修）、Chunk Worker 组合运行失败（单项通过）、备份恢复目录句柄/锁定故障注入路径。全量 Pyright `59 errors`；Ruff、compileall 通过。前端全量 `16 files / 79 tests passed`，typecheck、lint、build 通过。OpenAPI `3.1.0 / 119 schemas / 122 operations`，生成类型无差异；Alembic head `h72a1b2c3d4e5`。
 - 下一步：按第七十批文档内第七十四批 Windows 手测卡，用 Guest Chrome 和新建 `%TEMP%` Mock 根亲测主链路、总结定位、任务/历史删除确认、日志清理与服务恢复；浏览器结果回传前保持 `BROWSER_PARTIAL`。长期复习计划、打包入口、真实 Provider 与官方账单对账继续独立待办。
 - 报告：`docs/test-reports/stage-74-demo-stage8-acceptance.md`。
+
+### 第七十五批：阶段 8 Windows 恢复稳定性与浏览器交接
+
+- 进场：`feat/v1-bootstrap`，LOCAL/REMOTE 均为 `1f80fddfb4c74639aabcc89d97af98bd190d9135`，工作区干净。当前没有普通 Chrome/Edge 可绑定，仅空的 Codex In-app Browser。
+- 恢复回归：增强 `test_locked_database_and_interrupted_switch_keep_original`，验证明确锁定后失败保护、原数据哈希、第二次 `swap_tree` 注入、恢复点数据库/对象可读、失败重放幂等及根外哨兵。隔离单项 `1 passed`；受控组合有波动，后续组合和合法恢复单项在 Windows live `database` → aside 改名时返回 `WinError 5 / RESTORE_DATABASE_LOCKED`，第二次注入未到达。TestClient 退出后无应用 Worker 活跃、Engine pool checked-out 为 0，仍未定位句柄持有者；不延长固定 sleep 或改生产行为，恢复稳定性保持未闭环。
+- 凭据：当前 Codex 执行环境的 Windows Credential Manager 单项实际 `CredWrite WinError 1312`，未 skip、未改既有凭据；普通交互式 Windows VS Code 复核命令见第七十五批报告。新增 `InMemoryCredentialStore` 保存/替换/重启读取/删除契约测试通过，数据库不含合成 Key。
+- 隔离 Mock 实测：使用固定本地 ONNX 缓存，导入 9 份合成资料、建立 4 个库，三条索引均 `READY`，重复准备幂等；实际 API 有引用回答和 `LOCAL_EVIDENCE_GATE` 拒答，Mock 学习会话生成持久总结。停止确认端口释放后，同根同端口重启，健康 `ok`、Web `200`、同一学习总结与来源可读。无模型下载、真实 Key/Provider 或费用。当前 Demo 服务保留在 `http://127.0.0.1:5196/` 供用户 Guest 浏览器复测。
+- 验证：最终定向 pytest `2 passed`；Ruff、compileall、Alembic head、`git diff --check` 通过。改动只涉及测试和报告，无生产逻辑、数据库或 API 契约变更；前端未改动未重跑。两份受影响测试文件定向 Pyright 有 `35` 个既有 `TestClient.app.state`/`zipfile.crc32` 类型诊断，没有本批新增诊断；全量 Pyright `59 errors` 沿用第74批记录，本批未重跑。
+- 状态与交接：`DEMO_STABLE` 沿用第42/64批 `PASS` 并注明本批 API/HTTP 实测、未做页面验收；`STAGE8_FULL_V1`、阶段 5–7 保持 `PARTIAL`；浏览器相关行均为 `BROWSER_PARTIAL`。第七十批文档已将旧卡收敛为上传/索引、引用/拒答、学习总结、重启、设置日志及历史/任务六步优先卡；人工结果返回前不提升页面门禁。
+- 报告：`docs/test-reports/stage-75-windows-stability-handoff.md`。

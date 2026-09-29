@@ -136,6 +136,53 @@ def test_status_and_key_lifecycle_never_persist_secret(tmp_path: Path) -> None:
     assert API_KEY.encode() not in database_bytes
 
 
+def test_fake_credential_port_replace_delete_and_restart_contract(tmp_path: Path) -> None:
+    replacement_key = f"{API_KEY}-replacement"
+    client, store, calls = _make_app(tmp_path, _stream_response)
+    with client:
+        first_headers = _session(client)
+        saved = client.post(
+            "/api/v1/ai/provider/key",
+            headers=first_headers,
+            json={"api_key": API_KEY},
+        )
+        assert saved.status_code == 200
+        assert store.get_secret("provider/deepseek/api-key") == API_KEY
+
+        replaced = client.post(
+            "/api/v1/ai/provider/key",
+            headers={**first_headers, "Idempotency-Key": str(uuid4())},
+            json={"api_key": replacement_key},
+        )
+        assert replaced.status_code == 200
+        assert replaced.json()["configured"] is True
+        assert API_KEY not in replaced.text
+        assert replacement_key not in replaced.text
+        assert store.get_secret("provider/deepseek/api-key") == replacement_key
+        assert calls == []
+
+    client2, _, restart_calls = _make_app(tmp_path, _stream_response)
+    client2.app.state.credential_store = store
+    with client2:
+        status = client2.get("/api/v1/ai/provider")
+        assert status.status_code == 200
+        assert status.json()["configured"] is True
+        assert store.get_secret("provider/deepseek/api-key") == replacement_key
+
+        deleted = client2.delete(
+            "/api/v1/ai/provider/key",
+            headers={**_session(client2), "Idempotency-Key": str(uuid4())},
+        )
+        assert deleted.status_code == 200
+        assert deleted.json()["configured"] is False
+        assert store.get_secret("provider/deepseek/api-key") is None
+        assert restart_calls == []
+
+    database_bytes = (tmp_path / "database" / "mindmate.db").read_bytes()
+    assert API_KEY.encode() not in database_bytes
+    assert replacement_key.encode() not in database_bytes
+
+
 def test_probe_requires_explicit_external_transfer_and_sends_only_fixed_request(
     tmp_path: Path,
 ) -> None:

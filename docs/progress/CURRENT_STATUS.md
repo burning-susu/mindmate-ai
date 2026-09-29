@@ -5,10 +5,11 @@
 - 当前开发分支：`feat/v1-bootstrap`
 - 第七十三批历史进场：分支 `feat/v1-bootstrap`；LOCAL `f113518737b54e368151af420f2341dd99e282d5`，REMOTE `f113518737b54e368151af420f2341dd99e282d5`；核验日期 `2026-09-29`。
 - 第七十四批进场：分支 `feat/v1-bootstrap`；LOCAL / REMOTE 均为 `ae75945991a3890a6c5d2811e29ab70ca5432e7f`；工作区干净。
+- 第七十五批进场：分支 `feat/v1-bootstrap`；LOCAL / REMOTE 均为 `1f80fddfb4c74639aabcc89d97af98bd190d9135`；工作区干净。
 - 最后更新时间：`2026-09-29`
 - 当前开发阶段：阶段 8 开发中，状态 `PARTIAL`；阶段 5、阶段 6、阶段 7 继续 `PARTIAL`
 - 交付顺序：Demo 首先完成，完整 V1 以后精进。求职 Demo 优先文件整理/导入、建库、带来源问答、最小学习陪练和重启恢复。Demo 可用性与完整 V1 阶段状态分开报告。
-- 当前批次状态：第七十四批 `DEMO_STABLE=PASS（沿用第42/64批，本批未实测）`，`STAGE8_FULL_V1=PARTIAL`；`HISTORY-AC-04/06`、`TASK-AC-05/12` 均为 `CODE_PASS / BROWSER_PARTIAL`；`LOG_RETENTION_CODE=PASS（沿用第73批）`、`LOG_RETENTION_BROWSER=BROWSER_PARTIAL`；`PACKAGED_LAUNCHER=PACKAGED_LAUNCHER_PARTIAL`；`AC-LEARN-006=PARTIAL`；真实 Provider smoke 与账单核对为 `PENDING`。本批一次后端全量为 `335 passed, 9 failed, 1 skipped`；OpenAI 预算 Provider 标识缺陷已修复，受影响文件 `8 passed`；前端 `16 files / 79 tests passed`。无普通 Chrome/Edge 页面证据，手测卡见 `docs/test-reports/stage-70-stage8-browser-acceptance.md`，完整结果见 `docs/test-reports/stage-74-demo-stage8-acceptance.md`。
+- 当前批次状态：第七十五批 `DEMO_STABLE=PASS（沿用第42/64批页面证据；本批已实测隔离Mock服务/API，未实测浏览器页面）`，`STAGE8_FULL_V1=PARTIAL`。后端隔离 Mock 服务健康 `ok`、Web HTTP `200`、4 个知识库中 3 条索引 `READY`、引用问答/资料外拒答/学习总结及同根重启恢复均有 API 证据；服务当前在 `http://127.0.0.1:5196/` 等待 Guest Chrome/Edge 复测。备份恢复组合仍在 live→aside 改名遇到 Windows `WinError 5 / RESTORE_DATABASE_LOCKED`，根因未确认；Credential Manager 实测 `WinError 1312` 标记 `ENV_BLOCKED`，内存端口契约测试通过。浏览器页、`HISTORY-AC-04/06`、`TASK-AC-05/12`、`LOG_RETENTION_BROWSER` 均保持 `BROWSER_PARTIAL`；`PACKAGED_LAUNCHER=PACKAGED_LAUNCHER_PARTIAL`、`AC-LEARN-006=PARTIAL`；真实 Provider smoke 与账单核对为 `PENDING`。详细结果见 `docs/test-reports/stage-75-windows-stability-handoff.md`，浏览器卡见 `docs/test-reports/stage-70-stage8-browser-acceptance.md`。
 
 ## 已完成阶段
 

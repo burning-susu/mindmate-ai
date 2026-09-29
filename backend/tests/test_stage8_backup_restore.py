@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import io
 import sqlite3
+import threading
 import time
 import zipfile
 from datetime import UTC, datetime
@@ -16,6 +17,7 @@ import httpx
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+import mindmate.application.local_restore as local_restore_module
 from mindmate.ai.providers.deepseek import DEEPSEEK_MODEL, DeepSeekChatProvider
 from mindmate.application.local_backup import BackupBuildError
 from mindmate.application.local_restore import (
@@ -40,6 +42,12 @@ from mindmate.security.credentials import InMemoryCredentialStore
 ORIGIN = "http://127.0.0.1:5173"
 
 SECRET = "fixture-restore-secret-do-not-pack"
+_APP_WORKER_THREAD_PREFIXES = (
+    "mindmate-",
+    "history-search-backfill",
+    "history-trash-purge",
+    "task-retention-purge",
+)
 
 
 def _make_app(tmp_path: Path) -> tuple[TestClient, InMemoryCredentialStore, Settings]:
@@ -53,6 +61,36 @@ def _make_app(tmp_path: Path) -> tuple[TestClient, InMemoryCredentialStore, Sett
         transport=httpx.MockTransport(lambda request: httpx.Response(200, json={"ok": True}, request=request)),
     )
     return TestClient(app, base_url="http://127.0.0.1"), store, settings
+
+
+def _assert_test_app_released(client: TestClient) -> None:
+    app = cast(Any, client.app)
+    engine = getattr(app.state, "engine", None)
+    checked_out_before = engine.pool.checkedout() if engine is not None else 0
+    deadline = time.monotonic() + 10
+    active = [
+        thread
+        for thread in threading.enumerate()
+        if thread.name.startswith(_APP_WORKER_THREAD_PREFIXES)
+    ]
+    waited_for: set[str] = set()
+    while active and time.monotonic() < deadline:
+        waited_for.update(thread.name for thread in active)
+        for thread in active:
+            thread.join(timeout=max(0.0, deadline - time.monotonic()))
+        active = [thread for thread in active if thread.is_alive()]
+    assert not active, f"应用 Worker 未退出：{sorted(thread.name for thread in active)}"
+
+    if engine is not None:
+        checked_out_after = engine.pool.checkedout()
+        assert checked_out_after == 0
+        if waited_for or checked_out_before:
+            print(
+                "APP_SHUTDOWN_DIAGNOSTIC "
+                f"waited_for={sorted(waited_for)} checked_out_before={checked_out_before} "
+                f"checked_out_after={checked_out_after}"
+            )
+        engine.dispose()
 
 
 def _session_headers(client: TestClient, *, idempotency: str | None = None) -> dict[str, str]:
@@ -279,6 +317,7 @@ def test_restore_replaces_dataset_keeps_recovery_point_and_blocks_outbound(tmp_p
         assert blocked.json()["code"] == "RESTORE_WRITES_FROZEN"
         recovery_id = confirmed.json()["recovery_point_id"]
 
+    _assert_test_app_released(client)
     client2, store2, settings2 = _make_app(tmp_path)
     store2.set_secret(DEEPSEEK_SECRET_REFERENCE, SECRET)
     client2.app.state.credential_store = store2
@@ -338,6 +377,7 @@ def test_restore_replaces_dataset_keeps_recovery_point_and_blocks_outbound(tmp_p
             json={"mode": "deepseek"},
         )
         assert mode.status_code == 409
+    _assert_test_app_released(client2)
     assert sentinel.read_text(encoding="utf-8") == "outside-root"
 
 
@@ -425,8 +465,11 @@ def test_schema_space_permission_lock_migration_and_interrupt(tmp_path: Path, mo
 
 
 def test_locked_database_and_interrupted_switch_keep_original(tmp_path: Path, monkeypatch) -> None:
+    sentinel = tmp_path.parent / f"sentinel-{tmp_path.name}.txt"
+    sentinel.write_text("outside-root", encoding="utf-8")
     client, _, settings = _make_app(tmp_path)
     payload = b"locked-original"
+    original_hash = _sha(payload)
     with client:
         with client.app.state.session_factory() as session:
             row = _seed_content_object(session, settings, payload)
@@ -440,7 +483,7 @@ def test_locked_database_and_interrupted_switch_keep_original(tmp_path: Path, mo
         confirmed = _execute(client, precheck.json()["precheck_id"])
         assert confirmed.status_code == 200, confirmed.text
 
-    cast(Any, client.app).state.engine.dispose()
+    _assert_test_app_released(client)
     holder = sqlite3.connect(settings.database_path.as_posix())
     holder.execute("BEGIN IMMEDIATE")
     try:
@@ -451,7 +494,7 @@ def test_locked_database_and_interrupted_switch_keep_original(tmp_path: Path, mo
     status = __import__("json").loads((settings.runtime_dir / "restore-control" / "state.json").read_text(encoding="utf-8"))
     assert status["phase"] == "ROLLED_BACK"
     assert status["error_code"] == "RESTORE_DATABASE_LOCKED"
-    assert (settings.resolved_data_dir / relative).read_bytes() == payload
+    assert _sha((settings.resolved_data_dir / relative).read_bytes()) == original_hash
 
     # A fresh confirmation is required after the locked attempt.
     client2, _, settings2 = _make_app(tmp_path)
@@ -464,10 +507,27 @@ def test_locked_database_and_interrupted_switch_keep_original(tmp_path: Path, mo
         assert precheck2.status_code == 200, precheck2.text
         confirmed2 = _execute(client2, precheck2.json()["precheck_id"])
         assert confirmed2.status_code == 200, confirmed2.text
+        recovery_id = confirmed2.json()["recovery_point_id"]
 
-    cast(Any, client2.app).state.engine.dispose()
+    _assert_test_app_released(client2)
     calls = {"n": 0}
     original = swap_tree
+    rename_failures: list[tuple[str, str, int | None]] = []
+    original_rename = local_restore_module._rename_released
+
+    def observe_rename(source: Path, destination: Path) -> None:
+        try:
+            original_rename(source, destination)
+        except BackupBuildError as exc:
+            cause = exc.__cause__
+            source_role = "live" if source.parent == settings2.resolved_data_dir else "staged"
+            destination_role = "aside" if "aside" in destination.parts else "live"
+            rename_failures.append(
+                (source_role, destination_role, getattr(cause, "winerror", None))
+            )
+            raise
+
+    monkeypatch.setattr(local_restore_module, "_rename_released", observe_rename)
 
     def boom(live: Path, staged: Path, aside: Path) -> None:
         calls["n"] += 1
@@ -475,15 +535,50 @@ def test_locked_database_and_interrupted_switch_keep_original(tmp_path: Path, mo
             raise BackupBuildError("RESTORE_SWITCH_CONFLICT", "注入切换中断。")
         original(live, staged, aside)
 
-    monkeypatch.setattr("mindmate.application.local_restore.swap_tree", boom)
+    monkeypatch.setattr(local_restore_module, "swap_tree", boom)
     interrupted = apply_pending_restore(settings2)
-    assert calls["n"] >= 2, f"恢复状态：{interrupted!r}"
-    assert (settings2.resolved_data_dir / relative).read_bytes() == payload
+    assert interrupted is not None
+    diagnostic = {
+        "swap_calls": calls["n"],
+        "phase": interrupted.get("phase"),
+        "error_code": interrupted.get("error_code"),
+        "rename_failures": rename_failures,
+    }
+    assert calls["n"] == 2, f"第二次 swap 注入未到达：{diagnostic}"
+    assert interrupted["phase"] == "ROLLED_BACK"
+    assert interrupted["error_code"] == "RESTORE_SWITCH_CONFLICT"
+    live_object = settings2.resolved_data_dir / relative
+    assert _sha(live_object.read_bytes()) == original_hash
     quick = sqlite3.connect(settings2.database_path.as_posix())
     try:
         assert quick.execute("PRAGMA quick_check").fetchone()[0] == "ok"
+        assert quick.execute(
+            "SELECT 1 FROM content_objects WHERE sha256 = ?", (original_hash,)
+        ).fetchone() is not None
     finally:
         quick.close()
+
+    recovery_root = settings2.resolved_data_dir / "recovery-points" / recovery_id
+    recovery_db = recovery_root / "database" / "mindmate.db"
+    assert recovery_db.is_file()
+    snapshot = sqlite3.connect(recovery_db.as_posix())
+    try:
+        assert snapshot.execute("PRAGMA quick_check").fetchone()[0] == "ok"
+        second_live_hash = _sha(b"second-live")
+        recovery_object = snapshot.execute(
+            "SELECT storage_relative_path FROM content_objects WHERE sha256 = ?",
+            (second_live_hash,),
+        ).fetchone()
+        assert recovery_object is not None
+    finally:
+        snapshot.close()
+    assert _sha((recovery_root / recovery_object[0]).read_bytes()) == second_live_hash
+
+    replayed = apply_pending_restore(settings2)
+    assert replayed == interrupted
+    assert calls["n"] == 2
+    assert _sha(live_object.read_bytes()) == original_hash
+    assert sentinel.read_text(encoding="utf-8") == "outside-root"
 
 
 def test_migration_failure_rolls_back_before_publish(tmp_path: Path, monkeypatch) -> None:

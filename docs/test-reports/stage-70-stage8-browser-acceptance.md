@@ -142,68 +142,32 @@
 
 ## Windows Chrome 人工验收卡（可打印）
 
-本批未取得普通浏览器证据。由操作者在普通 Windows VS Code PowerShell 使用 Guest Chrome 完成后填写本卡；不要使用默认 MindMate 数据根。仅使用下列临时根、固定测试资料和 Mock/fixture，禁止真实 Key、真实 Provider 请求或上传诊断包。
+本节原第七十批多窗口 fixture 卡已收敛。当前唯一执行卡见[第七十五批 Windows 浏览器交接卡](stage-70-stage8-browser-acceptance.md#第七十五批-windows-浏览器交接卡)，按六步顺序完成一次 Mock Guest profile 走查并记录 URL、对象 ID、Network 次数和截图路径。上方追踪矩阵保留历史状态；没有新增页面证据的行不更新。
+
+## 第七十五批 Windows 浏览器交接卡
+
+本会话只发现空的 Codex In-app Browser，没有普通 Chrome/Edge 标签页或可绑定 profile。隔离服务已在本机运行：Web `http://127.0.0.1:5196/`，API `http://127.0.0.1:8045/`；打开 Chrome/Edge Guest 时使用预置主库：`http://127.0.0.1:5196/knowledge-bases/01a0ec68-93f2-73a2-bb36-0b653cf9ea66`。Provider 固定 Mock；请勿填 Key、切在线 Provider 或确认付费请求。
+
+如服务已停止，从仓库根目录在普通 Windows PowerShell 用同一隔离根重启。脚本会核对所有权标记、复用固定 ONNX 缓存并验证 Mock；缺模型会停止，不会下载或回退。
 
 ```powershell
-# 终端 A：仓库根目录，Mock Demo 独立数据根
-$mockData = Join-Path $env:TEMP 'mindmate-ai-stage70-host-mock'
-& '.\scripts\demo.ps1' -DataDir $mockData -ApiPort 8030 -WebPort 5190
-
-# 另开终端 A：仓库根目录，test-only Provider fixture API
-$fixtureData = Join-Path $env:TEMP 'mindmate-ai-stage70-provider-fixture'
-Set-Location '.\backend'
-& '.\.venv\Scripts\python.exe' -u '.\tests\stage56_online_browser_server.py' `
-  --data-dir $fixtureData --api-port 8031 --web-port 5191
-
-# 终端 B：仓库根目录，匹配的 fixture 前端
-Set-Location '.\frontend'
-npm.cmd run dev -- --host 127.0.0.1 --port 5191 --strictPort
+Set-Location 'C:\Users\15932\Desktop\ai知识学习助手\mindmate-ai'
+$dataDir = Join-Path $env:TEMP 'mindmate-ai-stage75-demo-mock-b3978231600c4a3c85f78bc426b9ada3'
+& .\scripts\demo.ps1 -DataDir $dataDir -ApiPort 8045 -WebPort 5196 -NoBrowser
 ```
 
-在 **Chrome Guest** 打开 `http://127.0.0.1:5190/`。Provider fixture 另开 Guest 窗口打开 `http://127.0.0.1:5191/settings`。日志、截图与诊断下载留在 `%TEMP%\mindmate-ai-stage70-evidence`，不要提交。fixture 初始调用数应为零；摘要端点为 `http://127.0.0.1:8031/api/v1/testing/provider-fixture/calls`，仅返回 Provider、固定 Host、模型、请求类别和授权头是否存在。若需模拟外部 Provider 不可用，在 fixture 页面同源 DevTools Console 执行一次 `fetch('/api/v1/testing/provider-fixture/fail-next-question',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':crypto.randomUUID()},body:JSON.stringify({provider:'DEEPSEEK'})})`；这只安排 MockTransport 失败，不访问服务商网络。
+在 Guest profile 打开上述主库 URL，并在 Network 勾选 Preserve log。按以下顺序完成一次页面走查；截图留在 `%TEMP%\mindmate-ai-stage75-browser-evidence`，不要提交仓库。
 
-| 操作 | 预期 | 实际/证据填写 |
+| 顺序 | 操作 | 记录 |
 | --- | --- | --- |
-| 依次打开五个核心入口；首页建立文件、知识库、对话、学习和任务 | 导航/标题一致；计数和最近活动与合成数据相符 | 日期/浏览器：______；合成 ID：______；截图：______ |
-| 在文件、对话、历史、学习、设置打开同一任务抽屉；关闭按钮/Esc；刷新并重启隔离 API | task id/阶段/真实进度一致；关闭不取消；焦点回归；重启后同一记录恢复 | task id：______；取消 POST 次数：______；Network 截图：______ |
-| 停止本卡 API 后刷新，再启动并点“重新连接” | 全页本地服务阻断；重连后原 URL 恢复 | 阻断结果：______；恢复结果：______；截图：______ |
-| API 保持可用时调用 fixture `/api/v1/testing/provider-fixture/fail-next-question` 安排某一 Provider 失败 | 本地文件/历史可读；在线操作失败且不切换/不自动重发；calls 与单次请求对应 | Provider：______；失败前后 calls：______；截图：______ |
-| 设置页检查日志期限/体积，先取消再确认合成日志清理；预览诊断并下载 JSON | `30 天 / 100 MiB` 可见；取消不发请求；清理不删文件/备份；JSON 只含白名单且无 Key/正文/绝对路径/Token | DELETE/POST 次数：______；下载文件脱敏结果：______；证据路径：______ |
-| 对话和学习历史分别组合关键词/类型/状态/日期/来源；打开原上下文；测试软删除恢复 | 条件交集正确；上下文不重生成；恢复同一 ID；确认前取消/Esc/错误词均零 DELETE | 结果：______；会话 ID：______；截图：______ |
-| 仅对隔离回收站记录输入正确永久删除确认词；逐题搜索三题题干/已提交答案/公开反馈 | 正确确认仅一条 DELETE；文件/知识库/其他会话仍在；每条链接用真实 `question_id` 定位；私有答案键/说明不命中 | DELETE 次数：______；question_id：______；共享资源核对：______ |
-| fixture Settings 分别选择 DeepSeek/OpenAI，各确认后完成一次出题和点评，刷新读取 | Host 分别固定 `api.deepseek.com` / `api.openai.com`；每次费用分别确认；无同意/Key/预算时 calls 为 0；fixture 失败不回退 | DEEPSEEK calls：______；OPENAI calls：______；费用确认截图：______ |
-| 刷新有效知识库/学习会话/文件详情，再刷新不存在 UUID | 有效详情恢复；不存在资源显示专用状态和返回入口，无白屏或业务写入 | URL/ID：______；实际文案：______；Network/截图：______ |
+| 1. 上传和索引 | 文件页上传合成资料 `docs/test-data/stage5-fixed-ready/README.md`，新建知识库并加入该文件，等待索引 `READY` | URL、`file_id`、`knowledge_base_id`、`index_version_id`、导入/索引任务 ID、各请求次数、截图路径 |
+| 2. 引用和拒答 | 在预置主库问“API 单次请求超时时间是多少秒？”，核对 `30 秒` 和真实引用；再问“玛雅文明使用几套历法？”，确认资料不足且无引用 | `conversation_id`、`operation_id`、引用文件/行号、零引用结果、请求次数、截图路径 |
+| 3. 学习和历史 | 从预置主库开始一题、提交答案、结束会话；在历史按总结关键词定位总结，再用题干/答案/反馈分别核对真实 `question_id` | `learning_session_id`、`question_id`、总结 URL、Network 次数、截图路径 |
+| 4. 刷新和重启 | 刷新总结页；在演示终端按 Ctrl+C 后，用同一命令重启，确认同一会话 ID、题目、总结和来源恢复 | 重启前/后 URL 与 ID、Network 次数、截图路径 |
+| 5. 设置日志 | 设置页分别取消按钮和 Escape；各应为 0 个清理 POST；再确认一次，应恰为 1 个 POST | 取消/Escape/确认 POST 数、日志状态、截图路径 |
+| 6. 历史删除和任务 | 只选本次合成历史记录，确认前取消/Escape/错误词均为 0 个 DELETE，正确确认恰为 1 个 DELETE；核对回收站关联任务 ID 与终态 | 历史/任务 ID、DELETE 次数、任务状态、URL、Network 次数、截图路径 |
 
-实际执行人：______　日期：______　完整证据目录：______　未通过项与复现步骤：______
-
-只有页面真实点击、刷新、Network 次数和本地截图/调用摘要齐全时，相关矩阵行才能改为浏览器 `PASS`。只有口头报告时标注“用户报告的人工复测”，不可写成代理亲测。备份创建/下载与有效恢复沿用第 66/53 批证据，不需重复跑。
-
-## 第七十四批最短人工复测卡
-
-本会话没有普通 Chrome/Edge。请在普通 Windows PowerShell 使用新的 `%TEMP%` 根和 Guest profile；不要删除已存在的目录或使用默认个人数据根。`demo.ps1` 固定 Mock 并离线校验本地 ONNX 缓存，缺模型时会停止，不会下载模型或切换 Provider。
-
-```powershell
-# 从仓库根目录执行；端口被占用时换成两个空闲回环端口并记录。
-$data = Join-Path $env:TEMP 'mindmate-ai-stage74-browser-mock'
-if (Test-Path -LiteralPath $data) { throw "隔离根已存在，请换一个新的 stage74 名称：$data" }
-& .\scripts\demo.ps1 -DataDir $data -ApiPort 8040 -WebPort 5195 -NoBrowser
-
-# Ctrl+C 停止后，使用同一数据根恢复原 URL。
-& .\scripts\dev.ps1 -DataDir $data -ApiPort 8040 -WebPort 5195
-```
-
-Chrome Guest 打开 `http://127.0.0.1:5195/`，在 Network 面板启用保留日志。网页上传 `docs/test-data/stage5-fixed-ready/README.md`，等待解析完成；创建新知识库并加入该文件，等索引 `READY`。它是合成资料，主库样本的 API 单次请求超时为 `30 秒`，资料没有给出的问题必须拒答。默认 Provider 维持 Mock；不要填写 Key、切换在线 Provider 或执行任何付费确认。
-
-| 步骤 | 操作与核对 | 记录 |
-| --- | --- | --- |
-| 1. Demo 主链路 | 从文件页上传上述资料，建库并等 `READY`；问“主库样本 API 单次请求超时是多少秒”，确认回答为 30 秒且引用来自 `README.md`；再问“玛雅文明使用几套历法”，确认拒答且无伪引用 | 数据根、`file_id`、`knowledge_base_id`、`index_version_id`、任务 ID、URL、每步请求次数、截图路径 |
-| 2. 学习和历史 | 从该库开始至少一题，提交答案、查看点评并结束；从历史关键词打开持久总结；分别查题干、已提交答案、公开反馈，核定位的真实 `question_id`；刷新并重启后核同一会话和总结 | `session_id`、各结果 `question_id`、总结 URL、重启前后截图、Network 请求次数 |
-| 3. 回收与任务 | 再上传一份合成文件，趁解析/索引任务处于 `QUEUED/RUNNING` 时将对应文件或库移入回收站；在任务抽屉核同一 ID 的取消/失效状态，并核共享文件/另一个库未误删；用合成历史记录检查软删/恢复 | 文件/库/任务 ID、共享对象 ID、状态变化 URL 与请求次数 |
-| 4. 历史删除确认 | 对合成历史项打开永久删除确认：取消、Escape、错误词各为 0 个 DELETE；仅在检查目标确为本次合成记录后输入界面要求的正确确认词，确认恰好 1 个 DELETE | 历史 ID、确认词操作结果、DELETE 次数、恢复/删除后的页面截图 |
-| 5. 设置日志 | 设置页先取消和 Escape 日志清理，各 0 个 POST；再次打开并确认，恰好 1 个 POST；检查诊断导出只含白名单字段且不含正文、Key、Cookie、Token、绝对路径。导出只留本机，不上传 | 清理前后计数、POST 次数、导出扫描结果、截图路径 |
-| 6. 本地恢复 | 记录学习总结 URL；停止隔离 API 后刷新应显示本地服务不可用，再以同一根/端口重启并重连；确认原会话总结一致，五个核心导航入口和工作台状态可见 | URL、ID、停机/恢复 Network 记录、截图路径 |
-
-截图和诊断下载放在 `%TEMP%\mindmate-ai-stage74-browser-evidence`，不提交仓库。回传浏览器/Guest profile、隔离根、业务 ID、URL、逐动作 Network 次数和证据路径；只有代理自己操作到的页面才可记为本批亲测，用户回传要标为“用户报告的人工复测”。本卡只覆盖最高优先级场景，其它矩阵行继续 `BROWSER_PARTIAL`。
+回传日期、浏览器及 Guest profile、隔离根、各对象 ID、URL、Network 次数和本机截图目录。页面项在收到真实点击证据前一律保持 `BROWSER_PARTIAL`；用户回传只标注“用户报告的人工复测”，不记为代理亲测。其它追踪矩阵行不因本卡更新。
 
 ## 第七十四批自动化增量证据
 
