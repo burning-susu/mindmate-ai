@@ -616,6 +616,8 @@
 .history-item__meta { display: grid; justify-items: end; gap: 3px; color: var(--muted); font-size: 11px; font-style: normal; }
 .history-item__meta em { font-style: normal; }
 .history-dialog { display: grid; gap: 8px; padding: 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.settings-dialog-backdrop { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px; background: rgb(18 31 34 / 42%); }
+.settings-log-cleanup-dialog { width: min(460px, calc(100vw - 32px)); box-shadow: 0 16px 48px rgb(18 31 34 / 22%); }
 .history-dialog__heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .history-dialog h2 { margin: 0; font-size: 16px; }
 .history-dialog p { margin: 0; font-size: 13px; }

@@ -3,11 +3,11 @@
 ## 基本信息
 
 - 当前开发分支：`feat/v1-bootstrap`
-- 第七十二批进场：分支 `feat/v1-bootstrap`；LOCAL `3310a762d6d24f92f8ec7f2d13c2894e1f4e2439`，REMOTE `3310a762d6d24f92f8ec7f2d13c2894e1f4e2439`；核验日期 `2026-09-29`。
+- 第七十三批进场：分支 `feat/v1-bootstrap`；LOCAL `f113518737b54e368151af420f2341dd99e282d5`，REMOTE `f113518737b54e368151af420f2341dd99e282d5`；核验日期 `2026-09-29`。
 - 最后更新时间：`2026-09-29`
 - 当前开发阶段：阶段 8 开发中，状态 `PARTIAL`；阶段 5、阶段 6、阶段 7 继续 `PARTIAL`
 - 交付顺序：Demo 首先完成，完整 V1 以后精进。求职 Demo 优先文件整理/导入、建库、带来源问答、最小学习陪练和重启恢复。Demo 可用性与完整 V1 阶段状态分开报告。
-- 当前批次状态：学习总结持久化、结束路径统一、历史全文检索和总结定位代码/自动化 `CODE_PASS`；`AC-LEARN-006` 仍 `PARTIAL`（完整间隔复习模型未实现），普通 Chrome/Edge 仍 `BROWSER_PARTIAL`；阶段 8 全量仍 `STAGE8_FULL_V1=PARTIAL`。第七十二批新增版本化 `learning_session_summaries` 快照、旧完成记录本地回填、动态 Citation 失效状态、`summary` 搜索投影和完成历史入口。详细报告见 `docs/test-reports/stage-72-learning-summary-history.md`；第七十批 `HISTORY-AC-04/06` 已回链本报告。前端 `16 files / 78 tests`、typecheck、lint、build 通过；阶段 7/8 定向后端和新批次 3 项回归通过。完整后端集合仍有宿主编码、Windows Credential Manager、Provider/budget、目录句柄和 FTS5 波动，未冒称全量通过。`LOCAL_BUDGET_RECONCILIATION` 沿用第 68 批 `PASS`，Provider 官方账单和真实 Provider smoke 仍 `PENDING`。求职 Demo 沿用第四十二/六十四批 `PASS`，本批未重跑；阶段 5–7 完整 V1 继续 `PARTIAL`。
+- 当前批次状态：第七十三批 `LOG_RETENTION_CODE=PASS`，`LOG_RETENTION_BROWSER=BROWSER_PARTIAL`，`PACKAGED_LAUNCHER_PARTIAL`；Settings 明确当前不提供现有数据目录搬迁，Alembic 只做 Schema 前向升级。`dev.ps1` 子服务 stdout/stderr 直出终端，不写应用日志；诊断结构化事件仍按 30 天/100 MiB 管理。设置页清理确认、取消、Escape、重复点击和失败自动化通过；两次隔离启动/健康/重启/正常停止通过。普通 Chrome/Edge 未验，`STAGE8_FULL_V1=PARTIAL`。报告见 `docs/test-reports/stage-73-runtime-logging-settings.md`。第七十二批 `HISTORY-AC-04/06` 继续 `CODE_PASS / BROWSER_PARTIAL`，`AC-LEARN-006` 仍 `PARTIAL`；第七十一批 `TASK-AC-05/12` 继续 `CODE_PASS / BROWSER_PARTIAL`。求职 Demo 可用性沿用第四十二/六十四批 `PASS`，本批未重跑；阶段 5–7 完整 V1、官方 Provider 账单和真实 Provider smoke 状态不变。
 
 ## 已完成阶段
 

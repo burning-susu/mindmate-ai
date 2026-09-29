@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { BrowserRouter } from 'react-router-dom'
 
@@ -359,7 +359,6 @@ describe('stage 6 AI provider configuration', () => {
     window.history.pushState({}, '', '/settings')
     let logFileCount = 2
     const clearCalls: string[] = []
-    vi.stubGlobal('confirm', vi.fn(() => false))
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
       if (url.includes('/system/session')) return response({ status: 'ready' })
@@ -382,20 +381,76 @@ describe('stage 6 AI provider configuration', () => {
 
     render(<BrowserRouter><App /></BrowserRouter>)
     const clearButton = await screen.findByRole('button', { name: '清理可清理的诊断日志' })
+    expect(screen.getByText(/手动命令输出和 Windows 系统日志也不在此清理范围/)).toBeInTheDocument()
     fireEvent.click(clearButton)
+    const dialog = await screen.findByRole('dialog', { name: '确认清理应用诊断日志' })
+    expect(within(dialog).getByText(/当前 2 个结构化诊断日志文件/)).toBeInTheDocument()
+    fireEvent.click(within(dialog).getByRole('button', { name: '取消' }))
+    expect(screen.queryByRole('dialog', { name: '确认清理应用诊断日志' })).not.toBeInTheDocument()
     expect(clearCalls).toEqual([])
 
-    vi.mocked(window.confirm).mockReturnValue(true)
     fireEvent.click(clearButton)
+    const confirmed = await screen.findByRole('dialog', { name: '确认清理应用诊断日志' })
+    fireEvent.click(within(confirmed).getByRole('button', { name: '确认清理日志' }))
     await waitFor(() => expect(clearCalls).toEqual(['POST']))
     expect(await screen.findByText('已清理 2 个诊断日志文件，释放 2.0 KB。')).toBeInTheDocument()
     expect(await screen.findByText(/当前 0 个文件 \/ 0 B/)).toBeInTheDocument()
   })
 
+  it('cancels on Escape and prevents duplicate log-clear writes while pending', async () => {
+    queryClient.clear()
+    window.history.pushState({}, '', '/settings')
+    const writes: Array<{ url: string; method: string }> = []
+    const pendingClear: { resolve: (() => void) | null } = { resolve: null }
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      if (method !== 'GET' && !url.includes('/system/session')) writes.push({ url, method })
+      if (url.includes('/system/session')) return response({ status: 'ready' })
+      if (url.endsWith('/api/v1/system/diagnostics/logs/clear')) {
+        return new Promise<Response>((resolve) => {
+          pendingClear.resolve = () => resolve(response({
+            files_removed: 2,
+            bytes_removed: 2048,
+            remaining_files: 0,
+            remaining_bytes: 0,
+            complete: true,
+          }))
+        })
+      }
+      const auxiliary = settingsAuxiliaryResponse(url)
+      if (auxiliary) return auxiliary
+      if (url.endsWith('/api/v1/ai/provider')) return response(initialStatus)
+      return response({ status: 'ok', version: '0.1.0' })
+    }))
+
+    render(<BrowserRouter><App /></BrowserRouter>)
+    const clearButton = await screen.findByRole('button', { name: '清理可清理的诊断日志' })
+    fireEvent.click(clearButton)
+    expect(await screen.findByRole('dialog', { name: '确认清理应用诊断日志' })).toBeInTheDocument()
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(screen.queryByRole('dialog', { name: '确认清理应用诊断日志' })).not.toBeInTheDocument()
+    expect(writes).toEqual([])
+
+    fireEvent.click(clearButton)
+    const dialog = await screen.findByRole('dialog', { name: '确认清理应用诊断日志' })
+    const confirmButton = within(dialog).getByRole('button', { name: '确认清理日志' })
+    fireEvent.click(confirmButton)
+    await waitFor(() => expect(writes).toHaveLength(1))
+    expect(writes[0]).toEqual({ url: '/api/v1/system/diagnostics/logs/clear', method: 'POST' })
+    expect(confirmButton).toBeDisabled()
+    fireEvent.click(confirmButton)
+    fireEvent.click(clearButton)
+    expect(writes).toHaveLength(1)
+
+    pendingClear.resolve?.()
+    expect(await screen.findByText('已清理 2 个诊断日志文件，释放 2.0 KB。')).toBeInTheDocument()
+    expect(writes).toHaveLength(1)
+  })
+
   it('shows a safe error when diagnostic log cleanup fails', async () => {
     queryClient.clear()
     window.history.pushState({}, '', '/settings')
-    vi.stubGlobal('confirm', vi.fn(() => true))
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
       if (url.includes('/system/session')) return response({ status: 'ready' })
@@ -415,6 +470,8 @@ describe('stage 6 AI provider configuration', () => {
 
     render(<BrowserRouter><App /></BrowserRouter>)
     fireEvent.click(await screen.findByRole('button', { name: '清理可清理的诊断日志' }))
+    const dialog = await screen.findByRole('dialog', { name: '确认清理应用诊断日志' })
+    fireEvent.click(within(dialog).getByRole('button', { name: '确认清理日志' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('诊断日志暂时无法清理，请稍后重试。')
   })
 

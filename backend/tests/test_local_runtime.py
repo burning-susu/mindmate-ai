@@ -132,11 +132,13 @@ def test_demo_stop_classifies_owned_termination_without_killing_unrelated_proces
         ],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=40,
         check=False,
     )
-    assert normal.returncode == 0, normal.stdout + normal.stderr
-    assert "正常停止分类通过" in normal.stdout
+    assert normal.returncode == 0, (normal.stdout or "") + (normal.stderr or "")
+    assert "RUNTIME_STOP_CLASSIFICATION_OK" in (normal.stdout or "")
 
     abnormal = subprocess.run(
         [
@@ -151,11 +153,73 @@ def test_demo_stop_classifies_owned_termination_without_killing_unrelated_proces
         ],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=40,
         check=False,
     )
-    assert abnormal.returncode == 1, abnormal.stdout + abnormal.stderr
-    assert "正常停止分类通过" not in abnormal.stdout
+    assert abnormal.returncode == 1, (abnormal.stdout or "") + (abnormal.stderr or "")
+    assert "RUNTIME_STOP_CLASSIFICATION_OK" not in (abnormal.stdout or "")
+
+
+def test_runtime_subprocess_output_is_visible_but_not_persisted(tmp_path: Path) -> None:
+    if sys.platform != "win32":
+        pytest.skip("后台子进程终端输出边界只在 Windows PowerShell 上验证")
+    script = Path(__file__).resolve().parents[2] / "scripts" / "dev.ps1"
+    data_root = tmp_path / "managed-data"
+    data_root.mkdir()
+    sentinel = tmp_path / "outside-sentinel.txt"
+    sentinel.write_text("keep-this-file", encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            "powershell",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(script),
+            "-RuntimeOutputSelfTest",
+            "-DataDir",
+            str(data_root),
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 0, (result.stdout or "") + (result.stderr or "")
+    assert "RUNTIME_OUTPUT_BOUNDARY_OK" in (result.stdout or "")
+    assert "MM_CANARY_KEY=fixture-secret" in (result.stdout or "")
+    assert "synthetic private content" in (result.stdout or "")
+    assert "C:\\MindMateSynthetic\\private.txt" in (result.stdout or "")
+    assert "Cookie: session=fixture-cookie" in (result.stderr or "")
+
+    with TestClient(
+        create_app(Settings(data_dir=data_root, env="test")),
+        base_url="http://127.0.0.1",
+    ) as client:
+        headers = {"Origin": "http://127.0.0.1:5173"}
+        session = client.post("/api/v1/system/session", headers=headers)
+        assert session.status_code == 200
+        export = client.get("/api/v1/system/diagnostics/export", headers=headers)
+        assert export.status_code == 200
+        assert "fixture-secret" not in export.text
+        assert "synthetic private content" not in export.text
+        assert "C:\\MindMateSynthetic\\private.txt" not in export.text
+        assert "fixture-cookie" not in export.text
+
+    for path in data_root.rglob("*"):
+        if path.is_file():
+            persisted = path.read_bytes().decode("utf-8", errors="replace")
+            assert "MM_CANARY_KEY" not in persisted
+            assert "synthetic private content" not in persisted
+            assert "MindMateSynthetic" not in persisted
+            assert "fixture-cookie" not in persisted
+    assert sentinel.read_text(encoding="utf-8") == "keep-this-file"
 
 
 def test_single_instance_lock_rejects_second_writer(tmp_path: Path) -> None:

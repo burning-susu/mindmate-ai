@@ -222,8 +222,8 @@ def get_privacy_status(request: Request) -> dict[str, Any]:
             else f"有文件暂未清理；当前 {retention.file_count} 个文件 / {retention.bytes_used} 字节"
         )
         message = (
-            "受控结构化应用事件：最多保留 30 天或 100 MB（先达到者清理）；"
-            f"外部终端输出不在清理范围。{state}。"
+            "仅应用保存的结构化诊断事件：最多保留 30 天或 100 MiB（先达到者清理）；"
+            f"后台服务 stdout/stderr 直出当前终端，不落盘；手动命令输出和 Windows 系统日志不在应用清理范围。{state}。"
         )
     else:
         message = "应用诊断日志目录暂不可安全访问，未提供清理操作。"

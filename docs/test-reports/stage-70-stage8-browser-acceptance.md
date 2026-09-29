@@ -87,13 +87,13 @@
 | --- | --- | --- | --- | --- | --- |
 | 首页统计/最近活动/快捷入口 | `home_overview.py`、HomePage 与对应 APIs | `test_stage8_home_overview.py`、`home-recent/home-shortcuts/home-learning` Vitest | 第 48 批只验证部分数量；没有同屏四类对象、任务摘要及有效学习统计 | `CODE_PASS / BROWSER_PARTIAL` | 人工卡内同根建四类对象，逐项核计数、最近项与导航 |
 | 设置-存储状态 | `GET /api/v1/system/storage`、`systemSettings.ts` | `test_stage8_settings_usage_budget.py::test_storage_usage_budget_and_privacy_endpoints`、第 52 批 | 没有本批设置页容量分类/读取失败状态截图 | `CODE_PASS / BROWSER_PARTIAL` | 打开设置页核分类、体积单位与失败不是 0 |
-| 设置-日志 | `GET /api/v1/system/privacy`、`POST /api/v1/system/diagnostics/logs/clear` | `test_stage67_diagnostic_log_retention.py`；上次定向 `19 passed, 1 skipped` | 第 67 批浏览器未进入；本批也未清理 | `CODE_PARTIAL / BROWSER_PARTIAL` | 人工卡核 30 天/100 MiB、预览清理范围、取消与确认；外部运行时 stdout/stderr 仍不受本服务控制，整体 `LOG_RETENTION` 不得记 `PASS` |
+| 设置-日志 | `GET /api/v1/system/privacy`、`POST /api/v1/system/diagnostics/logs/clear`；仅管理应用白名单结构化诊断事件 | `test_stage67_diagnostic_log_retention.py` 覆盖 30 天/100 MiB、路径/重解析点和清理边界；第 73 批 `test_local_runtime.py`、`test_stage65_diagnostics.py` 与设置交互覆盖终端诱饵不落盘、导出脱敏、取消/Esc/确认/重复/失败 | 仍无普通 Chrome/Edge 点击及 Network 计数 | `CODE_PASS / BROWSER_PARTIAL` | 用第 73 批补充卡亲测日志计数、取消/Esc 零 POST、确认恰一 POST 和诊断导出；未亲测前浏览器项保持 partial |
 | 设置-诊断预览/导出 | `GET /api/v1/system/diagnostics/preview`、`.../export` | `test_stage65_diagnostics.py` 覆盖白名单、诱饵泄漏和失败安全 | 本批无预览/取消/JSON 下载、无文件扫描结果 | `CODE_PASS / BROWSER_PARTIAL` | 人工卡核预览和下载，扫描不含测试 Key、正文、绝对路径、Cookie/Token；文件只保留本机 |
 | 设置-本地模型 | `/api/v1/embedding-model`、模型安装 Worker | `test_embedding_model_install.py`；第 52 批设置状态契约 | 第 54 批只说明本地模型/学习入口；本批未走模型状态页 | `CODE_PASS (自动化/继承) / BROWSER_PARTIAL` | 普通 Guest profile 核状态、固定来源/许可和无模型时的错误，不触发下载 |
 | 设置-DeepSeek/OpenAI 选择 | `/api/v1/ai/provider`、凭据/同意分 Provider 保存 | `test_stage54_openai_provider.py`、`test_stage6_provider_configuration.py`、第 68 批 fixture tests | 第 54 批 Chrome 已核 Mock/DeepSeek/OpenAI 选择、独立同意和刷新后 Mock | `CODE_PASS / BROWSER_PASS (沿用第 54 批选择流程)` | 在线学习生成/反馈部分仍需单独执行下面 fixture 浏览器流程 |
 | 设置-周期预算 | `usage_budget.py`、`GET /api/v1/system/ai-usage` | 第 68 批预算/Provider/Chat/RAG 组合 `33 passed`，覆盖两 Provider、UTC 窗口、预算阻断、恢复 | 本批无真实设置页、周期切换或历史窗口操作 | `LOCAL_BUDGET_RECONCILIATION=PASS / BROWSER_PARTIAL` | 人工卡核当前周期和历史窗口；官方账单核对仍 `PENDING`，本地估算不等同账单 |
 | 设置-备份/恢复 | `backup_worker.py`、Settings 备份页、恢复 UI | `test_stage66_backup_worker.py`、`test_stage8_backup_restore.py` | 创建/下载继承第 66 批；完整恢复 UI 继承第 53 批 | `PASS (继承)` | 不重复已充分验收部分；仅坏包手动流程仍列为 `AC-BACKUP-003 BROWSER_PARTIAL` |
-| 设置-存储迁移 | 当前 Settings 没有可用迁移操作；第 65 批明确仍显示不可用 | 未发现可执行存储迁移代码/测试 | 无浏览器可操作项 | `NOT_IMPLEMENTED (需确认是否属于本阶段已批准范围)` | 不伪造按钮；若 V1 阶段 8 确需迁移，先按变更治理确认范围再实施 |
+| 设置-存储迁移 | Settings 没有现有数据目录搬迁 API/操作；`09_数据模型与本地存储.md` §5.2 允许安装/首次启动选择目录，并规定改动已有目录属于迁移；`18_最终决策表.md` `DEC-DATA-006` 指 Alembic Schema 前向升级；`16_Codex开发任务书.md` §15.1 只要求设置中的存储，没有阶段 8 数据目录迁移验收 | 第 73 批核对需求原文、最终决策、API 与页面；无数据目录搬迁实现 | 无浏览器可操作项 | `NOT_IMPLEMENTED (现有数据目录搬迁未定义为阶段 8 验收；留作发布规划)` | 保持不可用；不要把 Alembic Schema 升级称为数据目录搬迁 |
 | 业务回收站到期清理 | `history_purge.py`、`history_purge_worker.py`、purge preview/run APIs | `test_stage8_history_purge.py`、第 51 批 30 天边界及共享来源用例 | 无普通浏览器到期预览/清理及对象仍在页面对照 | `CODE_PASS / BROWSER_PARTIAL` | 用隔离合成对话/学习记录修改测试时间，核未满 30 天不删、到期删除且来源保留 |
 | 任务记录保留清理 | `task_retention.py`、`task_retention_worker.py`、Home 任务面板 | `test_stage8_task_retention.py` 7/30 天、引用保护和计数一致 | 无普通浏览器确认词、取消、清理后页面计数 | `CODE_PASS / BROWSER_PARTIAL` | 在普通浏览器单独核 preview/取消/确认及业务对象仍存在 |
 | 恢复后回到 Mock/重新确认两家 | `local_restore.py` Provider restore guard；设置页确认提示 | `test_stage8_backup_restore.py` 恢复阻断外发；第 53 批恢复测试 | 第 53 批 Chrome 重启后显示 Mock、同意清空、0 在线请求 | `PASS (继承第 53 批页面证据)` | 不重复真实服务测试；用户后续操作仍需分别确认 Provider |
@@ -107,7 +107,7 @@
 2. 学习会话没有持久化的完成总结对象，也没有完成总结展示/全文检索路径；对应 `HISTORY-AC-04`、`HISTORY-AC-06` 为 `CODE_PARTIAL`。下一批先按变更治理明确总结字段和业务口径。
 3. 文件和知识库软删除接口不调用 `cancel_task`；`TASK-AC-12` 尚无回收站后任务取消/安全停机专用回归。下一批需要以排队任务、运行任务和共享资源建立后端测试，再实现已批准语义。
 4. `TASK-AC-05` 的固定并发边界有既有 Worker 证据，但源码没有找到“用户可配置下调”入口；此子项保留 `CODE_PARTIAL`。
-5. 应用自有白名单诊断事件有 30 天/100 MiB 清理；外部启动器和 Python/Uvicorn stdout/stderr 不受该服务控制，所以整体 `LOG_RETENTION` 仍 `PARTIAL`。
+5. 第 73 批已把 `dev.ps1` 启动的 Uvicorn/Vite stdout/stderr 直出当前操作者终端，不另存文件；应用清理只作用于白名单结构化诊断事件。打包入口仍未实现，普通浏览器设置页验收也未取得，所以发布范围的 `LOG_RETENTION` 与 `STAGE8_FULL_V1` 不应据此记为完整通过。
 
 `PROVIDER_BILLING_RECONCILIATION` 与 `REAL_PROVIDER_SMOKE` 单独保持 `PENDING`，不被本地预算测试或 MockTransport 覆盖。第 53/66 批的备份创建、恢复与恢复后 Mock 页面证据按原范围继承，不算成本批亲测。求职 Demo 可用性继续单独沿用 `PASS`，完整 V1 阶段 5–8 不因此通过。
 

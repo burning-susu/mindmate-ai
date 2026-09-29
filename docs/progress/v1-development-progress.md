@@ -666,3 +666,13 @@
 - 证据：新增 `backend/tests/test_stage72_learning_summary.py` 3 项，覆盖自动完成、0 题主动结束、旧快照确定性回填、总结关键词定位、Citation 失效、软删除/恢复/永久清理；阶段 7/8 定向回归、多题回归和迁移回归通过。前端 `16 files / 78 tests passed`，typecheck、lint、build、OpenAPI 生成、Ruff、定向 Pyright、compileall、`git diff --check` 通过。
 - 全量边界：后端全量集合保留既有 Windows PowerShell stdout、Credential Manager `WinError 1312`、OpenAI fixture、备份目录句柄等失败，未写成全量通过；详见 `docs/test-reports/stage-72-learning-summary-history.md`。
 - 浏览器与交接：当前会话没有普通 Chrome/Edge 标签页，因此没有截图、URL 或 Network 证据；报告附最短人工复测卡。Demo 可用性沿用既有 `PASS`，阶段 5–7、设置迁移、外部 stdout/stderr、Provider 账单和真实 Provider smoke 独立保持原状态。
+
+### 第七十三批：阶段 8 运行日志边界与设置验收收口
+
+- 进场：`feat/v1-bootstrap`，LOCAL/REMOTE 均为 `f113518737b54e368151af420f2341dd99e282d5`，工作区干净。
+- 日志边界：`scripts/dev.ps1` 启动的 Uvicorn 与 Vite stdout/stderr 直出当前终端，不写入应用文件；应用诊断清理只覆盖 `diagnostic_log_retention.py` 管理的结构化白名单事件。设置文案同时排除手动命令输出与 Windows 系统日志。`LOG_RETENTION_CODE=PASS`，普通浏览器验收仍 `BROWSER_PARTIAL`。
+- 设置清理：确认框支持取消和 Escape；请求进行中禁用重复确认；确认路径只发一个清理 POST，错误态显示安全问题文本。
+- 存储迁移范围：`09` §5.2 要求已有数据目录变更按迁移处理；`16` §15.1 未定义阶段 8 的数据目录搬迁验收；`18` `DEC-DATA-006` 是 Alembic Schema 前向升级。设置页明确当前不搬迁既有目录，留作发布规划；没有迁移接口、数据库变更或迁移文件。
+- 验证：Windows 后端 `test_local_runtime.py` `10 passed`、日志保留 `11 passed / 1 skipped`、诊断导出 `4 passed`；前端设置 Provider 测试文件 `10 passed`。隔离根真实启动两次均 API 健康 `ok`、Vite HTTP 200；同根重启后诊断存储 1 个文件 / 234 字节，无诱饵泄漏，根外哨兵未变。通过停止本批自启服务验证监督脚本退出 0、端口释放。当前工具 PTY 未把 Ctrl+C 传为控制台按键，本批保留该手工复测缺口。
+- 测试宿主：第七十二批 `stdout=None` 由 PowerShell 中文 `Write-Host` 输出与 Python GBK 解码不兼容复现；测试改用 ASCII 状态标记和显式容错解码后通过。该修正只处理测试宿主编码，不代表完整后端集合通过。
+- 追踪状态：存储目录搬迁 `NOT_IMPLEMENTED`（当前阶段未定义验收），打包启动器 `PACKAGED_LAUNCHER_PARTIAL`；`STAGE8_FULL_V1` 继续 `PARTIAL`。第七十批日志/迁移矩阵已按本批证据更新；`HISTORY-AC-04/06`、`AC-LEARN-006`、`TASK-AC-05/12`、官方账单和真实 Provider 门禁维持原状态。详细证据与下批浏览器优先级见 `docs/test-reports/stage-73-runtime-logging-settings.md`。

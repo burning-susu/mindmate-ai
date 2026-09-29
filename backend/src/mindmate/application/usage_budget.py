@@ -660,7 +660,7 @@ def privacy_diagnostics_status() -> dict[str, Any]:
     return {
         "log_retention": {
             "available": False,
-            "message": "日志保留与清理服务尚未验收，当前仅展示说明。",
+            "message": "仅管理应用保存的结构化诊断事件；终端输出、手动命令输出和 Windows 系统日志不在此范围。",
         },
         "diagnostics_export": {
             "available": True,
@@ -668,7 +668,7 @@ def privacy_diagnostics_status() -> dict[str, Any]:
         },
         "storage_migration": {
             "available": False,
-            "message": "存储迁移尚未实现，请继续使用当前本机数据目录。",
+            "message": "当前设置不提供现有数据目录搬迁；数据库 Schema 由 Alembic 执行版本升级。",
         },
         "secrets_policy": {
             "api_key_in_sqlite": False,

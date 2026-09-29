@@ -17,7 +17,7 @@ import {
   Cpu,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { ApiError } from '../api/client'
 import { BackupRestorePanel } from './BackupRestorePanel'
@@ -116,6 +116,11 @@ export default function SettingsPage() {
   const [diagnosticsError, setDiagnosticsError] = useState<string | null>(null)
   const [logCleanupMessage, setLogCleanupMessage] = useState<string | null>(null)
   const [logCleanupError, setLogCleanupError] = useState<string | null>(null)
+  const [confirmLogCleanup, setConfirmLogCleanup] = useState(false)
+  const clearLogsTriggerRef = useRef<HTMLButtonElement>(null)
+  const cancelLogCleanupRef = useRef<HTMLButtonElement>(null)
+  const logCleanupInFlight = useRef(false)
+  const logCleanupDialogWasOpen = useRef(false)
 
   const query = useQuery({ queryKey: ['ai-provider'], queryFn: ({ signal }) => getAiProviderStatus(signal) })
   const storageQuery = useQuery({ queryKey: ['system-storage'], queryFn: ({ signal }) => getStorageOverview(signal) })
@@ -313,7 +318,35 @@ export default function SettingsPage() {
       void queryClient.invalidateQueries({ queryKey: ['system-privacy'] })
     },
     onError: (error) => setLogCleanupError(errorText(error)),
+    onSettled: () => {
+      logCleanupInFlight.current = false
+      setConfirmLogCleanup(false)
+    },
   })
+
+  useEffect(() => {
+    if (!confirmLogCleanup) {
+      return
+    }
+    cancelLogCleanupRef.current?.focus()
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !logCleanupInFlight.current) {
+        event.preventDefault()
+        setConfirmLogCleanup(false)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [confirmLogCleanup])
+
+  useEffect(() => {
+    if (confirmLogCleanup) {
+      logCleanupDialogWasOpen.current = true
+    } else if (logCleanupDialogWasOpen.current) {
+      clearLogsTriggerRef.current?.focus()
+      logCleanupDialogWasOpen.current = false
+    }
+  }, [confirmLogCleanup])
 
   async function handleDownloadBackup(backup: BackupRecord) {
     setBackupError(null)
@@ -1017,16 +1050,20 @@ export default function SettingsPage() {
           ) : null}
           {privacyQuery.data?.log_retention.available ? (
             <div className="settings-diagnostics" aria-live="polite">
+              <p className="settings-hint">
+                此处只管理应用保存的结构化诊断事件（30 天或 100 MiB，先达到者清理）。后端与前端运行输出显示在当前终端，不保存在应用日志目录；手动命令输出和 Windows 系统日志也不在此清理范围。
+              </p>
               <div className="settings-actions">
                 <button
+                  ref={clearLogsTriggerRef}
                   className="quiet-button"
                   type="button"
                   disabled={logCleanupMutation.isPending}
                   onClick={() => {
-                    const confirmed = window.confirm(
-                      '清理会永久删除应用自己的本地结构化诊断日志。会话、任务、业务数据、备份、模型和索引不会受影响。继续吗？',
-                    )
-                    if (confirmed) logCleanupMutation.mutate()
+                    if (logCleanupInFlight.current) return
+                    setLogCleanupError(null)
+                    setLogCleanupMessage(null)
+                    setConfirmLogCleanup(true)
                   }}
                 >
                   <Trash2 size={15} aria-hidden="true" />
@@ -1039,6 +1076,45 @@ export default function SettingsPage() {
                   {formatBytes(privacyQuery.data.log_retention.max_bytes)}
                 </span>
               </div>
+              {confirmLogCleanup ? (
+                <div className="settings-dialog-backdrop">
+                  <div
+                    className="history-dialog settings-log-cleanup-dialog"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="settings-log-cleanup-title"
+                    aria-describedby="settings-log-cleanup-description"
+                  >
+                    <h2 id="settings-log-cleanup-title">确认清理应用诊断日志</h2>
+                    <p id="settings-log-cleanup-description">
+                      将清理当前 {privacyQuery.data.log_retention.file_count} 个结构化诊断日志文件（{formatBytes(privacyQuery.data.log_retention.bytes_used)}）。不会影响会话、任务、业务数据、备份、模型或索引，也不会清理终端输出和 Windows 系统日志。
+                    </p>
+                    <div className="history-dialog__actions">
+                      <button
+                        ref={cancelLogCleanupRef}
+                        className="quiet-button"
+                        type="button"
+                        disabled={logCleanupMutation.isPending}
+                        onClick={() => setConfirmLogCleanup(false)}
+                      >
+                        取消
+                      </button>
+                      <button
+                        className="danger-button"
+                        type="button"
+                        disabled={logCleanupMutation.isPending}
+                        onClick={() => {
+                          if (logCleanupInFlight.current) return
+                          logCleanupInFlight.current = true
+                          logCleanupMutation.mutate()
+                        }}
+                      >
+                        {logCleanupMutation.isPending ? '正在清理…' : '确认清理日志'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
               {logCleanupMessage ? (
                 <p className="settings-success-text" role="status">
                   <Check size={14} aria-hidden="true" />{logCleanupMessage}

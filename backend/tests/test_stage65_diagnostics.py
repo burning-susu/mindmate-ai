@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 from fastapi.testclient import TestClient
@@ -28,7 +29,7 @@ def _session_headers(client: TestClient) -> dict[str, str]:
 def test_diagnostics_preview_and_export_share_one_redacted_projection(tmp_path: Path) -> None:
     client = _make_client(tmp_path)
     with client:
-        factory = client.app.state.session_factory
+        factory = cast(Any, client.app).state.session_factory
         created_at = datetime.now(UTC) - timedelta(minutes=3)
         with factory() as session:
             session.add(
@@ -106,7 +107,11 @@ def test_privacy_status_exposes_verified_log_retention_and_diagnostics_export(tm
         assert body["log_retention"]["available"] is True
         assert body["log_retention"]["retention_days"] == 30
         assert body["log_retention"]["max_bytes"] == 100 * 1024 * 1024
+        assert "后台服务 stdout/stderr 直出当前终端" in body["log_retention"]["message"]
+        assert "Windows 系统日志不在应用清理范围" in body["log_retention"]["message"]
         assert body["storage_migration"]["available"] is False
+        assert "当前设置不提供现有数据目录搬迁" in body["storage_migration"]["message"]
+        assert "Alembic" in body["storage_migration"]["message"]
 
         # The JSON download must remain valid and contain no hidden raw fields.
         json.loads(response.text)

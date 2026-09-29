@@ -7,6 +7,7 @@ param(
     [string]$ExpectedFingerprint = '',
     [string]$ExpectedIndexVersionId = '',
     [switch]$OpenBrowser,
+    [switch]$RuntimeOutputSelfTest,
     [ValidateSet('', 'RequestedStop', 'UnexpectedExit')]
     [string]$LifecycleSelfTest = ''
 )
@@ -159,12 +160,29 @@ function Invoke-LifecycleSelfTest {
     if ($Mode -eq 'UnexpectedExit') {
         exit 1
     }
-    Write-Host "正常停止分类通过，未结束无关进程。"
+    Write-Host 'RUNTIME_STOP_CLASSIFICATION_OK'
+    exit 0
+}
+
+function Invoke-RuntimeOutputSelfTest {
+    $stdoutCanary = 'MM_CANARY_KEY=fixture-secret | BODY=synthetic private content'
+    $stderrCanary = 'Cookie: session=fixture-cookie'
+    $childScript = "Write-Output '$stdoutCanary'; [Console]::Error.WriteLine('$stderrCanary'); exit 0"
+    $powerShell = Join-Path $PSHOME 'powershell.exe'
+    & $powerShell -NoProfile -Command $childScript
+    if ($LASTEXITCODE -ne 0) {
+        throw "输出边界自测进程退出码为 $LASTEXITCODE。"
+    }
+    Write-Output 'C:\MindMateSynthetic\private.txt'
+    Write-Host 'RUNTIME_OUTPUT_BOUNDARY_OK'
     exit 0
 }
 
 if ($LifecycleSelfTest) {
     Invoke-LifecycleSelfTest -Mode $LifecycleSelfTest
+}
+if ($RuntimeOutputSelfTest) {
+    Invoke-RuntimeOutputSelfTest
 }
 
 if (-not (Test-LoopbackPortFree -Port $ApiPort)) {
@@ -191,7 +209,7 @@ try {
         '-m', 'uvicorn', 'mindmate.main:app',
         '--host', '127.0.0.1',
         '--port', "$ApiPort"
-    ) -WorkingDirectory (Join-Path $repoRoot 'backend') -PassThru -WindowStyle Hidden
+    ) -WorkingDirectory (Join-Path $repoRoot 'backend') -PassThru -NoNewWindow
 
     $healthDeadline = (Get-Date).AddSeconds(40)
     $healthy = $false
@@ -248,7 +266,7 @@ try {
     }
     $script:frontendProcess = Start-Process -FilePath $npm.Source -ArgumentList @(
         'run', 'dev', '--', '--host', '127.0.0.1', '--port', "$WebPort", '--strictPort'
-    ) -WorkingDirectory (Join-Path $repoRoot 'frontend') -PassThru -WindowStyle Hidden
+    ) -WorkingDirectory (Join-Path $repoRoot 'frontend') -PassThru -NoNewWindow
 
     $webDeadline = (Get-Date).AddSeconds(40)
     $webReady = $false
@@ -276,6 +294,7 @@ try {
     }
     Write-Host "API  http://127.0.0.1:$ApiPort"
     Write-Host "Web  $pageUrl"
+    Write-Host '后端与前端 stdout/stderr 直出当前终端，不保存为应用日志。'
     Write-Host "Provider 固定为 Mock。按 Ctrl+C，或结束本次启动的后端/前端进程，即正常停止。"
     Write-Host "Stop-Process 产生的退出码 -1 视为正常停止；其他退出码仍视为失败。不会结束系统浏览器，也不会清理其他端口。"
     if ($OpenBrowser) {
