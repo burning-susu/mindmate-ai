@@ -407,7 +407,8 @@ def test_budget_and_missing_key_make_zero_openai_calls(tmp_path: Path) -> None:
             summary = summarize_usage(session)
         openai_bucket = next(item for item in summary["by_provider"] if item["provider"] == "OPENAI")
         deepseek_bucket = next(item for item in summary["by_provider"] if item["provider"] == "DEEPSEEK")
-        assert openai_bucket["unknown_usage_operations"] == 2
+        # The missing-key request is NOT_SENT and must not inflate unknown usage.
+        assert openai_bucket["unknown_usage_operations"] == 1
         assert openai_bucket["input_tokens"] == 0
         assert Decimal_from(deepseek_bucket["estimated_usd"]) > 0
         blocked = client.post(

@@ -3,11 +3,12 @@
 ## 基本信息
 
 - 当前开发分支：`feat/v1-bootstrap`
-- 第七十三批进场：分支 `feat/v1-bootstrap`；LOCAL `f113518737b54e368151af420f2341dd99e282d5`，REMOTE `f113518737b54e368151af420f2341dd99e282d5`；核验日期 `2026-09-29`。
+- 第七十三批历史进场：分支 `feat/v1-bootstrap`；LOCAL `f113518737b54e368151af420f2341dd99e282d5`，REMOTE `f113518737b54e368151af420f2341dd99e282d5`；核验日期 `2026-09-29`。
+- 第七十四批进场：分支 `feat/v1-bootstrap`；LOCAL / REMOTE 均为 `ae75945991a3890a6c5d2811e29ab70ca5432e7f`；工作区干净。
 - 最后更新时间：`2026-09-29`
 - 当前开发阶段：阶段 8 开发中，状态 `PARTIAL`；阶段 5、阶段 6、阶段 7 继续 `PARTIAL`
 - 交付顺序：Demo 首先完成，完整 V1 以后精进。求职 Demo 优先文件整理/导入、建库、带来源问答、最小学习陪练和重启恢复。Demo 可用性与完整 V1 阶段状态分开报告。
-- 当前批次状态：第七十三批 `LOG_RETENTION_CODE=PASS`，`LOG_RETENTION_BROWSER=BROWSER_PARTIAL`，`PACKAGED_LAUNCHER_PARTIAL`；Settings 明确当前不提供现有数据目录搬迁，Alembic 只做 Schema 前向升级。`dev.ps1` 子服务 stdout/stderr 直出终端，不写应用日志；诊断结构化事件仍按 30 天/100 MiB 管理。设置页清理确认、取消、Escape、重复点击和失败自动化通过；两次隔离启动/健康/重启/正常停止通过。普通 Chrome/Edge 未验，`STAGE8_FULL_V1=PARTIAL`。报告见 `docs/test-reports/stage-73-runtime-logging-settings.md`。第七十二批 `HISTORY-AC-04/06` 继续 `CODE_PASS / BROWSER_PARTIAL`，`AC-LEARN-006` 仍 `PARTIAL`；第七十一批 `TASK-AC-05/12` 继续 `CODE_PASS / BROWSER_PARTIAL`。求职 Demo 可用性沿用第四十二/六十四批 `PASS`，本批未重跑；阶段 5–7 完整 V1、官方 Provider 账单和真实 Provider smoke 状态不变。
+- 当前批次状态：第七十四批 `DEMO_STABLE=PASS（沿用第42/64批，本批未实测）`，`STAGE8_FULL_V1=PARTIAL`；`HISTORY-AC-04/06`、`TASK-AC-05/12` 均为 `CODE_PASS / BROWSER_PARTIAL`；`LOG_RETENTION_CODE=PASS（沿用第73批）`、`LOG_RETENTION_BROWSER=BROWSER_PARTIAL`；`PACKAGED_LAUNCHER=PACKAGED_LAUNCHER_PARTIAL`；`AC-LEARN-006=PARTIAL`；真实 Provider smoke 与账单核对为 `PENDING`。本批一次后端全量为 `335 passed, 9 failed, 1 skipped`；OpenAI 预算 Provider 标识缺陷已修复，受影响文件 `8 passed`；前端 `16 files / 79 tests passed`。无普通 Chrome/Edge 页面证据，手测卡见 `docs/test-reports/stage-70-stage8-browser-acceptance.md`，完整结果见 `docs/test-reports/stage-74-demo-stage8-acceptance.md`。
 
 ## 已完成阶段
 

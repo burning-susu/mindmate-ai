@@ -676,3 +676,12 @@
 - 验证：Windows 后端 `test_local_runtime.py` `10 passed`、日志保留 `11 passed / 1 skipped`、诊断导出 `4 passed`；前端设置 Provider 测试文件 `10 passed`。隔离根真实启动两次均 API 健康 `ok`、Vite HTTP 200；同根重启后诊断存储 1 个文件 / 234 字节，无诱饵泄漏，根外哨兵未变。通过停止本批自启服务验证监督脚本退出 0、端口释放。当前工具 PTY 未把 Ctrl+C 传为控制台按键，本批保留该手工复测缺口。
 - 测试宿主：第七十二批 `stdout=None` 由 PowerShell 中文 `Write-Host` 输出与 Python GBK 解码不兼容复现；测试改用 ASCII 状态标记和显式容错解码后通过。该修正只处理测试宿主编码，不代表完整后端集合通过。
 - 追踪状态：存储目录搬迁 `NOT_IMPLEMENTED`（当前阶段未定义验收），打包启动器 `PACKAGED_LAUNCHER_PARTIAL`；`STAGE8_FULL_V1` 继续 `PARTIAL`。第七十批日志/迁移矩阵已按本批证据更新；`HISTORY-AC-04/06`、`AC-LEARN-006`、`TASK-AC-05/12`、官方账单和真实 Provider 门禁维持原状态。详细证据与下批浏览器优先级见 `docs/test-reports/stage-73-runtime-logging-settings.md`。
+
+### 第七十四批：Demo 与阶段 8 验收及回归收口
+
+- 进场：`feat/v1-bootstrap`，本地/远端完整 SHA 均为 `ae75945991a3890a6c5d2811e29ab70ca5432e7f`，工作区干净。普通 Chrome/Edge 不可绑定；旧隔离端口 `5123/8123` 均无监听，本批未启动服务或填写浏览器证据。
+- 门禁：`DEMO_STABLE=PASS（沿用第42/64批，本批未实测）`；`STAGE8_FULL_V1=PARTIAL`；`HISTORY-AC-04/06`、`TASK-AC-05/12` 为 `CODE_PASS / BROWSER_PARTIAL`；`LOG_RETENTION_CODE=PASS（沿用第73批）`、`LOG_RETENTION_BROWSER=BROWSER_PARTIAL`；`PACKAGED_LAUNCHER=PACKAGED_LAUNCHER_PARTIAL`；`AC-LEARN-006=PARTIAL`；`REAL_PROVIDER_SMOKE`、`PROVIDER_BILLING_RECONCILIATION` 为 `PENDING`。
+- 修复：OpenAI 设置 ID `openai_gpt6_sol` 在预算预留边界映射为规范名 `OPENAI`，修复五个 OpenAI MockTransport 集成用例；预算汇总不把 `NOT_SENT` 的无 Key 请求计为未知 Provider usage。修复后 `test_stage54_openai_provider.py` `8 passed`，修复文件 Ruff 与定向 Pyright 通过。
+- 回归：后端全量一次 `335 passed, 9 failed, 1 skipped`；失败包括 Credential Manager `WinError 1312`、OpenAI 预算标识（已修）、Chunk Worker 组合运行失败（单项通过）、备份恢复目录句柄/锁定故障注入路径。全量 Pyright `59 errors`；Ruff、compileall 通过。前端全量 `16 files / 79 tests passed`，typecheck、lint、build 通过。OpenAPI `3.1.0 / 119 schemas / 122 operations`，生成类型无差异；Alembic head `h72a1b2c3d4e5`。
+- 下一步：按第七十批文档内第七十四批 Windows 手测卡，用 Guest Chrome 和新建 `%TEMP%` Mock 根亲测主链路、总结定位、任务/历史删除确认、日志清理与服务恢复；浏览器结果回传前保持 `BROWSER_PARTIAL`。长期复习计划、打包入口、真实 Provider 与官方账单对账继续独立待办。
+- 报告：`docs/test-reports/stage-74-demo-stage8-acceptance.md`。

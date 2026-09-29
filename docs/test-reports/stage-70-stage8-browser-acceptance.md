@@ -101,15 +101,23 @@
 
 ## 未完成项与阶段判定
 
-以下是具体缺口，不用“待优化”代替：
+以下状态按第七十四批证据校准；矩阵中的 `CODE_PASS` 不代替浏览器证据。
 
-1. 普通 Chrome/Edge 当前不可由本会话操作。全局任务、离线、历史永久删除、多题 `question_id` 定位、设置日志与诊断导出、首页全量统计、任务保留、双 Provider 学习页面均缺本批普通浏览器证据，状态按矩阵保留 `BROWSER_PARTIAL`。
-2. 学习会话没有持久化的完成总结对象，也没有完成总结展示/全文检索路径；对应 `HISTORY-AC-04`、`HISTORY-AC-06` 为 `CODE_PARTIAL`。下一批先按变更治理明确总结字段和业务口径。
-3. 文件和知识库软删除接口不调用 `cancel_task`；`TASK-AC-12` 尚无回收站后任务取消/安全停机专用回归。下一批需要以排队任务、运行任务和共享资源建立后端测试，再实现已批准语义。
-4. `TASK-AC-05` 的固定并发边界有既有 Worker 证据，但源码没有找到“用户可配置下调”入口；此子项保留 `CODE_PARTIAL`。
-5. 第 73 批已把 `dev.ps1` 启动的 Uvicorn/Vite stdout/stderr 直出当前操作者终端，不另存文件；应用清理只作用于白名单结构化诊断事件。打包入口仍未实现，普通浏览器设置页验收也未取得，所以发布范围的 `LOG_RETENTION` 与 `STAGE8_FULL_V1` 不应据此记为完整通过。
+| 门禁 | 当前状态 | 证据与下步 |
+| --- | --- | --- |
+| `DEMO_STABLE` | `PASS（沿用第42/64批；本批未实测）` | 普通浏览器中按第七十四批手测卡重新走主链路 |
+| `HISTORY-AC-04` | `CODE_PASS / BROWSER_PARTIAL` | 第72批总结搜索与定位自动化沿用；补普通浏览器搜索、`question_id` 与 Network 证据 |
+| `HISTORY-AC-06` | `CODE_PASS / BROWSER_PARTIAL` | 第72批总结持久化和焦点导航自动化沿用；补刷新、后端重启后页面对照 |
+| `TASK-AC-05` | `CODE_PASS / BROWSER_PARTIAL` | 第71批并发配置和 Worker 自动化沿用；补设置页生效值与排队状态 |
+| `TASK-AC-12` | `CODE_PASS / BROWSER_PARTIAL` | 第71批回收站任务联动自动化沿用；补任务抽屉同一 `task_id` 页面证据 |
+| `LOG_RETENTION_BROWSER` | `BROWSER_PARTIAL` | 第73批 `LOG_RETENTION_CODE=PASS` 沿用；设置清理确认和准确 POST 数仍需浏览器验收 |
+| `PACKAGED_LAUNCHER` | `PACKAGED_LAUNCHER_PARTIAL` | 没有可运行打包启动器；不能据应用结构化日志自动清理推断宿主 stdout/stderr 或打包日志通过 |
+| `AC-LEARN-006` | `PARTIAL` | 持久学习总结已具备代码证据；`1/3/7/14/30` 天复习计划未实现 |
+| `REAL_PROVIDER_SMOKE` | `PENDING` | 未使用真实凭据或真实服务 |
+| `PROVIDER_BILLING_RECONCILIATION` | `PENDING` | 未使用官方账单或用量接口 |
+| `STAGE8_FULL_V1` | `PARTIAL` | 普通浏览器、打包启动器及其它页面/运行门禁仍不完整 |
 
-`PROVIDER_BILLING_RECONCILIATION` 与 `REAL_PROVIDER_SMOKE` 单独保持 `PENDING`，不被本地预算测试或 MockTransport 覆盖。第 53/66 批的备份创建、恢复与恢复后 Mock 页面证据按原范围继承，不算成本批亲测。求职 Demo 可用性继续单独沿用 `PASS`，完整 V1 阶段 5–8 不因此通过。
+存储目录搬迁在当前阶段没有验收定义，保持 `NOT_IMPLEMENTED`，不在本批重开范围。第53/66批合法备份创建/恢复页面证据按原范围继承。详细测试计数、失败隔离和浏览器缺口见[第七十四批报告](stage-74-demo-stage8-acceptance.md)。
 
 ## 自动化验证
 
@@ -170,9 +178,42 @@ npm.cmd run dev -- --host 127.0.0.1 --port 5191 --strictPort
 
 只有页面真实点击、刷新、Network 次数和本地截图/调用摘要齐全时，相关矩阵行才能改为浏览器 `PASS`。只有口头报告时标注“用户报告的人工复测”，不可写成代理亲测。备份创建/下载与有效恢复沿用第 66/53 批证据，不需重复跑。
 
-## Git 交付
+## 第七十四批最短人工复测卡
 
-- 只提交本批 3 个回归测试文件、本报告及两份进度文档。
-- 提交信息使用中文目的句：`验收：补齐阶段八需求追踪与路由回归`。
-- 本报告不把旧第 69 批“未推送”文字当作当前事实；本批起始远端 SHA 以实际进场 `git ls-remote` 结果为准。
-- 最终本地/远端完整 SHA、推送结果与分支由本批交付说明给出；不修改 `main`，不强推。
+本会话没有普通 Chrome/Edge。请在普通 Windows PowerShell 使用新的 `%TEMP%` 根和 Guest profile；不要删除已存在的目录或使用默认个人数据根。`demo.ps1` 固定 Mock 并离线校验本地 ONNX 缓存，缺模型时会停止，不会下载模型或切换 Provider。
+
+```powershell
+# 从仓库根目录执行；端口被占用时换成两个空闲回环端口并记录。
+$data = Join-Path $env:TEMP 'mindmate-ai-stage74-browser-mock'
+if (Test-Path -LiteralPath $data) { throw "隔离根已存在，请换一个新的 stage74 名称：$data" }
+& .\scripts\demo.ps1 -DataDir $data -ApiPort 8040 -WebPort 5195 -NoBrowser
+
+# Ctrl+C 停止后，使用同一数据根恢复原 URL。
+& .\scripts\dev.ps1 -DataDir $data -ApiPort 8040 -WebPort 5195
+```
+
+Chrome Guest 打开 `http://127.0.0.1:5195/`，在 Network 面板启用保留日志。网页上传 `docs/test-data/stage5-fixed-ready/README.md`，等待解析完成；创建新知识库并加入该文件，等索引 `READY`。它是合成资料，主库样本的 API 单次请求超时为 `30 秒`，资料没有给出的问题必须拒答。默认 Provider 维持 Mock；不要填写 Key、切换在线 Provider 或执行任何付费确认。
+
+| 步骤 | 操作与核对 | 记录 |
+| --- | --- | --- |
+| 1. Demo 主链路 | 从文件页上传上述资料，建库并等 `READY`；问“主库样本 API 单次请求超时是多少秒”，确认回答为 30 秒且引用来自 `README.md`；再问“玛雅文明使用几套历法”，确认拒答且无伪引用 | 数据根、`file_id`、`knowledge_base_id`、`index_version_id`、任务 ID、URL、每步请求次数、截图路径 |
+| 2. 学习和历史 | 从该库开始至少一题，提交答案、查看点评并结束；从历史关键词打开持久总结；分别查题干、已提交答案、公开反馈，核定位的真实 `question_id`；刷新并重启后核同一会话和总结 | `session_id`、各结果 `question_id`、总结 URL、重启前后截图、Network 请求次数 |
+| 3. 回收与任务 | 再上传一份合成文件，趁解析/索引任务处于 `QUEUED/RUNNING` 时将对应文件或库移入回收站；在任务抽屉核同一 ID 的取消/失效状态，并核共享文件/另一个库未误删；用合成历史记录检查软删/恢复 | 文件/库/任务 ID、共享对象 ID、状态变化 URL 与请求次数 |
+| 4. 历史删除确认 | 对合成历史项打开永久删除确认：取消、Escape、错误词各为 0 个 DELETE；仅在检查目标确为本次合成记录后输入界面要求的正确确认词，确认恰好 1 个 DELETE | 历史 ID、确认词操作结果、DELETE 次数、恢复/删除后的页面截图 |
+| 5. 设置日志 | 设置页先取消和 Escape 日志清理，各 0 个 POST；再次打开并确认，恰好 1 个 POST；检查诊断导出只含白名单字段且不含正文、Key、Cookie、Token、绝对路径。导出只留本机，不上传 | 清理前后计数、POST 次数、导出扫描结果、截图路径 |
+| 6. 本地恢复 | 记录学习总结 URL；停止隔离 API 后刷新应显示本地服务不可用，再以同一根/端口重启并重连；确认原会话总结一致，五个核心导航入口和工作台状态可见 | URL、ID、停机/恢复 Network 记录、截图路径 |
+
+截图和诊断下载放在 `%TEMP%\mindmate-ai-stage74-browser-evidence`，不提交仓库。回传浏览器/Guest profile、隔离根、业务 ID、URL、逐动作 Network 次数和证据路径；只有代理自己操作到的页面才可记为本批亲测，用户回传要标为“用户报告的人工复测”。本卡只覆盖最高优先级场景，其它矩阵行继续 `BROWSER_PARTIAL`。
+
+## 第七十四批自动化增量证据
+
+- 后端全量一次：`335 passed, 9 failed, 1 skipped`。失败名称、隔离复跑、OpenAI 修复后的定向结果见[第七十四批报告](stage-74-demo-stage8-acceptance.md)；全量不记为通过。
+- 修复后 `test_stage54_openai_provider.py`：`8 passed`；OpenAI 使用 MockTransport，未连真实服务。
+- 前端：`16 files / 79 tests passed`；typecheck、lint、build 通过，Vite 有最大 JS `542.55 kB` 的既有 chunk 警告。
+- Ruff、compileall、修复文件定向 Pyright、OpenAPI 生成类型一致性通过；全量 Pyright 有 `59 errors`，已在报告列明。Alembic head 为 `h72a1b2c3d4e5`。
+
+## 第七十四批 Git 交付
+
+- 本批提交包含修复、针对性测试、阶段报告、矩阵校准和两份进度文件；不提交浏览器截图、测试数据库、诊断下载或个人路径。
+- 中文提交目的句：`验收：复核演示主链路与阶段八页面门禁`。
+- 只推送 `feat/v1-bootstrap` 并核对完整本地/远端 SHA；不修改 `main`、不强推。

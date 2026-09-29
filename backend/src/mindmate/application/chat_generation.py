@@ -1425,6 +1425,7 @@ class ChatGenerationWorker:
             )
             if getattr(provider, "requires_external_transfer", True):
                 provider_id = OPENAI_PROVIDER_ID if generation_mode == OPENAI_PROVIDER_ID else "deepseek"
+                budget_provider = "OPENAI" if provider_id == OPENAI_PROVIDER_ID else "DEEPSEEK"
                 secret_reference = (
                     OPENAI_SECRET_REFERENCE
                     if provider_id == OPENAI_PROVIDER_ID
@@ -1482,7 +1483,7 @@ class ChatGenerationWorker:
                         reservation = reserve_external_operation(
                             budget_session,
                             operation_id=operation_for_request.operation_id,
-                            provider=provider_id.upper(),
+                            provider=budget_provider,
                             model=request.model_profile,
                             estimated_input_tokens=estimate_input_tokens(_outbound_text(request)),
                             estimated_output_tokens=request.max_output_tokens,
