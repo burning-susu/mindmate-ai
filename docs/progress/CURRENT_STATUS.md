@@ -382,3 +382,11 @@
 - 报告：`docs/test-reports/stage-69-global-recovery.md`，包含阶段 8 逐项追踪矩阵和一页最短人工补验步骤。截图、诊断 JSON、备份和隔离数据根必须留在忽略目录。
 - Git：本批已在本地完成中文提交；推送命令退出码 `128` 且无诊断文本，`origin/feat/v1-bootstrap` 仍为进场 SHA `c0875126e34b9445db025124f862d158358c41ab`。不强推、不修改 `main`；下一次普通 Windows VS Code 终端需重试并核对完整 SHA。
 - 下一批：先在普通 Chrome/Edge Guest profile 按报告步骤核对任务抽屉跨页/刷新、取消一次、本地 API 停止/恢复、外网断开但回环可用、404 详情恢复和第 67/68 批历史页面；再决定阶段 8 是否可标 `PASS`。真实 Provider smoke、官方账单和完整 V1 不属于本批通过范围。
+
+## 第七十七批交接
+
+- 本批目标：补齐知识库内直接导入文件与建库闭环。建库页支持空库、已有文件、本地文件和混合选择；详情页增加当前库上传入口；重复决策、解析状态、成员任务和导入任务在知识库上下文内展示。
+- 当前代码：`POST /api/v1/file-imports` 继续复用既有安全校验并携带 `knowledge_base_id`；服务端修复 `REUSE_EXISTING` 未建立当前库成员关系的问题，并拒绝向回收站知识库导入。没有数据库迁移、OpenAPI schema 或真实 Provider 变更。
+- 自动化：前端全量 `16 files / 84 tests passed`，typecheck、lint、build 通过；后端阶段 4 文件测试 `13 passed`，阶段 5 知识库测试 `13 passed`，Ruff、compileall、`git diff --check` 通过。构建主 JS `590.42 kB`，保留既有 chunk warning。
+- 门禁：`KNOWLEDGE_BASE_INTAKE_CODE=PASS`、`KNOWLEDGE_BASE_INTAKE_FRONTEND=PASS`、`KNOWLEDGE_BASE_INTAKE_BACKEND=PASS`；`DEMO_STABLE=PASS` 仅沿用第 42/64 批，本批未做普通浏览器复测，`KNOWLEDGE_BASE_INTAKE_BROWSER=BROWSER_PARTIAL`；`STAGE8_FULL_V1=PARTIAL`。没有真实 Key、Provider 请求、费用或模型下载。
+- 报告与变更：[stage-77-knowledge-base-intake.md](../test-reports/stage-77-knowledge-base-intake.md)、[CHG-20260929-KNOWLEDGE-BASE-INTAKE.md](../project/changes/CHG-20260929-KNOWLEDGE-BASE-INTAKE.md)。本轮收尾后按最终交付命令核对中文提交和远端 SHA；下一批唯一优先主题是普通 Windows Chrome/Edge Guest profile 复测建库混合导入、三种重复决策、刷新恢复和索引等待提示。

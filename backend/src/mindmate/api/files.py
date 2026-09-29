@@ -671,8 +671,10 @@ def _validate_context(
     for tag_id in tag_ids:
         if session.get(Tag, tag_id) is None:
             raise FileApiError("TAG_NOT_FOUND", "标签不存在。", 404)
-    if knowledge_base_id and session.get(KnowledgeBase, knowledge_base_id) is None:
-        raise FileApiError("KNOWLEDGE_BASE_NOT_FOUND", "知识库不存在。", 404)
+    if knowledge_base_id:
+        knowledge_base = session.get(KnowledgeBase, knowledge_base_id)
+        if knowledge_base is None or knowledge_base.deleted_at is not None:
+            raise FileApiError("KNOWLEDGE_BASE_NOT_FOUND", "知识库不存在。", 404)
 
 
 def _attach_tags(session: Session, file_id: str, tag_ids: list[str]) -> None:
@@ -689,6 +691,8 @@ def _attach_knowledge_base(session: Session, file_id: str, knowledge_base_id: st
             KnowledgeBaseFile.knowledge_base_id == knowledge_base_id,
         )
     )
+    changed = False
+    now = utc_now()
     if existing is None:
         session.add(
             KnowledgeBaseFile(
@@ -697,9 +701,21 @@ def _attach_knowledge_base(session: Session, file_id: str, knowledge_base_id: st
                 file_id=file_id,
                 membership_status="ACTIVE",
                 index_state="PENDING",
-                added_at=utc_now(),
+                added_at=now,
             )
         )
+        changed = True
+    elif existing.membership_status != "ACTIVE":
+        existing.membership_status = "ACTIVE"
+        existing.index_state = "PENDING"
+        existing.removed_at = None
+        existing.added_at = now
+        changed = True
+    if changed:
+        knowledge_base = session.get(KnowledgeBase, knowledge_base_id)
+        if knowledge_base is not None and knowledge_base.deleted_at is None:
+            knowledge_base.status = "PREPARING"
+            knowledge_base.updated_at = now
 
 
 def _create_record_from_content(
@@ -1032,6 +1048,10 @@ def decide_duplicates(
                     "file_id": existing_file.file_id if existing_file else None,
                 }
             )
+            if existing_file is not None:
+                _attach_knowledge_base(
+                    session, existing_file.file_id, context.get("knowledge_base_id")
+                )
         elif decision == "CREATE_SEPARATE_RECORD":
             spec = document_spec(str(item["original_name"]))
             record, parse_error = _create_record_from_content(

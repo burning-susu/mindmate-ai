@@ -125,6 +125,53 @@ def test_duplicate_requires_decision_and_separate_record_reuses_content(file_cli
     assert {item["file_id"] for item in listed} == {first_file_id, second_file_id}
 
 
+def test_knowledge_base_import_reuses_source_and_persists_membership(file_client) -> None:
+    client, _ = file_client
+    knowledge_base = client.post(
+        "/api/v1/knowledge-bases",
+        headers=write_headers("import-context-kb"),
+        json={"name": "导入上下文库", "color": "#176b87"},
+    )
+    assert knowledge_base.status_code == 201
+    knowledge_base_id = knowledge_base.json()["knowledge_base_id"]
+
+    first = import_one(client, "source.txt", b"shared-source", "import-context-source")
+    first_file_id = first.json()["items"][0]["file_id"]
+    duplicate = client.post(
+        "/api/v1/file-imports",
+        headers=write_headers("import-context-duplicate"),
+        data={"knowledge_base_id": knowledge_base_id},
+        files={"files": ("copy.txt", b"shared-source", "text/plain")},
+    )
+    assert duplicate.status_code == 202
+    duplicate_payload = duplicate.json()
+    assert duplicate_payload["status"] == "BLOCKED"
+
+    decided = client.post(
+        f"/api/v1/file-imports/{duplicate_payload['import_id']}/duplicate-decisions",
+        headers=write_headers("import-context-reuse"),
+        json={"decisions": [{"item_index": 0, "decision": "REUSE_EXISTING"}]},
+    )
+    assert decided.status_code == 200
+    assert decided.json()["items"][0]["file_id"] == first_file_id
+
+    members = client.get(f"/api/v1/knowledge-bases/{knowledge_base_id}/files")
+    assert members.status_code == 200
+    assert [item["file_id"] for item in members.json()["items"]] == [first_file_id]
+    assert client.get(f"/api/v1/knowledge-bases/{knowledge_base_id}").json()["status"] == "PREPARING"
+
+    direct = client.post(
+        "/api/v1/file-imports",
+        headers=write_headers("import-context-direct"),
+        data={"knowledge_base_id": knowledge_base_id},
+        files={"files": ("new.txt", b"new-source", "text/plain")},
+    )
+    assert direct.status_code == 202
+    direct_file_id = direct.json()["items"][0]["file_id"]
+    assert direct_file_id != first_file_id
+    assert {item["file_id"] for item in client.get(f"/api/v1/knowledge-bases/{knowledge_base_id}/files").json()["items"]} == {first_file_id, direct_file_id}
+
+
 def test_invalid_signature_and_batch_limits_are_rejected_per_item(file_client) -> None:
     client, _ = file_client
     disguised = client.post(

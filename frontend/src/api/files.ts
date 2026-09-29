@@ -1,5 +1,5 @@
 import type { components } from './generated/openapi'
-import { ApiError, apiRequest } from './client'
+import { ApiError, apiRequest, apiUpload } from './client'
 
 export type FileItem = components['FileItemResponse']
 export type FileListResponse = components['FileListResponse']
@@ -9,6 +9,57 @@ export type TagItem = components['TagResponse']
 export type TagListResponse = components['TagListResponse']
 export type TrashResponse = components['TrashResponse']
 export type TrashFolderItem = components['TrashFolderResponse']
+
+export type FileImportItem = {
+  item_index: number
+  original_name: string
+  status: string
+  hash_status?: string | null
+  duplicate_status: string
+  file_id?: string | null
+  task_id?: string | null
+  error?: string | null
+  error_code?: string
+  parse_status?: string | null
+  parse_error?: string | null
+  parse_failure_stage?: string | null
+  parse_error_id?: string | null
+  parse_retry_count?: number | null
+}
+
+export type FileImportResponse = {
+  import_id: string
+  task_id: string
+  status: string
+  phase?: string | null
+  progress?: number | null
+  items: FileImportItem[]
+  folder_id?: string | null
+  tag_ids?: string[]
+  knowledge_base_id?: string | null
+  error?: string | null
+  cancel_reason_code?: string | null
+}
+
+export function importFiles(
+  files: File[],
+  fields: Record<string, string | undefined> = {},
+  idempotencyKey?: string,
+): Promise<FileImportResponse> {
+  return apiUpload<FileImportResponse>('/api/v1/file-imports', files, fields, idempotencyKey)
+}
+
+export function decideFileImportDuplicates(
+  importId: string,
+  decisions: Array<{ item_index: number; decision: 'REUSE_EXISTING' | 'CREATE_SEPARATE_RECORD' | 'SKIP' }>,
+  idempotencyKey?: string,
+): Promise<FileImportResponse> {
+  return apiRequest(`/api/v1/file-imports/${importId}/duplicate-decisions`, {
+    method: 'POST',
+    headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
+    body: JSON.stringify({ decisions }),
+  })
+}
 
 export function listRecentFiles(limit = 5): Promise<FileListResponse> {
   const params = new URLSearchParams({

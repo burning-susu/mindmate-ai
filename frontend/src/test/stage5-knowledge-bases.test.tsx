@@ -57,7 +57,7 @@ const emptyIndexStatus: MockIndexStatus = {
 }
 
 describe('stage 5 knowledge base foundation', () => {
-  afterEach(() => vi.unstubAllGlobals())
+  afterEach(() => { vi.unstubAllGlobals(); window.localStorage.clear() })
 
   it('renders persisted knowledge bases and navigates to detail', async () => {
     window.history.pushState({}, '', '/knowledge-bases')
@@ -342,5 +342,82 @@ describe('stage 5 knowledge base foundation', () => {
     render(<BrowserRouter><App /></BrowserRouter>)
     fireEvent.click(await screen.findByRole('button', { name: '恢复知识库' }))
     await waitFor(() => expect(restoreUrl).toContain('expected_version=3'))
+  })
+
+  it('creates one knowledge base and submits mixed existing and local files once', async () => {
+    window.history.pushState({}, '', '/knowledge-bases/new')
+    const operations: Array<{ type: string; body?: unknown }> = []
+    const existingFile = {
+      file_id: 'existing-1', display_name: '已有讲义.txt', source_name: '已有讲义.txt', extension: '.txt', document_type: 'TXT',
+      folder_id: null, folder_name: null, status: 'PARSED', content_hash: 'hash-1', byte_size: 10,
+      created_at: '2026-09-23T00:00:00Z', updated_at: '2026-09-23T00:00:00Z', deleted_at: null, purge_after: null,
+      row_version: 1, tags: [], parsed_metadata: null, has_parsed_text: true, content_available: true,
+      parse_failure_stage: null, parse_error_id: null, parse_retry_count: 0, can_reprocess: true,
+    }
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.includes('/system/session')) return response({ status: 'ready' })
+      if (url.includes('/api/v1/files?sort=name')) return response({ items: [existingFile], next_cursor: null })
+      if (url.endsWith('/api/v1/knowledge-bases') && init?.method === 'POST') {
+        operations.push({ type: 'create', body: JSON.parse(String(init.body)) })
+        return response({ ...baseItem, status: 'EMPTY', row_version: 1 }, 201)
+      }
+      if (url.endsWith('/api/v1/knowledge-bases/kb-1/files') && init?.method === 'POST') {
+        operations.push({ type: 'members', body: JSON.parse(String(init.body)) })
+        return response({ task_id: 'member-1', task_type: 'KNOWLEDGE_MEMBERSHIP_ADD', status: 'QUEUED', phase: 'QUEUED', progress: 0, knowledge_base_id: 'kb-1', items: [], results: [], summary: null, error: null }, 202)
+      }
+      if (url.endsWith('/api/v1/file-imports') && init?.method === 'POST') {
+        const form = init.body as FormData
+        operations.push({ type: 'import', body: { knowledge_base_id: form.get('knowledge_base_id'), files: form.getAll('files').map((file) => (file as File).name) } })
+        return response({ import_id: 'import-1', task_id: 'import-1', status: 'QUEUED', phase: 'PARSING', progress: 0, items: [{ item_index: 0, original_name: 'new.txt', status: 'IMPORTED', duplicate_status: 'NOT_DUPLICATE', file_id: 'new-1', parse_status: 'QUEUED' }], knowledge_base_id: 'kb-1' }, 202)
+      }
+      if (url.endsWith('/api/v1/knowledge-bases/kb-1')) return response({ ...baseItem, status: 'PREPARING', file_count: 2 })
+      if (url.endsWith('/api/v1/knowledge-bases/kb-1/files')) return response({ items: [] })
+      if (url.endsWith('/index-status')) return response(emptyIndexStatus)
+      return response({ status: 'ok', version: '0.1.0' })
+    }))
+
+    render(<BrowserRouter><App /></BrowserRouter>)
+    fireEvent.change(await screen.findByRole('textbox', { name: '知识库名称' }), { target: { value: '混合资料库' } })
+    fireEvent.click(await screen.findByRole('checkbox', { name: /已有讲义/ }))
+    const localFile = new File(['本地资料'], 'new.txt', { type: 'text/plain' })
+    fireEvent.change(screen.getByLabelText('上传本地文件'), { target: { files: [localFile] } })
+    const createButton = screen.getByRole('button', { name: '创建知识库' })
+    fireEvent.click(createButton)
+    fireEvent.click(createButton)
+
+    await waitFor(() => expect(operations.map((operation) => operation.type)).toEqual(['create', 'members', 'import']))
+    expect(operations.filter((operation) => operation.type === 'create')).toHaveLength(1)
+    expect(operations.find((operation) => operation.type === 'members')?.body).toEqual({ file_ids: ['existing-1'] })
+    expect(operations.find((operation) => operation.type === 'import')?.body).toEqual({ knowledge_base_id: 'kb-1', files: ['new.txt'] })
+  })
+
+  it('keeps duplicate decisions in the knowledge base upload context', async () => {
+    window.history.pushState({}, '', '/knowledge-bases/kb-duplicate')
+    let decisionBody: unknown
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.includes('/system/session')) return response({ status: 'ready' })
+      if (url.endsWith('/api/v1/knowledge-bases/kb-duplicate')) return response({ ...baseItem, knowledge_base_id: 'kb-duplicate' })
+      if (url.endsWith('/api/v1/knowledge-bases/kb-duplicate/files')) return response({ items: [] })
+      if (url.includes('/api/v1/files?sort=name')) return response({ items: [], next_cursor: null })
+      if (url.endsWith('/index-status')) return response(emptyIndexStatus)
+      if (url.endsWith('/embedding-model')) return response({ state: 'MISSING_OFFLINE', can_install: false, can_cancel: false })
+      if (url.endsWith('/api/v1/file-imports') && init?.method === 'POST') return response({ import_id: 'import-duplicate', task_id: 'import-duplicate', status: 'BLOCKED', phase: 'WAITING_DUPLICATE_DECISION', progress: 100, items: [{ item_index: 0, original_name: 'copy.txt', status: 'BLOCKED', duplicate_status: 'PENDING_DECISION' }], knowledge_base_id: 'kb-duplicate' }, 202)
+      if (url.endsWith('/api/v1/file-imports/import-duplicate')) return response({ import_id: 'import-duplicate', task_id: 'import-duplicate', status: 'BLOCKED', phase: 'WAITING_DUPLICATE_DECISION', progress: 100, items: [{ item_index: 0, original_name: 'copy.txt', status: 'BLOCKED', duplicate_status: 'PENDING_DECISION' }], knowledge_base_id: 'kb-duplicate' })
+      if (url.endsWith('/duplicate-decisions') && init?.method === 'POST') {
+        decisionBody = JSON.parse(String(init.body))
+        return response({ import_id: 'import-duplicate', task_id: 'import-duplicate', status: 'COMPLETED', phase: 'COMPLETED', progress: 100, items: [{ item_index: 0, original_name: 'copy.txt', status: 'REUSED', duplicate_status: 'REUSED', file_id: 'existing-1' }], knowledge_base_id: 'kb-duplicate' })
+      }
+      return response({ status: 'ok', version: '0.1.0' })
+    }))
+
+    render(<BrowserRouter><App /></BrowserRouter>)
+    fireEvent.click(await screen.findByRole('button', { name: '上传新文件' }))
+    fireEvent.change(screen.getByLabelText('上传新文件'), { target: { files: [new File(['copy'], 'copy.txt', { type: 'text/plain' })] } })
+    fireEvent.click(await screen.findByRole('button', { name: '复用现有' }))
+
+    await waitFor(() => expect(decisionBody).toEqual({ decisions: [{ item_index: 0, decision: 'REUSE_EXISTING' }] }))
+    expect(await screen.findByText('copy.txt：已复用已有文件并加入当前知识库。')).toBeInTheDocument()
   })
 })

@@ -131,6 +131,7 @@ export async function apiUpload<T>(
   path: string,
   files: File[],
   fields: Record<string, string | undefined> = {},
+  idempotencyKey?: string,
 ): Promise<T> {
   await ensureLocalSession()
   const body = new FormData()
@@ -147,7 +148,7 @@ export async function apiUpload<T>(
       cache: 'no-store',
       headers: {
         'X-Request-ID': uuidv7(),
-        'Idempotency-Key': uuidv7(),
+        'Idempotency-Key': idempotencyKey ?? uuidv7(),
       },
     })
   } catch {

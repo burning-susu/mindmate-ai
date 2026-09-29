@@ -706,3 +706,12 @@
 - 浏览器边界：新增 `frontend/e2e/stage76-history-delete.spec.ts`，但 Playwright 在页面打开前启动 Chromium 返回 `spawn EPERM`。提权复跑因自动审批服务 `404 Not Found` 未执行，未绕过审核。当前没有普通 Chrome/Edge 标签页；本批没有新截图、URL 或 Network 计数。历史相关浏览器门禁继续 `BROWSER_PARTIAL`。
 - 阶段状态：`DEMO_STABLE=PASS` 仅沿用第 42/64 批证据；`STAGE8_FULL_V1=PARTIAL`。第七十五批备份恢复 `WinError 5 / RESTORE_DATABASE_LOCKED` 和 Credential Manager `WinError 1312`、`PACKAGED_LAUNCHER_PARTIAL`、`AC-LEARN-006=PARTIAL`、真实 Provider 与账单 `PENDING` 维持原状态。
 - 报告与下一优先级：结果见 `docs/test-reports/stage-76-history-delete-dialog.md`；第七十批文档新增第六项修订卡。下一步在普通 Windows Chrome/Edge Guest profile 对新模态复测，用合成历史对象分别验证恢复、不可恢复删除各请求一次、源文件/知识库不受影响，并单独核对后台任务状态；记录对象 ID、URL、Network 与截图后再更新浏览器门禁。不要把旧用户回报转写为新 UI 证据。
+
+### 第七十七批：知识库内直接导入文件与建库闭环
+
+- 进场核验：`feat/v1-bootstrap`；本地和 `origin/feat/v1-bootstrap` 均为 `371243e065737f189075fc6c16cb0d09c416d197`，工作区干净。附件提示词中第 76 批旧远端 SHA 与当前事实不一致，已按当前 Git 核对，没有重置或强推。
+- 实现：`KnowledgeBaseNewPage` 增加已有文件筛选、批量本地文件选择、混合提交、空库创建、稳定幂等键和提交锁；`KnowledgeBaseDetailPage` 增加当前库上传、三种重复决策、逐文件真实结果、任务 ID 和刷新后的服务端状态恢复。文件导入仍复用既有格式/大小/解析/重复安全边界。
+- 后端衔接：文件导入上下文拒绝回收站知识库；`REUSE_EXISTING` 会恢复或创建当前库成员关系并标记 `PREPARING`，源文件仍可复用到多个知识库；没有迁移、OpenAPI 或 Provider 变更。
+- 证据：前端全量 `16 files / 84 tests passed`、typecheck、lint、build 通过；后端阶段 4 文件 `13 passed`、阶段 5 知识库 `13 passed`；Ruff、compileall、`git diff --check` 通过。报告为 `docs/test-reports/stage-77-knowledge-base-intake.md`，变更记录为 `docs/project/changes/CHG-20260929-KNOWLEDGE-BASE-INTAKE.md`。
+- 状态边界：`KNOWLEDGE_BASE_INTAKE_CODE/FRONTEND/BACKEND=PASS`；普通浏览器页面未取得，`KNOWLEDGE_BASE_INTAKE_BROWSER=BROWSER_PARTIAL`；`DEMO_STABLE=PASS` 仅沿用第 42/64 批，`STAGE8_FULL_V1=PARTIAL`。没有真实 Key、真实 Provider、模型下载或费用。
+- 下一批唯一优先主题：普通 Windows Chrome/Edge Guest profile 复测建库空库/已有文件/本地文件/混合选择、复用/另存/跳过、刷新恢复、部分失败和索引未就绪提示，记录对象 ID、URL、任务 ID、请求次数和截图，不把自动化证据冒充页面验收。

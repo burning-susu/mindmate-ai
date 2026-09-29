@@ -82,9 +82,11 @@ export function listKnowledgeBaseMembers(
 export function addKnowledgeBaseMembers(
   knowledgeBaseId: string,
   fileIds: string[],
+  idempotencyKey?: string,
 ): Promise<KnowledgeMembershipTask> {
   return apiRequest(`/api/v1/knowledge-bases/${knowledgeBaseId}/files`, {
     method: 'POST',
+    headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
     body: JSON.stringify({ file_ids: fileIds }),
   })
 }

@@ -277,6 +277,22 @@
 .knowledge-form input[type='color'] { width: 52px; height: 34px; padding: 2px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
 .knowledge-form__mark { display: grid; place-items: center; width: 52px; height: 52px; margin-bottom: 18px; border-radius: 7px; color: #fff; }
 .knowledge-title { display: flex; align-items: center; gap: 14px; }
+.knowledge-intake { display: grid; gap: 14px; margin: 20px 0; padding-top: 18px; border-top: 1px solid var(--border); }
+.knowledge-intake__source { display: grid; gap: 10px; padding: 13px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-subtle); }
+.knowledge-intake__source-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.knowledge-intake__source-heading > div { display: grid; gap: 4px; min-width: 0; }
+.knowledge-intake__source-heading h3 { margin: 0; color: var(--text); font-size: 13px; }
+.knowledge-intake__source-heading p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.knowledge-intake__source-heading > span { flex: 0 0 auto; color: var(--primary); font-size: 11px; }
+.knowledge-intake__files { display: grid; gap: 7px; max-height: 260px; overflow: auto; }
+.knowledge-intake__file { display: flex; align-items: center; gap: 9px; min-width: 0; padding: 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); }
+.knowledge-intake__file > span { display: grid; gap: 3px; min-width: 0; flex: 1; }
+.knowledge-intake__file strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.knowledge-intake__file small { color: var(--muted); font-size: 11px; }
+.knowledge-intake__file .file-status { min-height: 20px; padding: 0 6px; font-size: 10px; }
+.knowledge-intake__file > svg:last-child { flex: 0 0 auto; color: var(--primary); }
+.knowledge-intake__empty { padding: 14px; border: 1px dashed var(--border); color: var(--muted); font-size: 12px; text-align: center; }
+.knowledge-intake__hint { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
 .retrieval-panel { display: grid; gap: 16px; margin-top: 18px; }
 .retrieval-scope-note { margin: -7px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .retrieval-form { display: grid; gap: 8px; }
@@ -358,6 +374,8 @@
   .retrieval-signal-grid, .retrieval-metrics { grid-template-columns: 1fr; }
   .retrieval-candidate__header { flex-direction: column; }
   .retrieval-candidate__id { max-width: none; text-align: left; }
+  .knowledge-intake__source-heading { align-items: stretch; flex-direction: column; }
+  .knowledge-intake__source-heading .quiet-button { align-self: flex-start; }
 }
 
 .settings-page { min-width: 0; }
