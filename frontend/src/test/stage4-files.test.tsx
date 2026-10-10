@@ -102,6 +102,44 @@ describe('stage 4 file workspace', () => {
     expect(importedName).toBe('dropped.txt')
   })
 
+  it('refreshes global and folder counts after trashing a filtered file', async () => {
+    window.history.pushState({}, '', '/files?folder_id=folder-7')
+    let activeTotal = 3
+    let folderCount = 2
+    let folderFiles = [
+      { file_id: 'file-7', display_name: 'interview.md', source_name: 'interview.md', extension: '.md', document_type: 'MARKDOWN', folder_id: 'folder-7', folder_name: '面试题', status: 'PARSED', content_hash: 'hash-7', byte_size: 128, created_at: '2026-10-10T00:00:00Z', updated_at: '2026-10-10T00:00:00Z', deleted_at: null, purge_after: null, row_version: 2, tags: [], parsed_metadata: null, has_parsed_text: true, content_available: true, parse_failure_stage: null, parse_error_id: null, parse_retry_count: 0, can_reprocess: true },
+      { file_id: 'file-8', display_name: 'notes.md', source_name: 'notes.md', extension: '.md', document_type: 'MARKDOWN', folder_id: 'folder-7', folder_name: '面试题', status: 'PARSED', content_hash: 'hash-8', byte_size: 256, created_at: '2026-10-10T00:00:00Z', updated_at: '2026-10-10T00:00:00Z', deleted_at: null, purge_after: null, row_version: 1, tags: [], parsed_metadata: null, has_parsed_text: true, content_available: true, parse_failure_stage: null, parse_error_id: null, parse_retry_count: 0, can_reprocess: true },
+    ]
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.includes('/system/session')) return new Response(JSON.stringify({ status: 'ready' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      if (url.endsWith('/api/v1/health')) return new Response(JSON.stringify({ status: 'ok', version: '0.1.0' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      if (url.includes('/api/v1/files?')) return new Response(JSON.stringify({ items: folderFiles, next_cursor: null }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      if (url.endsWith('/api/v1/folders')) return new Response(JSON.stringify({ items: [{ folder_id: 'folder-7', parent_folder_id: null, name: '面试题', file_count: folderCount, row_version: 1, created_at: '2026-10-10T00:00:00Z', updated_at: '2026-10-10T00:00:00Z' }] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      if (url.endsWith('/api/v1/tags')) return new Response(JSON.stringify({ items: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      if (url.includes('/api/v1/home/overview')) return new Response(JSON.stringify({ files: activeTotal }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      if (url.startsWith('/api/v1/files/file-7?') && init?.method === 'DELETE') {
+        folderFiles = folderFiles.filter((file) => file.file_id !== 'file-7')
+        folderCount = 1
+        activeTotal = 2
+        return new Response(JSON.stringify({ file_id: 'file-7', status: 'IN_TRASH' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      return new Response(JSON.stringify({ status: 'ok', version: '0.1.0' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }))
+
+    render(<BrowserRouter><App /></BrowserRouter>)
+    const allFilesButton = await screen.findByRole('button', { name: /全部文件/ })
+    const folderButtons = await screen.findAllByRole('button', { name: /面试题/ })
+    const folderButton = folderButtons.find((button) => button.classList.contains('folder-row'))
+    expect(folderButton).toBeDefined()
+    expect(allFilesButton.querySelector('small')).toHaveTextContent('3')
+    expect(folderButton.querySelector('small')).toHaveTextContent('2')
+
+    fireEvent.click(await screen.findByRole('button', { name: '移入回收站 interview.md' }))
+    await waitFor(() => expect(allFilesButton.querySelector('small')).toHaveTextContent('2'))
+    await waitFor(() => expect(folderButton?.querySelector('small')).toHaveTextContent('1'))
+  })
+
   it('sends the folder version and shows a conflict reload action', async () => {
     window.history.pushState({}, '', '/files')
     vi.spyOn(window, 'confirm').mockReturnValue(true)

@@ -10,7 +10,7 @@
 - 最后更新时间：`2026-10-10`
 - 当前开发阶段：阶段 8 开发中，状态 `PARTIAL`；阶段 5、阶段 6、阶段 7 继续 `PARTIAL`
 - 交付顺序：Demo 首先完成，完整 V1 以后精进。求职 Demo 优先文件整理/导入、建库、带来源问答、最小学习陪练和重启恢复。Demo 可用性与完整 V1 阶段状态分开报告。
-- 当前批次状态：第八十批文件夹内重复复用与扩大拖放区域 `CODE PASS / AUTOMATED PASS / BROWSER NOT RUN`；阶段 8 `PARTIAL`，完整 V1 状态未改变。重复内容选“复用现有”时，活动 FileRecord 现在移动到本次明确选中的文件夹，并刷新文件列表与目录计数；未选择文件夹时保留原目录。拖放监听覆盖右侧整个文件工作区，拖入时出现整区释放提示。后端文件契约 `7 passed`，前端文件页 `6 passed`，typecheck、lint、build、定向 Ruff 通过；未做普通浏览器 Network/截图验收。第七十九批有关回收站复用、旧任务缓存及其原证据见 `docs/test-reports/stage-79-file-import-duplicate-resolution.md`；本批报告见 `docs/test-reports/stage-80-folder-reuse-and-drop-target.md`。阶段 8 未完成项仍以既有证据为准。
+- 当前批次状态：第八十一批文件与目录计数修复 `CODE PASS / AUTOMATED PASS / BROWSER NOT RUN`；阶段 8 `PARTIAL`，完整 V1 状态未改变。移入回收站后文件夹 API 已排除该文件，但文件页删除成功只刷新了文件列表，目录数继续显示缓存值；“全部文件”计数使用当前过滤后的 `files.length`，不是服务端全局活动文件数。现在删除/目录递归删除会刷新文件夹与全局概览；“全部文件”使用 `/home/overview` 的未回收文件总数，并在导入、复用、删除等增减场景刷新。文件页前端回归 `7 passed`，typecheck、lint、build 通过。未做普通浏览器截图/Network 验收。报告见 `docs/test-reports/stage-81-file-and-folder-counts.md`；此前第七十九、八十批行为和阶段 8 未完成项均保持原状。
 
 ## 已完成阶段
 

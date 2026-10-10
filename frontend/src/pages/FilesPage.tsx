@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 
 import { apiRequest, apiUpload } from '../api/client'
+import { getHomeOverview } from '../api/home'
 import {
   deleteFolder as deleteFolderRequest,
   isVersionConflict,
@@ -111,6 +112,12 @@ export default function FilesPage() {
   })
   const foldersQuery = useQuery({ queryKey: ['folders'], queryFn: () => apiRequest<{ items: FolderItem[] }>('/api/v1/folders') })
   const tagsQuery = useQuery({ queryKey: ['tags'], queryFn: () => apiRequest<{ items: TagItem[] }>('/api/v1/tags') })
+  const overviewQuery = useQuery({
+    queryKey: ['home-overview', 8],
+    queryFn: () => getHomeOverview(8),
+    staleTime: 0,
+    refetchOnMount: 'always',
+  })
 
   const uploadMutation = useMutation({
     mutationFn: (files: File[]) => apiUpload<ImportResponse>('/api/v1/file-imports', files, { folder_id: folderId }),
@@ -118,6 +125,7 @@ export default function FilesPage() {
       setImportResult(result)
       void queryClient.invalidateQueries({ queryKey: ['files'] })
       void queryClient.invalidateQueries({ queryKey: ['folders'] })
+      void queryClient.invalidateQueries({ queryKey: ['home-overview'] })
     },
   })
   const deleteMutation = useMutation({
@@ -125,6 +133,8 @@ export default function FilesPage() {
     onSuccess: () => {
       setSelected([])
       void queryClient.invalidateQueries({ queryKey: ['files'] })
+      void queryClient.invalidateQueries({ queryKey: ['folders'] })
+      void queryClient.invalidateQueries({ queryKey: ['home-overview'] })
     },
     onError: (error) => {
       if (isVersionConflict(error)) setVersionConflict('文件已被其他操作修改，请重新加载后再试。')
@@ -143,6 +153,7 @@ export default function FilesPage() {
       updateFilter('folder_id')
       void queryClient.invalidateQueries({ queryKey: ['folders'] })
       void queryClient.invalidateQueries({ queryKey: ['files'] })
+      void queryClient.invalidateQueries({ queryKey: ['home-overview'] })
     },
     onError: (error) => {
       if (isVersionConflict(error)) setVersionConflict('文件夹已被其他操作修改，请重新加载后再试。')
@@ -164,6 +175,7 @@ export default function FilesPage() {
       setSelected([])
       void queryClient.invalidateQueries({ queryKey: ['files'] })
       void queryClient.invalidateQueries({ queryKey: ['folders'] })
+      void queryClient.invalidateQueries({ queryKey: ['home-overview'] })
     },
   })
   const duplicateMutation = useMutation({
@@ -177,6 +189,7 @@ export default function FilesPage() {
       queryClient.setQueryData(['file-import', result.import_id], result)
       void queryClient.invalidateQueries({ queryKey: ['files'] })
       void queryClient.invalidateQueries({ queryKey: ['folders'] })
+      void queryClient.invalidateQueries({ queryKey: ['home-overview'] })
     },
   })
 
@@ -193,6 +206,7 @@ export default function FilesPage() {
     if (!activeImportResult || !['COMPLETED', 'FAILED', 'CANCELLED'].includes(activeImportResult.status)) return
     void queryClient.invalidateQueries({ queryKey: ['files'] })
     void queryClient.invalidateQueries({ queryKey: ['folders'] })
+    void queryClient.invalidateQueries({ queryKey: ['home-overview'] })
   }, [activeImportResult, queryClient])
 
   useEffect(() => {
@@ -286,7 +300,7 @@ export default function FilesPage() {
       <div className="files-layout">
         <aside className="folder-panel" aria-label="文件夹">
           <div className="panel-heading"><span>目录</span><FolderPlus size={16} aria-hidden="true" /></div>
-          <button className={`folder-row ${!folderId ? 'folder-row--active' : ''}`} type="button" onClick={() => updateFilter('folder_id')}><Folder size={16} aria-hidden="true" /><span>全部文件</span><small>{files.length}</small></button>
+          <button className={`folder-row ${!folderId ? 'folder-row--active' : ''}`} type="button" onClick={() => updateFilter('folder_id')}><Folder size={16} aria-hidden="true" /><span>全部文件</span><small>{overviewQuery.data?.files ?? (overviewQuery.isLoading ? '…' : '—')}</small></button>
           <FolderTree folders={folders} selectedId={folderId} onSelect={(id) => updateFilter('folder_id', id)} onDelete={deleteFolder} />
           <form className="new-folder-form" onSubmit={(event) => { event.preventDefault(); if (newFolderName.trim()) folderMutation.mutate(newFolderName.trim()) }}>
             <input value={newFolderName} onChange={(event) => setNewFolderName(event.target.value)} aria-label="新文件夹名称" placeholder="新建文件夹" maxLength={100} />
@@ -329,7 +343,7 @@ export default function FilesPage() {
           {dragging && <div className="files-drop-overlay" role="status"><FileUp size={28} aria-hidden="true" /><strong>释放文件以导入</strong><span>文件将加入当前文件夹</span></div>}
         </div>
       </div>
-      {versionConflict && <div className="inline-error" role="alert"><span>{versionConflict}</span><button type="button" className="quiet-button" onClick={() => { setVersionConflict(null); void queryClient.invalidateQueries({ queryKey: ['folders'] }); void queryClient.invalidateQueries({ queryKey: ['files'] }) }}>重新加载</button></div>}
+      {versionConflict && <div className="inline-error" role="alert"><span>{versionConflict}</span><button type="button" className="quiet-button" onClick={() => { setVersionConflict(null); void queryClient.invalidateQueries({ queryKey: ['folders'] }); void queryClient.invalidateQueries({ queryKey: ['files'] }); void queryClient.invalidateQueries({ queryKey: ['home-overview'] }) }}>重新加载</button></div>}
     </section>
   )
 }
