@@ -10,7 +10,7 @@
 - 最后更新时间：`2026-10-10`
 - 当前开发阶段：阶段 8 开发中，状态 `PARTIAL`；阶段 5、阶段 6、阶段 7 继续 `PARTIAL`
 - 交付顺序：Demo 首先完成，完整 V1 以后精进。求职 Demo 优先文件整理/导入、建库、带来源问答、最小学习陪练和重启恢复。Demo 可用性与完整 V1 阶段状态分开报告。
-- 当前批次状态：第八十一批文件与目录计数修复 `CODE PASS / AUTOMATED PASS / BROWSER NOT RUN`；阶段 8 `PARTIAL`，完整 V1 状态未改变。移入回收站后文件夹 API 已排除该文件，但文件页删除成功只刷新了文件列表，目录数继续显示缓存值；“全部文件”计数使用当前过滤后的 `files.length`，不是服务端全局活动文件数。现在删除/目录递归删除会刷新文件夹与全局概览；“全部文件”使用 `/home/overview` 的未回收文件总数，并在导入、复用、删除等增减场景刷新。文件页前端回归 `7 passed`，typecheck、lint、build 通过。未做普通浏览器截图/Network 验收。报告见 `docs/test-reports/stage-81-file-and-folder-counts.md`；此前第七十九、八十批行为和阶段 8 未完成项均保持原状。
+- 当前批次状态：第八十二批 Markdown 文件阅读视图 `CODE PASS / AUTOMATED PASS / BROWSER NOT RUN`；阶段 8 `PARTIAL`，完整 V1 状态未改变。此前文件详情将所有解析文本放在等宽 `<pre>`，Markdown 标记原样显示。现对 `MARKDOWN` 文档使用安全 React 阅读渲染，支持标题、段落、强调、列表、引用、表格、分隔线和 fenced code；原始 HTML 作为文本，不注入 HTML，链接不加载外部资源；其他文档类型仍显示纯解析文本。前端组件与文件详情定向测试 `10 passed`，typecheck、lint、build 通过。未做普通浏览器截图验收。报告见 `docs/test-reports/stage-82-markdown-reading-view.md`；阶段 8 其他未完成项仍保持原状。
 
 ## 已完成阶段
 

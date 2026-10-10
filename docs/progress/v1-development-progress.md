@@ -1,5 +1,13 @@
 # V1 开发进度
 
+## 第八十二批：Markdown 文件阅读视图（2026-10-10）
+
+- 现象：文件详情“解析文本”统一使用 `<pre>`，Markdown 标题、表格、列表、粗体等被当作语法源码展示，阅读体验不符合普通文档阅读方式。
+- 修复：新增 React Markdown 阅读组件，无外部依赖、无 `dangerouslySetInnerHTML`；将标题、段落、强调、删除线、行内代码、列表、引用、表格、分隔线和 fenced code 渲染成有层级的文档布局。Markdown 链接只显示标签，不打开远程资源；原始 HTML 以文本呈现。仅 `document_type=MARKDOWN` 使用此视图，TXT/PDF/DOCX/PPTX 等仍使用原解析文本框。
+- 证据：`src/test/markdown-preview.test.tsx` 和 `src/test/stage4-files.test.tsx` 共 `10 passed`；覆盖 Markdown 结构、原始 HTML 安全边界和文件详情格式分流。typecheck、lint、build 通过；构建保留既有主 JS 体积提示。未做普通浏览器截图验收。
+- 范围：无依赖、API、后端解析或数据格式变更；原始 `.md` 文件及解析文本保留。
+- 报告：`docs/test-reports/stage-82-markdown-reading-view.md`。
+
 ## 第八十一批：文件与目录计数修复（2026-10-10）
 
 - 现象：在某个文件夹筛选页把一个文件移入回收站后，文件夹计数保留旧值；“全部文件”计数随着当前文件夹筛选缩小，不能代表全局活动文件数。

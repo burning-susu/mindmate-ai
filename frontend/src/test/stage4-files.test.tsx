@@ -132,12 +132,13 @@ describe('stage 4 file workspace', () => {
     const folderButtons = await screen.findAllByRole('button', { name: /面试题/ })
     const folderButton = folderButtons.find((button) => button.classList.contains('folder-row'))
     expect(folderButton).toBeDefined()
+    const folderCountButton = folderButton as HTMLButtonElement
     expect(allFilesButton.querySelector('small')).toHaveTextContent('3')
-    expect(folderButton.querySelector('small')).toHaveTextContent('2')
+    expect(folderCountButton.querySelector('small')).toHaveTextContent('2')
 
     fireEvent.click(await screen.findByRole('button', { name: '移入回收站 interview.md' }))
     await waitFor(() => expect(allFilesButton.querySelector('small')).toHaveTextContent('2'))
-    await waitFor(() => expect(folderButton?.querySelector('small')).toHaveTextContent('1'))
+    await waitFor(() => expect(folderCountButton.querySelector('small')).toHaveTextContent('1'))
   })
 
   it('sends the folder version and shows a conflict reload action', async () => {
@@ -181,6 +182,29 @@ describe('stage 4 file workspace', () => {
     expect(await screen.findByText('PARSER_FAILED')).toBeInTheDocument()
     expect(screen.getByText('失败阶段')).toBeInTheDocument()
     expect(screen.getByText('重试次数')).toBeInTheDocument()
+  })
+
+  it('shows Markdown files in formatted reading mode', async () => {
+    window.history.pushState({}, '', '/files/file-markdown')
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      let payload: unknown = { items: [] }
+      if (url.includes('/system/session')) payload = { status: 'ready' }
+      else if (url.endsWith('/api/v1/health')) payload = { status: 'ok', version: '0.1.0' }
+      else if (url.endsWith('/api/v1/files/file-markdown')) payload = {
+        file_id: 'file-markdown', display_name: 'interview.md', source_name: 'interview.md', extension: '.md', document_type: 'MARKDOWN', folder_id: null, folder_name: null, status: 'PARSED', content_hash: 'abcdef123456', byte_size: 42, created_at: '2026-09-22T00:00:00Z', updated_at: '2026-09-22T00:00:00Z', deleted_at: null, purge_after: null, row_version: 1, tags: [], parsed_metadata: null, has_parsed_text: true, content_available: true, parse_failure_stage: null, parse_error_id: null, parse_retry_count: 0, can_reprocess: true,
+      }
+      else if (url.endsWith('/preview')) payload = { preview_available: true, text: '# 模块成绩\n\n**结果：** 已通过。', metadata: { line_count: 3, character_count: 20 } }
+      else if (url.endsWith('/knowledge-bases')) payload = { items: [] }
+      return new Response(JSON.stringify(payload), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }))
+
+    render(<BrowserRouter><App /></BrowserRouter>)
+
+    expect(await screen.findByRole('heading', { level: 1, name: '模块成绩' })).toBeInTheDocument()
+    expect(screen.getByText('结果：')).toBeInTheDocument()
+    expect(document.querySelector('.markdown-preview')).toBeInTheDocument()
+    expect(document.querySelector('.text-preview')).not.toBeInTheDocument()
   })
 
   it('restores list filters, sorting, and scroll position after returning from details', async () => {

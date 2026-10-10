@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 
 import { apiRequest } from '../api/client'
+import MarkdownPreview from '../components/MarkdownPreview'
 import { isVersionConflict, type FileItem, type FolderItem, type TagItem } from '../api/files'
 import type { components } from '../api/generated/openapi'
 
@@ -129,7 +130,7 @@ export default function FileDetailPage() {
       <div className="detail-grid">
         <section className="detail-section">
           <h2>解析文本</h2>
-          {previewQuery.isLoading ? <div className="detail-empty">正在加载解析文本…</div> : previewQuery.isError ? <div className="detail-empty">解析文本加载失败。</div> : previewQuery.data?.preview_available ? <pre className="text-preview">{previewQuery.data.text}</pre> : <div className="detail-empty"><FileText size={20} aria-hidden="true" /><span>当前文件还没有可用的解析文本。</span></div>}
+          {previewQuery.isLoading ? <div className="detail-empty">正在加载解析文本…</div> : previewQuery.isError ? <div className="detail-empty">解析文本加载失败。</div> : previewQuery.data?.preview_available ? file.document_type === 'MARKDOWN' ? <MarkdownPreview source={previewQuery.data.text ?? ''} /> : <pre className="text-preview">{previewQuery.data.text}</pre> : <div className="detail-empty"><FileText size={20} aria-hidden="true" /><span>当前文件还没有可用的解析文本。</span></div>}
         </section>
         <section className="detail-section">
           <h2>文件设置</h2>
