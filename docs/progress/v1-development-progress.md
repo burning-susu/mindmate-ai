@@ -1,5 +1,11 @@
 # V1 开发进度
 
+## 第八十四批：PDF 默认查看状态（2026-10-10）
+
+- 修改 PDF 内嵌查看器的打开参数：默认收起左侧导航面板，缩放设为 100%。
+- 证据：`src/test/document-preview.test.tsx` `4 passed`，断言本地 PDF URL 包含默认视图参数；typecheck、lint 通过。未做普通浏览器 PDF 插件截图验收。
+- 报告：`docs/test-reports/stage-84-pdf-default-view.md`。
+
 ## 第八十三批：多格式文件阅读预览（2026-10-10）
 
 - 用户补充范围：Markdown 的阅读排版只是文件详情预览优化的一部分，PDF、Word、PowerPoint 和 TXT 也要按格式处理。

@@ -68,7 +68,7 @@ export default function DocumentPreview({
   if (documentType === 'PDF') {
     return contentAvailable ? (
       <div className="pdf-document-preview" aria-label="PDF 原版式预览">
-        <iframe title="PDF 原版式预览" src={`/api/v1/files/${fileId}/content`} />
+        <iframe title="PDF 原版式预览" src={`/api/v1/files/${fileId}/content#navpanes=0&zoom=100`} />
         {!previewAvailable ? <p className="document-preview-note"><FileText size={15} aria-hidden="true" />此 PDF 没有可提取的文本，仍可查看原始页面；扫描版文字识别暂不支持。</p> : null}
         {previewAvailable ? <details className="pdf-document-preview__text"><summary>查看提取文本</summary><pre className="text-preview">{text}</pre></details> : null}
       </div>

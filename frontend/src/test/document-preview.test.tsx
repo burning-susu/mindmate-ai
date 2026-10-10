@@ -7,7 +7,7 @@ describe('DocumentPreview', () => {
   it('shows the local original PDF layout even when text extraction is unavailable', () => {
     render(<DocumentPreview fileId="pdf-1" documentType="PDF" contentAvailable previewAvailable={false} text="" metadata={null} />)
 
-    expect(screen.getByTitle('PDF 原版式预览')).toHaveAttribute('src', '/api/v1/files/pdf-1/content')
+    expect(screen.getByTitle('PDF 原版式预览')).toHaveAttribute('src', '/api/v1/files/pdf-1/content#navpanes=0&zoom=100')
     expect(screen.getByText(/扫描版文字识别暂不支持/)).toBeInTheDocument()
   })
 

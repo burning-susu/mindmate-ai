@@ -10,7 +10,7 @@
 - 最后更新时间：`2026-10-10`
 - 当前开发阶段：阶段 8 开发中，状态 `PARTIAL`；阶段 5、阶段 6、阶段 7 继续 `PARTIAL`
 - 交付顺序：Demo 首先完成，完整 V1 以后精进。求职 Demo 优先文件整理/导入、建库、带来源问答、最小学习陪练和重启恢复。Demo 可用性与完整 V1 阶段状态分开报告。
-- 当前批次状态：第八十三批多格式文件阅读预览 `CODE PASS / AUTOMATED PASS / BROWSER NOT RUN`；阶段 8 `PARTIAL`，完整 V1 状态未改变。PDF 详情内嵌本地原文件，由浏览器 PDF 阅读器显示真实分页；即使扫描版没有可提取文本仍能看原页，并提示 OCR 不支持。DOCX 段落/表格、PPTX 提取文本块、TXT 使用可读文档排版；Markdown 使用上批安全阅读视图。DOCX/PPTX 当前并非原版面还原，页面如实提示可通过“打开原文”看原件。格式预览及历史文件页定向测试 `14 passed`，typecheck、lint、build 通过；未做普通浏览器 PDF iframe 实机截图。报告见 `docs/test-reports/stage-83-multiformat-document-preview.md`。完整 Office 原版布局需额外本地转换/渲染依赖，当前未新增依赖，其他阶段 8 未完成项保持不变。
+- 当前批次状态：第八十四批 PDF 默认查看状态 `CODE PASS / AUTOMATED PASS / BROWSER NOT RUN`。内嵌 PDF URL 默认请求关闭左侧导航面板并以 100% 缩放打开。PDF 查看器组件测试 `4 passed`，typecheck 和 lint 通过。未做普通浏览器视觉验收。记录见 `docs/test-reports/stage-84-pdf-default-view.md`；第八十三批多格式阅读行为及 DOCX/PPTX 原版面转换限制保持不变。
 
 ## 已完成阶段
 
