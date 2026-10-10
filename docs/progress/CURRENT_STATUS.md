@@ -10,7 +10,7 @@
 - 最后更新时间：`2026-10-10`
 - 当前开发阶段：阶段 8 开发中，状态 `PARTIAL`；阶段 5、阶段 6、阶段 7 继续 `PARTIAL`
 - 交付顺序：Demo 首先完成，完整 V1 以后精进。求职 Demo 优先文件整理/导入、建库、带来源问答、最小学习陪练和重启恢复。Demo 可用性与完整 V1 阶段状态分开报告。
-- 当前批次状态：第八十二批 Markdown 文件阅读视图 `CODE PASS / AUTOMATED PASS / BROWSER NOT RUN`；阶段 8 `PARTIAL`，完整 V1 状态未改变。此前文件详情将所有解析文本放在等宽 `<pre>`，Markdown 标记原样显示。现对 `MARKDOWN` 文档使用安全 React 阅读渲染，支持标题、段落、强调、列表、引用、表格、分隔线和 fenced code；原始 HTML 作为文本，不注入 HTML，链接不加载外部资源；其他文档类型仍显示纯解析文本。前端组件与文件详情定向测试 `10 passed`，typecheck、lint、build 通过。未做普通浏览器截图验收。报告见 `docs/test-reports/stage-82-markdown-reading-view.md`；阶段 8 其他未完成项仍保持原状。
+- 当前批次状态：第八十三批多格式文件阅读预览 `CODE PASS / AUTOMATED PASS / BROWSER NOT RUN`；阶段 8 `PARTIAL`，完整 V1 状态未改变。PDF 详情内嵌本地原文件，由浏览器 PDF 阅读器显示真实分页；即使扫描版没有可提取文本仍能看原页，并提示 OCR 不支持。DOCX 段落/表格、PPTX 提取文本块、TXT 使用可读文档排版；Markdown 使用上批安全阅读视图。DOCX/PPTX 当前并非原版面还原，页面如实提示可通过“打开原文”看原件。格式预览及历史文件页定向测试 `14 passed`，typecheck、lint、build 通过；未做普通浏览器 PDF iframe 实机截图。报告见 `docs/test-reports/stage-83-multiformat-document-preview.md`。完整 Office 原版布局需额外本地转换/渲染依赖，当前未新增依赖，其他阶段 8 未完成项保持不变。
 
 ## 已完成阶段
 

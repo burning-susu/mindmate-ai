@@ -177,6 +177,23 @@
 .detail-section { min-width: 0; padding: 20px; }
 .detail-section h2 { margin: 0 0 16px; color: var(--text); font-size: 16px; }
 .text-preview { max-height: 560px; overflow: auto; margin: 0; padding: 16px; border: 1px solid var(--border); border-radius: 7px; background: #f8fafb; color: #33454d; font: 13px/1.7 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; word-break: break-word; }
+.pdf-document-preview { display: grid; gap: 10px; }
+.pdf-document-preview iframe { display: block; width: 100%; height: min(76vh, 900px); min-height: 560px; border: 1px solid var(--border); border-radius: 7px; background: #eef1f2; }
+.pdf-document-preview__text { color: var(--muted); font-size: 12px; }
+.pdf-document-preview__text summary { width: fit-content; cursor: pointer; }
+.pdf-document-preview__text .text-preview { margin-top: 8px; }
+.document-preview-note { display: flex; align-items: flex-start; gap: 7px; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.document-preview-note svg { flex: 0 0 auto; margin-top: 1px; }
+.plain-document-preview, .office-document-preview__page { max-height: 680px; overflow: auto; padding: 24px clamp(20px, 5vw, 64px); border: 1px solid var(--border); border-radius: 7px; background: #fff; color: var(--text); font-size: 14px; line-height: 1.8; overflow-wrap: anywhere; }
+.plain-document-preview { white-space: pre-wrap; }
+.office-document-preview__meta { margin-bottom: 8px; color: var(--muted); font-size: 12px; }
+.office-document-preview__page { min-height: 300px; padding: 32px clamp(24px, 7vw, 80px); }
+.office-document-preview__page p { margin: 0 0 1em; }
+.slide-document-preview__blocks { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); align-items: start; gap: 14px; max-height: 680px; overflow: auto; padding: 4px; }
+.slide-document-preview__blocks li { min-width: 0; padding: 12px 14px; border: 1px solid var(--border); border-radius: 6px; background: #fff; }
+.slide-document-preview__blocks li > span { color: var(--muted); font-size: 11px; }
+.slide-document-preview__blocks p { margin: 5px 0 0; color: var(--text); font-size: 14px; line-height: 1.65; white-space: pre-wrap; }
+@media (max-width: 560px) { .pdf-document-preview iframe { min-height: 420px; height: 68vh; } .office-document-preview__page { padding: 22px 18px; } }
 .markdown-preview { max-height: 680px; overflow: auto; padding: 20px 24px; border: 1px solid var(--border); border-radius: 7px; background: #fff; color: var(--text); font-size: 14px; line-height: 1.75; overflow-wrap: anywhere; }
 .markdown-preview > :first-child { margin-top: 0; }
 .markdown-preview > :last-child { margin-bottom: 0; }

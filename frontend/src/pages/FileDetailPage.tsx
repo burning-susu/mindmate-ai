@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 
 import { apiRequest } from '../api/client'
+import DocumentPreview from '../components/DocumentPreview'
 import MarkdownPreview from '../components/MarkdownPreview'
 import { isVersionConflict, type FileItem, type FolderItem, type TagItem } from '../api/files'
 import type { components } from '../api/generated/openapi'
@@ -11,7 +12,7 @@ import type { components } from '../api/generated/openapi'
 type Preview = {
   preview_available: boolean
   text?: string | null
-  metadata?: { line_count?: number; character_count?: number } | null
+  metadata?: { page_count?: number; paragraph_count?: number; table_count?: number; slide_count?: number; line_count?: number; character_count?: number } | null
 }
 
 const statusLabels: Record<string, string> = {
@@ -129,8 +130,8 @@ export default function FileDetailPage() {
       </div>
       <div className="detail-grid">
         <section className="detail-section">
-          <h2>解析文本</h2>
-          {previewQuery.isLoading ? <div className="detail-empty">正在加载解析文本…</div> : previewQuery.isError ? <div className="detail-empty">解析文本加载失败。</div> : previewQuery.data?.preview_available ? file.document_type === 'MARKDOWN' ? <MarkdownPreview source={previewQuery.data.text ?? ''} /> : <pre className="text-preview">{previewQuery.data.text}</pre> : <div className="detail-empty"><FileText size={20} aria-hidden="true" /><span>当前文件还没有可用的解析文本。</span></div>}
+          <h2>{file.document_type === 'PDF' ? 'PDF 原版式预览' : file.document_type === 'PPTX' ? '幻灯片内容预览' : '文档预览'}</h2>
+          {previewQuery.isLoading ? <div className="detail-empty">正在加载文件预览…</div> : previewQuery.isError ? <div className="detail-empty">文件预览加载失败。</div> : file.document_type === 'MARKDOWN' ? previewQuery.data?.preview_available ? <MarkdownPreview source={previewQuery.data.text ?? ''} /> : <div className="detail-empty"><FileText size={20} aria-hidden="true" /><span>当前文件还没有可用的解析文本。</span></div> : <DocumentPreview fileId={file.file_id} documentType={file.document_type} contentAvailable={file.content_available} previewAvailable={previewQuery.data?.preview_available ?? false} text={previewQuery.data?.text ?? ''} metadata={previewQuery.data?.metadata} />}
         </section>
         <section className="detail-section">
           <h2>文件设置</h2>
