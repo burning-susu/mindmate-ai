@@ -28,13 +28,15 @@ describe('DocumentPreview', () => {
   })
 
   it('renders XMind sheets and nested topic branches as an outline', () => {
-    render(<DocumentPreview fileId="xmind-1" documentType="XMIND" contentAvailable previewAvailable text="root branch leaf" metadata={{ sheet_count: 1, topic_count: 3, xmind_outline: [{ title: '工作计划', root: { title: '年度目标', children: [{ title: '第一季度', children: [{ title: '完成项目', children: [] }] }] } }] }} />)
+    const { container } = render(<DocumentPreview fileId="xmind-1" documentType="XMIND" contentAvailable previewAvailable text="root branch leaf" metadata={{ sheet_count: 1, topic_count: 4, xmind_outline: [{ title: '工作计划', root: { title: '年度目标', children: [{ title: '第一季度', children: [{ title: '完成项目', children: [] }] }, { title: '第二季度', children: [] }] } }] }} />)
 
     expect(screen.getByRole('article', { name: 'XMind 思维导图结构' })).toBeInTheDocument()
-    expect(screen.getByText('1 个主题 · 3 个分支')).toBeInTheDocument()
+    expect(screen.getByText('1 个工作表 · 4 个主题节点')).toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 3, name: '工作计划' })).toBeInTheDocument()
     expect(screen.getByRole('treeitem', { name: /第一季度/ })).toBeInTheDocument()
     expect(screen.getByText('完成项目')).toBeInTheDocument()
+    expect(container.querySelector('.xmind-map__side--left')).toHaveTextContent('第一季度')
+    expect(container.querySelector('.xmind-map__side--right')).toHaveTextContent('第二季度')
   })
 
   it('keeps plain text readable without monospace source styling', () => {

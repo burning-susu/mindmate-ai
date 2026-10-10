@@ -10,7 +10,7 @@
 - 最后更新时间：`2026-10-10`
 - 当前开发阶段：阶段 8 开发中，状态 `PARTIAL`；阶段 5、阶段 6、阶段 7 继续 `PARTIAL`
 - 交付顺序：Demo 首先完成，完整 V1 以后精进。求职 Demo 优先文件整理/导入、建库、带来源问答、最小学习陪练和重启恢复。Demo 可用性与完整 V1 阶段状态分开报告。
-- 当前批次状态：第八十五批 XMind 文件支持 `CODE PASS / AUTOMATED PASS / BROWSER NOT RUN`。`.xmind` 现通过文件管理和知识库各上传入口接收；校验根 content.json/content.xml XMind ZIP 签名，在隔离解析子进程生成工作表/主题树和可检索文本，详情页以分支树展示。沿用 ZIP 条目/解压大小/压缩比/任务时间内存限制，并额外限制主数据大小、主题层级/数量、重复 ZIP 项。后端阶段 4 文件测试 `14 passed`，前端文档/文件页测试 `15 passed`，Pyright、Ruff、compileall、typecheck、lint、build 通过。未做普通浏览器真实 XMind 样本验收。变更单 `docs/project/changes/CHG-20261010-XMIND-SUPPORT.md`，报告 `docs/test-reports/stage-85-xmind-support.md`。阶段 8 其他状态不变。
+- 当前批次状态：第八十六批 XMind 思维导图预览布局 `CODE PASS / AUTOMATED PASS / BROWSER NOT RUN`。根据截图反馈，将单列主题长列表改为中心主题居中、一级分支交错分布于左右两侧、子主题在分支下递归展开的可滚动画布；主题数文案调整为“主题节点”。预览组件 `5 passed`，typecheck 和 lint 通过；未做真实第三方 XMind 浏览器截图复验。记录见 `docs/test-reports/stage-86-xmind-map-layout.md`。第八十五批导入/解析支持保持不变。
 
 ## 已完成阶段
 

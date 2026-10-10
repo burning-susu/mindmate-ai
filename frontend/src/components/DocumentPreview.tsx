@@ -20,16 +20,38 @@ function TopicTree({ topics, nested = false }: { topics: XMindTopic[]; nested?: 
   return <ul role={nested ? 'group' : 'tree'}>{topics.map((topic, index) => <li role="treeitem" aria-expanded={topic.children.length ? true : undefined} key={`${topic.title}-${index}`}><span>{topic.title}</span><TopicTree topics={topic.children} nested /></li>)}</ul>
 }
 
+function XMindBranches({ topics }: { topics: XMindTopic[] }) {
+  if (topics.length === 0) return <div className="xmind-map__empty-side" aria-hidden="true" />
+  return (
+    <div className="xmind-map__branch-list" role="group">
+      {topics.map((topic, index) => (
+        <div className="xmind-map__branch" role="treeitem" aria-expanded={topic.children.length ? true : undefined} key={`${topic.title}-${index}`}>
+          <span>{topic.title}</span>
+          <TopicTree topics={topic.children} nested />
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function XMindDocumentPreview({ metadata }: { metadata: ParsedMetadata | null | undefined }) {
   const sheets = metadata?.xmind_outline ?? []
   return (
     <article className="xmind-document-preview" aria-label="XMind 思维导图结构">
-      <div className="office-document-preview__meta">{metadata?.sheet_count ?? sheets.length} 个主题 · {metadata?.topic_count ?? 0} 个分支</div>
+      <div className="office-document-preview__meta">{metadata?.sheet_count ?? sheets.length} 个工作表 · {metadata?.topic_count ?? 0} 个主题节点</div>
       <div className="xmind-document-preview__sheets">
         {sheets.map((sheet, index) => (
           <section key={`${sheet.title}-${index}`} aria-labelledby={`xmind-sheet-${index}`}>
             <h3 id={`xmind-sheet-${index}`}>{sheet.title}</h3>
-            {sheet.root ? <div className="xmind-document-preview__root"><strong>{sheet.root.title}</strong><TopicTree topics={sheet.root.children} /></div> : <p>此工作表没有可显示的主题。</p>}
+            {sheet.root ? (
+              <div className="xmind-map-scroll">
+                <div className="xmind-map" role="tree" aria-label={sheet.title}>
+                  <div className="xmind-map__side xmind-map__side--left"><XMindBranches topics={sheet.root.children.filter((_, branchIndex) => branchIndex % 2 === 0)} /></div>
+                  <strong className="xmind-map__root" role="treeitem" aria-expanded={sheet.root.children.length > 0 || undefined}>{sheet.root.title}</strong>
+                  <div className="xmind-map__side xmind-map__side--right"><XMindBranches topics={sheet.root.children.filter((_, branchIndex) => branchIndex % 2 === 1)} /></div>
+                </div>
+              </div>
+            ) : <p>此工作表没有可显示的主题。</p>}
           </section>
         ))}
       </div>
