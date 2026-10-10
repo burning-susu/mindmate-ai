@@ -430,6 +430,21 @@ def test_office_documents_use_isolated_parsers_and_blank_pdf_is_not_marked_parse
     docx_preview = client.get(f"/api/v1/files/{docx_item['file_id']}/preview").json()
     assert "这是 Word 正文" in docx_preview["text"]
     assert docx_preview["metadata"]["paragraph_count"] >= 2
+    rendered_docx_pdf = data_dir / "rendered-docx-preview.pdf"
+    docx_writer = PdfWriter()
+    docx_writer.add_blank_page(width=72, height=72)
+    docx_writer.write(str(rendered_docx_pdf))
+    monkeypatch.setattr(
+        files_api,
+        "get_or_create_office_preview",
+        lambda _source, _sha, document_type, _settings: (rendered_docx_pdf, 1, False)
+        if document_type == "DOCX"
+        else (rendered_docx_pdf, 1, False),
+    )
+    rendered_docx_response = client.get(f"/api/v1/files/{docx_item['file_id']}/docx-preview")
+    assert rendered_docx_response.status_code == 200
+    assert rendered_docx_response.headers["content-type"] == "application/pdf"
+    assert rendered_docx_response.content.startswith(b"%PDF-")
 
     pptx_buffer = io.BytesIO()
     presentation = Presentation()
@@ -460,8 +475,8 @@ def test_office_documents_use_isolated_parsers_and_blank_pdf_is_not_marked_parse
     rendered.write(str(rendered_pdf))
     monkeypatch.setattr(
         files_api,
-        "get_or_create_pptx_preview",
-        lambda _source, _sha, _settings: (rendered_pdf, 1, False),
+        "get_or_create_office_preview",
+        lambda _source, _sha, document_type, _settings: (rendered_pdf, 1, False),
     )
     rendered_response = client.get(f"/api/v1/files/{pptx_item['file_id']}/pptx-preview")
     assert rendered_response.status_code == 200
@@ -471,8 +486,8 @@ def test_office_documents_use_isolated_parsers_and_blank_pdf_is_not_marked_parse
 
     monkeypatch.setattr(
         files_api,
-        "get_or_create_pptx_preview",
-        lambda _source, _sha, _settings: (rendered_pdf, 2, False),
+        "get_or_create_office_preview",
+        lambda _source, _sha, _document_type, _settings: (rendered_pdf, 2, False),
     )
     mismatch_response = client.get(f"/api/v1/files/{pptx_item['file_id']}/pptx-preview")
     assert mismatch_response.status_code == 422
@@ -484,7 +499,10 @@ def test_office_documents_use_isolated_parsers_and_blank_pdf_is_not_marked_parse
     monkeypatch.setattr(pptx_preview_service, "find_libreoffice", lambda _settings: None)
     unavailable_response = client.get(f"/api/v1/files/{pptx_item['file_id']}/pptx-preview")
     assert unavailable_response.status_code == 503
-    assert unavailable_response.json()["code"] == "PPTX_RENDERER_UNAVAILABLE"
+    assert unavailable_response.json()["code"] == "OFFICE_RENDERER_UNAVAILABLE"
+    unavailable_docx_response = client.get(f"/api/v1/files/{docx_item['file_id']}/docx-preview")
+    assert unavailable_docx_response.status_code == 503
+    assert unavailable_docx_response.json()["code"] == "OFFICE_RENDERER_UNAVAILABLE"
 
     pdf_buffer = io.BytesIO()
     writer = PdfWriter()

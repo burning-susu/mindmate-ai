@@ -20,8 +20,9 @@ if (-not $target.StartsWith($buildPrefix, [System.StringComparison]::OrdinalIgno
 
 $sourceProgram = Join-Path $source 'program'
 $sourceSoffice = Join-Path $sourceProgram 'soffice.exe'
-if (-not (Test-Path -LiteralPath $sourceSoffice -PathType Leaf)) {
-    throw 'The source directory does not contain program\soffice.exe.'
+$sourceConsole = Join-Path $sourceProgram 'soffice.com'
+if (-not (Test-Path -LiteralPath $sourceSoffice -PathType Leaf) -or -not (Test-Path -LiteralPath $sourceConsole -PathType Leaf)) {
+    throw 'The source directory must contain program\soffice.com and soffice.exe.'
 }
 
 $licenseFiles = @(Get-ChildItem -LiteralPath $source -Recurse -File -ErrorAction Stop |
@@ -30,20 +31,36 @@ if ($licenseFiles.Count -eq 0) {
     throw 'LibreOffice license files were not found; staging is refused.'
 }
 if (Test-Path -LiteralPath $target) {
-    throw "Staging target already exists: $target. Move it aside before replacing it."
+    $sourceInventory = @(Get-ChildItem -LiteralPath $source -Recurse -File -ErrorAction Stop |
+        ForEach-Object { $_.FullName.Substring($source.Length).TrimStart('\') + '|' + $_.Length } |
+        Sort-Object)
+    $targetInventory = @(Get-ChildItem -LiteralPath $target -Recurse -File -ErrorAction Stop |
+        Where-Object { $_.Name -ne 'mindmate-runtime-manifest.json' } |
+        ForEach-Object { $_.FullName.Substring($target.Length).TrimStart('\') + '|' + $_.Length } |
+        Sort-Object)
+    if ($sourceInventory.Count -ne $targetInventory.Count -or (Compare-Object $sourceInventory $targetInventory)) {
+        throw "Staging target already exists and does not match the source runtime: $target"
+    }
+    $stagedSoffice = Join-Path $target 'program\soffice.exe'
+    $sourceHash = (Get-FileHash -LiteralPath $sourceSoffice -Algorithm SHA256).Hash
+    $stagedHash = (Get-FileHash -LiteralPath $stagedSoffice -Algorithm SHA256).Hash
+    if ($sourceHash -ne $stagedHash) {
+        throw 'The staged LibreOffice executable hash does not match the source.'
+    }
+} else {
+    New-Item -ItemType Directory -Path $target -Force | Out-Null
+    $sourceItems = Get-ChildItem -LiteralPath $source -Force -ErrorAction Stop
+    if (-not $sourceItems) {
+        throw 'The LibreOffice source directory is empty.'
+    }
+    $sourceItems | Copy-Item -Destination $target -Recurse -Force
 }
-
-New-Item -ItemType Directory -Path $target -Force | Out-Null
-$sourceItems = Get-ChildItem -LiteralPath $source -Force -ErrorAction Stop
-if (-not $sourceItems) {
-    throw 'The LibreOffice source directory is empty.'
-}
-$sourceItems | Copy-Item -Destination $target -Recurse -Force
 $stagedSoffice = Join-Path $target 'program\soffice.exe'
-if (-not (Test-Path -LiteralPath $stagedSoffice -PathType Leaf)) {
-    throw 'The staged LibreOffice runtime is missing program\soffice.exe.'
+$stagedConsole = Join-Path $target 'program\soffice.com'
+if (-not (Test-Path -LiteralPath $stagedSoffice -PathType Leaf) -or -not (Test-Path -LiteralPath $stagedConsole -PathType Leaf)) {
+    throw 'The staged LibreOffice runtime is missing program\soffice.com or soffice.exe.'
 }
-$versionOutput = (& $stagedSoffice --version 2>&1 | Out-String).Trim()
+$versionOutput = (& $stagedConsole --version 2>&1 | Out-String).Trim()
 if ($LASTEXITCODE -ne 0 -or $versionOutput -notmatch '^LibreOffice\s+') {
     throw 'Unable to verify the staged LibreOffice version.'
 }

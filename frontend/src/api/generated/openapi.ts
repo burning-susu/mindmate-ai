@@ -1369,6 +1369,9 @@ export interface operations {
   "GET /api/v1/files/{file_id}/pptx-preview": {
     operationId: "file_pptx_preview_api_v1_files__file_id__pptx_preview_get"
   };
+  "GET /api/v1/files/{file_id}/docx-preview": {
+    operationId: "file_docx_preview_api_v1_files__file_id__docx_preview_get"
+  };
   "GET /api/v1/files/{file_id}/preview": {
     operationId: "file_preview_api_v1_files__file_id__preview_get"
   };

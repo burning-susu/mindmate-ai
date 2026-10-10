@@ -71,46 +71,18 @@ function XMindDocumentPreview({ fileId, metadata }: { fileId: string; metadata: 
   )
 }
 
-function WordDocumentPreview({ text, metadata }: { text: string; metadata: ParsedMetadata | null | undefined }) {
-  const lines = text.split(/\r?\n/)
-  const blocks: Array<{ type: 'paragraph'; text: string } | { type: 'table'; rows: string[][] }> = []
-  let tableRows: string[][] = []
-  const flushTable = () => {
-    if (tableRows.length) blocks.push({ type: 'table', rows: tableRows })
-    tableRows = []
-  }
-
-  for (const line of lines) {
-    if (line.includes('\t')) {
-      tableRows.push(line.split('\t'))
-    } else {
-      flushTable()
-      if (line.trim()) blocks.push({ type: 'paragraph', text: line.trim() })
-    }
-  }
-  flushTable()
-
-  return (
-    <article className="office-document-preview" aria-label="Word 文档解析内容">
-      <div className="office-document-preview__meta">提取 {metadata?.paragraph_count ?? blocks.filter((block) => block.type === 'paragraph').length} 段文字 · {metadata?.table_count ?? tableRows.length} 个表格</div>
-      <div className="office-document-preview__page">
-        {blocks.map((block, index) => block.type === 'paragraph'
-          ? <p key={`paragraph-${index}`}>{block.text}</p>
-          : <div className="markdown-table-wrap" key={`table-${index}`}><table><tbody>{block.rows.map((row, rowIndex) => <tr key={`row-${rowIndex}`}>{row.map((cell, cellIndex) => <td key={`cell-${cellIndex}`}>{cell}</td>)}</tr>)}</tbody></table></div>)}
-      </div>
-    </article>
-  )
-}
-
-function PowerPointDocumentPreview({ fileId, text, metadata }: { fileId: string; text: string; metadata: ParsedMetadata | null | undefined }) {
+function OfficeDocumentPreview({ fileId, text, metadata, documentType }: { fileId: string; text: string; metadata: ParsedMetadata | null | undefined; documentType: 'DOCX' | 'PPTX' }) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const isPresentation = documentType === 'PPTX'
+  const previewTitle = isPresentation ? 'PowerPoint 原版式预览' : 'Word 原版式预览'
+  const previewPath = `/api/v1/files/${fileId}/${isPresentation ? 'pptx' : 'docx'}-preview`
 
   useEffect(() => {
     const controller = new AbortController()
     let active = true
     let objectUrl: string | null = null
-    void apiRequestBlob(`/api/v1/files/${fileId}/pptx-preview`, { signal: controller.signal })
+    void apiRequestBlob(previewPath, { signal: controller.signal })
       .then((blob) => {
         if (!active) return
         objectUrl = URL.createObjectURL(blob)
@@ -120,21 +92,21 @@ function PowerPointDocumentPreview({ fileId, text, metadata }: { fileId: string;
         if (!active) return
         if (reason instanceof ApiError) setError(reason.problem.detail)
         else if (reason instanceof LocalBackendUnavailableError) setError(reason.message)
-        else setError('无法生成幻灯片版式预览，请打开原文查看。')
+        else setError(`无法生成${isPresentation ? '幻灯片' : 'Word'}版式预览，请打开原文查看。`)
       })
     return () => {
       active = false
       controller.abort()
       if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
-  }, [fileId])
+  }, [fileId, isPresentation, previewPath])
 
   return (
-    <article className="slide-document-preview" aria-label="PowerPoint 幻灯片原版式预览">
-      <div className="office-document-preview__meta">共 {metadata?.slide_count ?? 0} 张幻灯片 · 本地转换为 PDF 预览</div>
-      {previewUrl ? <iframe title="PowerPoint 原版式预览" src={`${previewUrl}#navpanes=0&zoom=100`} />
+    <article className="office-layout-preview" aria-label={previewTitle}>
+      <div className="office-document-preview__meta">{isPresentation ? `共 ${metadata?.slide_count ?? 0} 张幻灯片 · 本地转换为 PDF 预览` : 'Word 文档 · 本地转换为 PDF 原版式预览'}</div>
+      {previewUrl ? <iframe title={previewTitle} src={`${previewUrl}#navpanes=0&zoom=100`} />
         : error ? <div className="detail-empty" role="alert"><FileText size={18} aria-hidden="true" /><span>{error}</span></div>
-          : <div className="detail-empty" role="status"><LoaderCircle size={18} className="spin" aria-hidden="true" /><span>正在转换幻灯片预览…</span></div>}
+          : <div className="detail-empty" role="status"><LoaderCircle size={18} className="spin" aria-hidden="true" /><span>正在转换文档预览…</span></div>}
       {text ? <details className="pdf-document-preview__text"><summary>查看提取文本</summary><pre className="text-preview">{text}</pre></details> : null}
     </article>
   )
@@ -165,9 +137,8 @@ export default function DocumentPreview({
     ) : <div className="detail-empty"><FileText size={20} aria-hidden="true" /><span>原始 PDF 文件当前不可用。</span></div>
   }
 
-  if (documentType === 'PPTX') return <PowerPointDocumentPreview key={fileId} fileId={fileId} text={text} metadata={metadata} />
+  if (documentType === 'DOCX' || documentType === 'PPTX') return <OfficeDocumentPreview key={`${fileId}-${documentType}`} fileId={fileId} text={text} metadata={metadata} documentType={documentType} />
   if (!previewAvailable) return <div className="detail-empty"><FileText size={20} aria-hidden="true" /><span>当前文件还没有可用的解析文本。</span></div>
-  if (documentType === 'DOCX') return <WordDocumentPreview text={text} metadata={metadata} />
   if (documentType === 'XMIND') return metadata?.xmind_outline ? <XMindDocumentPreview fileId={fileId} metadata={metadata} /> : <div className="detail-empty"><FileText size={20} aria-hidden="true" /><span>XMind 主题结构无法读取。</span></div>
   return <div className="plain-document-preview">{text}</div>
 }

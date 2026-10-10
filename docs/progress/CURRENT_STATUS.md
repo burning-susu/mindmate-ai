@@ -10,7 +10,7 @@
 - 最后更新时间：`2026-10-10`
 - 当前开发阶段：阶段 8 开发中，状态 `PARTIAL`；阶段 5、阶段 6、阶段 7 继续 `PARTIAL`
 - 交付顺序：Demo 首先完成，完整 V1 以后精进。求职 Demo 优先文件整理/导入、建库、带来源问答、最小学习陪练和重启恢复。Demo 可用性与完整 V1 阶段状态分开报告。
-- 当前批次状态：第八十八批 PPTX 原版式预览 `CODE PASS / AUTOMATED PASS / LIBREOFFICE RUNTIME PENDING`。已用隔离 LibreOffice 转 PDF 的受限接口替代文本块卡片；PDF 按源哈希缓存、核对页数、限制输入/输出/超时/内存并原子发布，前端显示 PDF 画面、保留折叠文本及失败提示。后端文件测试、缓存/超时/输出校验定向测试，前端 `96 passed`，Ruff、Pyright、compileall、typecheck、lint、build 和 OpenAPI 类型生成通过。当前机器没有 LibreOffice 或可校验安装包，真实 62 页转换和正式安装包验收未完成；接口在运行时缺失时明确返回 `PPTX_RENDERER_UNAVAILABLE`。暂存脚本与剩余条件见 `docs/project/changes/CHG-20261010-PPTX-RENDERING.md`。
+- 当前批次状态：第八十九批 DOCX 原版式预览 `CODE PASS / AUTOMATED PASS / REAL DOCX CONVERSION PASS / APP RESTART PENDING`。复用已暂存的 LibreOffice；详情页现用 Writer PDF 渲染真实页布局，文本提取折叠保留。演示 DOCX 已真实转换为 23 页、991,564 字节 PDF，并检查首页/末页。后端 Office 定向测试 `22 passed`，前端全量 `18 files / 96 tests passed`；Ruff、Pyright、compileall、typecheck、lint、build 通过。当前端口仍运行旧版 API，`/docx-preview` 返回 `404`；自动审批 `429` 阻止了重启命令，浏览器内验收待重启。PPTX 实际转换也已完成。DOCX 变更见 `docs/project/changes/CHG-20261010-DOCX-RENDERING.md`。
 
 ## 已完成阶段
 

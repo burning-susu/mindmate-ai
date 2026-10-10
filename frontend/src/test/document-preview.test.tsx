@@ -25,12 +25,18 @@ describe('DocumentPreview', () => {
     expect(screen.getByText(/扫描版文字识别暂不支持/)).toBeInTheDocument()
   })
 
-  it('formats extracted Word paragraphs and tabular rows for reading', () => {
+  it('renders the converted Word PDF and keeps extracted text secondary', async () => {
+    const createObjectURL = vi.fn(() => 'blob:docx-preview')
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL })
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
+    apiRequestBlobMock.mockResolvedValue(new Blob(['%PDF-fixture'], { type: 'application/pdf' }))
     render(<DocumentPreview fileId="docx-1" documentType="DOCX" contentAvailable previewAvailable text={'标题\n正文内容\n项目\t结果\nA\t通过'} metadata={{ paragraph_count: 2, table_count: 1 }} />)
 
-    expect(screen.getByLabelText('Word 文档解析内容')).toBeInTheDocument()
-    expect(screen.getByText('提取 2 段文字 · 1 个表格')).toBeInTheDocument()
-    expect(screen.getByRole('cell', { name: '通过' })).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('正在转换文档预览')
+    expect(await screen.findByTitle('Word 原版式预览')).toHaveAttribute('src', 'blob:docx-preview#navpanes=0&zoom=100')
+    expect(screen.getByText('Word 文档 · 本地转换为 PDF 原版式预览')).toBeInTheDocument()
+    expect(screen.getByText('查看提取文本')).toBeInTheDocument()
+    expect(screen.queryByRole('cell', { name: '通过' })).not.toBeInTheDocument()
   })
 
   it('renders the converted PowerPoint PDF and keeps extracted text secondary', async () => {
@@ -40,7 +46,7 @@ describe('DocumentPreview', () => {
     apiRequestBlobMock.mockResolvedValue(new Blob(['%PDF-fixture'], { type: 'application/pdf' }))
     render(<DocumentPreview fileId="pptx-1" documentType="PPTX" contentAvailable previewAvailable text={'标题\n要点一\n要点二'} metadata={{ slide_count: 2 }} />)
 
-    expect(screen.getByRole('status')).toHaveTextContent('正在转换幻灯片预览')
+    expect(screen.getByRole('status')).toHaveTextContent('正在转换文档预览')
     expect(await screen.findByTitle('PowerPoint 原版式预览')).toHaveAttribute('src', 'blob:pptx-preview#navpanes=0&zoom=100')
     expect(screen.getByText('共 2 张幻灯片 · 本地转换为 PDF 预览')).toBeInTheDocument()
     expect(screen.getByText('查看提取文本')).toBeInTheDocument()

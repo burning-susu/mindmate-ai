@@ -18,18 +18,21 @@ from mindmate.application.files import validate_managed_content_path
 from mindmate.application.resource_limits import JobObjectError, ManagedJobObject
 from mindmate.config import Settings
 
-PPTX_PREVIEW_CACHE_REVISION = "libreoffice-pdf-v1"
+OFFICE_PREVIEW_CACHE_REVISION = "libreoffice-office-pdf-v1"
 MAX_PREVIEW_PDF_PAGES = 2_000
 MAX_PREVIEW_CACHE_LOCK_WAIT_SECONDS = 180
 _RENDER_SLOT = threading.BoundedSemaphore(1)
 
 
-class PptxPreviewError(RuntimeError):
+class OfficePreviewError(RuntimeError):
     def __init__(self, code: str, detail: str, status: int) -> None:
         super().__init__(detail)
         self.code = code
         self.detail = detail
         self.status = status
+
+
+PptxPreviewError = OfficePreviewError
 
 
 def _candidate_executables(root: Path) -> tuple[Path, ...]:
@@ -98,8 +101,8 @@ def _cache_lock(path: Path, timeout: float) -> Iterator[None]:
                 locked = True
             except (OSError, BlockingIOError):
                 if time.monotonic() >= deadline:
-                    raise PptxPreviewError(
-                        "PPTX_PREVIEW_BUSY", "幻灯片预览正在生成，请稍后重试。", 503
+                    raise OfficePreviewError(
+                        "OFFICE_PREVIEW_BUSY", "文档版式预览正在生成，请稍后重试。", 503
                     ) from None
                 time.sleep(0.05)
         yield
@@ -120,8 +123,8 @@ def _cache_lock(path: Path, timeout: float) -> Iterator[None]:
 @contextmanager
 def _renderer_slot(timeout: float) -> Iterator[None]:
     if not _RENDER_SLOT.acquire(timeout=timeout):
-        raise PptxPreviewError(
-            "PPTX_PREVIEW_BUSY", "另一个幻灯片预览正在转换，请稍后重试。", 503
+        raise OfficePreviewError(
+            "OFFICE_PREVIEW_BUSY", "另一个文档正在转换，请稍后重试。", 503
         ) from None
     try:
         yield
@@ -163,17 +166,25 @@ def _render_to_cache(
     executable: Path,
     cache_path: Path,
     settings: Settings,
+    document_type: str,
 ) -> Path:
     if not source.is_file():
-        raise PptxPreviewError("FILE_CONTENT_MISSING", "PPTX 原文件不可用。", 409)
+        raise OfficePreviewError("FILE_CONTENT_MISSING", "Office 原文件不可用。", 409)
     if source.stat().st_size > 50 * 1024 * 1024:
-        raise PptxPreviewError("PPTX_PREVIEW_INPUT_TOO_LARGE", "PPTX 文件超过预览限制。", 413)
+        raise OfficePreviewError("OFFICE_PREVIEW_INPUT_TOO_LARGE", "Office 文件超过预览限制。", 413)
+
+    export_filters = {"DOCX": "writer_pdf_Export", "PPTX": "impress_pdf_Export"}
+    extensions = {"DOCX": ".docx", "PPTX": ".pptx"}
+    export_filter = export_filters.get(document_type)
+    extension = extensions.get(document_type)
+    if export_filter is None or extension is None:
+        raise OfficePreviewError("OFFICE_PREVIEW_TYPE_UNSUPPORTED", "Office 文件类型不受支持。", 415)
 
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     try:
         with tempfile.TemporaryDirectory(prefix="mindmate-pptx-", dir=cache_path.parent) as value:
             workdir = Path(value)
-            source_copy = workdir / "source.pptx"
+            source_copy = workdir / f"source{extension}"
             shutil.copyfile(source, source_copy)
             profile = workdir / "profile"
             profile.mkdir()
@@ -187,7 +198,7 @@ def _render_to_cache(
                 "--norestore",
                 f"-env:UserInstallation={profile_url}",
                 "--convert-to",
-                "pdf:impress_pdf_Export",
+                f"pdf:{export_filter}",
                 "--outdir",
                 str(workdir),
                 str(source_copy),
@@ -195,8 +206,8 @@ def _render_to_cache(
             try:
                 job = ManagedJobObject.create(settings.pptx_preview_memory_limit_bytes)
             except JobObjectError as exc:
-                raise PptxPreviewError(
-                    "PPTX_PREVIEW_LIMIT_SETUP_FAILED", "无法建立受限的幻灯片转换进程。", 503
+                raise OfficePreviewError(
+                    "OFFICE_PREVIEW_LIMIT_SETUP_FAILED", "无法建立受限的文档转换进程。", 503
                 ) from exc
             try:
                 process: subprocess.Popen[bytes] | None = None
@@ -215,8 +226,8 @@ def _render_to_cache(
                     if process is not None:
                         process.kill()
                         process.wait()
-                    raise PptxPreviewError(
-                        "PPTX_RENDERER_START_FAILED", "无法安全启动 LibreOffice 转换器。", 503
+                    raise OfficePreviewError(
+                        "OFFICE_RENDERER_START_FAILED", "无法安全启动 LibreOffice 转换器。", 503
                     ) from exc
                 assert process is not None
                 try:
@@ -224,43 +235,45 @@ def _render_to_cache(
                 except subprocess.TimeoutExpired as exc:
                     process.kill()
                     process.wait()
-                    raise PptxPreviewError(
-                        "PPTX_RENDER_TIMEOUT", "幻灯片转换超时，请稍后重试。", 504
+                    raise OfficePreviewError(
+                        "OFFICE_RENDER_TIMEOUT", "文档转换超时，请稍后重试。", 504
                     ) from exc
             finally:
                 job.close()
 
             generated = workdir / "source.pdf"
             if return_code != 0:
-                raise PptxPreviewError(
-                    "PPTX_RENDER_FAILED", "LibreOffice 无法生成幻灯片预览。", 422
+                raise OfficePreviewError(
+                    "OFFICE_RENDER_FAILED", "LibreOffice 无法生成文档预览。", 422
                 )
             if _pdf_page_count(generated, settings.pptx_preview_max_bytes) is None:
-                raise PptxPreviewError(
-                    "PPTX_RENDER_OUTPUT_INVALID", "生成的幻灯片预览无效或超过限制。", 422
+                raise OfficePreviewError(
+                    "OFFICE_RENDER_OUTPUT_INVALID", "生成的文档预览无效或超过限制。", 422
                 )
             temporary_cache = cache_path.with_suffix(f".{os.getpid()}.partial")
             shutil.copyfile(generated, temporary_cache)
             os.replace(temporary_cache, cache_path)
-    except PptxPreviewError:
+    except OfficePreviewError:
         raise
     except OSError as exc:
-        raise PptxPreviewError("PPTX_RENDER_FAILED", "无法写入幻灯片预览缓存。", 500) from exc
+        raise OfficePreviewError("OFFICE_RENDER_FAILED", "无法写入文档预览缓存。", 500) from exc
     return cache_path
 
 
-def get_or_create_pptx_preview(
-    source: Path, content_hash: str, settings: Settings
+def get_or_create_office_preview(
+    source: Path, content_hash: str, document_type: str, settings: Settings
 ) -> tuple[Path, int, bool]:
+    if document_type not in {"DOCX", "PPTX"}:
+        raise OfficePreviewError("OFFICE_PREVIEW_TYPE_UNSUPPORTED", "Office 文件类型不受支持。", 415)
     if len(content_hash) != 64 or any(character not in "0123456789abcdef" for character in content_hash):
-        raise PptxPreviewError("PPTX_PREVIEW_CACHE_KEY_INVALID", "PPTX 预览缓存键无效。", 500)
+        raise OfficePreviewError("OFFICE_PREVIEW_CACHE_KEY_INVALID", "Office 预览缓存键无效。", 500)
 
     cache_key = hashlib.sha256(
-        f"{PPTX_PREVIEW_CACHE_REVISION}:{content_hash}".encode("ascii")
+        f"{OFFICE_PREVIEW_CACHE_REVISION}:{document_type}:{content_hash}".encode("ascii")
     ).hexdigest()
-    relative = f"previews/pptx/{cache_key}.pdf"
+    relative = f"previews/office/{document_type.lower()}/{cache_key}.pdf"
     cache_path = validate_managed_content_path(settings, relative)
-    lock_path = validate_managed_content_path(settings, "previews/pptx/renderer.lock")
+    lock_path = validate_managed_content_path(settings, "previews/office/renderer.lock")
     cache_path.parent.mkdir(parents=True, exist_ok=True)
 
     page_count = _pdf_page_count(cache_path, settings.pptx_preview_max_bytes)
@@ -270,9 +283,9 @@ def get_or_create_pptx_preview(
 
     executable = find_libreoffice(settings)
     if executable is None:
-        raise PptxPreviewError(
-            "PPTX_RENDERER_UNAVAILABLE",
-            "缺少本地幻灯片渲染组件，无法生成 PPTX 版式预览。",
+        raise OfficePreviewError(
+            "OFFICE_RENDERER_UNAVAILABLE",
+            "缺少本地 LibreOffice 运行时，无法生成 Office 版式预览。",
             503,
         )
 
@@ -282,11 +295,17 @@ def get_or_create_pptx_preview(
             if page_count is not None:
                 return cache_path, page_count, True
             cache_path.unlink(missing_ok=True)
-            _render_to_cache(source, executable, cache_path, settings)
+            _render_to_cache(source, executable, cache_path, settings, document_type)
             page_count = _pdf_page_count(cache_path, settings.pptx_preview_max_bytes)
             if page_count is None:
                 cache_path.unlink(missing_ok=True)
-                raise PptxPreviewError(
-                    "PPTX_RENDER_OUTPUT_INVALID", "生成的幻灯片预览无效或超过限制。", 422
+                raise OfficePreviewError(
+                    "OFFICE_RENDER_OUTPUT_INVALID", "生成的文档预览无效或超过限制。", 422
                 )
             return cache_path, page_count, False
+
+
+def get_or_create_pptx_preview(
+    source: Path, content_hash: str, settings: Settings
+) -> tuple[Path, int, bool]:
+    return get_or_create_office_preview(source, content_hash, "PPTX", settings)

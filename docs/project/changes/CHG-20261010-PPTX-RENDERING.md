@@ -1,6 +1,6 @@
 # CHG-20261010-PPTX-RENDERING
 
-状态：`PARTIAL / 代码已实现，LibreOffice 运行时与正式安装包待补`
+状态：`LOCAL RENDER PASS / 应用服务重启待完成 / 正式安装包属于阶段 10`
 
 日期：2026-10-10
 
@@ -38,7 +38,9 @@
 - [x] 新增 API、OpenAPI/前端类型及失败状态契约。
 - [x] 更新 PPTX 详情为 PDF 原版式预览，并保留折叠的文本辅助视图。
 - [x] 增加缓存命中、超时终止、输出校验、成功/缺失运行时 API 和前端失败状态回归测试。
-- [ ] 使用用户提供的 62 页演示文件做真实 LibreOffice 视觉验收，并验证 one-folder 运行时打包。
+- [x] 使用用户提供的 62 页演示文件做真实 LibreOffice 转换和首末页视觉验收；确认页数一致。
+- [ ] 在本机重启 MindMate API/Web 并通过详情页完成人工浏览器验收。
+- [ ] 验证正式 one-folder 安装包；对应项目阶段 10，当前尚无 PyInstaller/Inno Setup 工程。
 
 ## 变更边界
 
@@ -48,4 +50,4 @@
 
 ## 当前缺口
 
-用户已确认采用 LibreOffice，并确认本计划。代码及自动化验证已完成；当前开发机没有 LibreOffice 安装/可执行文件，也没有可校验的官方运行时包，故接口会返回 `PPTX_RENDERER_UNAVAILABLE`，不能宣称真实 PPTX 已完成版式验收。正式 PyInstaller/Inno Setup 配置属于阶段 10，当前尚无安装工程可把暂存目录打进最终安装包。用户提供已校验的 LibreOffice Windows 安装目录后，可运行 `scripts/stage-libreoffice.ps1` 将其暂存到 `build/runtime/libreoffice`；来源版本、官方下载 SHA-256 和许可证核验仍须记录。
+用户已确认采用 LibreOffice，并确认本计划。LibreOffice `26.8.1.1` 已暂存到 `build/runtime/libreoffice`；用户演示 PPTX 实际转换为 62 页 PDF，并完成首末页渲染检查。MindMate 服务进程尚未重启，Codex 启动命令连续被自动审批服务 `429` 限流，命令未执行。正式 PyInstaller/Inno Setup 配置属于阶段 10，当前尚无安装工程可把暂存目录装成最终 one-folder 安装包。

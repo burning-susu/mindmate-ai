@@ -8,7 +8,7 @@ import pytest
 from pypdf import PdfWriter
 
 from mindmate.application import pptx_preview
-from mindmate.application.pptx_preview import PptxPreviewError
+from mindmate.application.pptx_preview import OfficePreviewError
 from mindmate.config import Settings
 
 
@@ -35,8 +35,14 @@ class FakeJob:
         self.closed = True
 
 
-def test_pptx_preview_is_cached_by_source_content_hash(tmp_path: Path, monkeypatch) -> None:
-    source = tmp_path / "slides.pptx"
+@pytest.mark.parametrize(
+    ("document_type", "extension", "export_filter"),
+    [("DOCX", ".docx", "writer_pdf_Export"), ("PPTX", ".pptx", "impress_pdf_Export")],
+)
+def test_office_preview_uses_matching_filter_and_cache(
+    tmp_path: Path, monkeypatch, document_type: str, extension: str, export_filter: str
+) -> None:
+    source = tmp_path / f"slides{extension}"
     source.write_bytes(b"pptx fixture")
     executable = tmp_path / "soffice.exe"
     executable.write_bytes(b"fake executable")
@@ -49,6 +55,7 @@ def test_pptx_preview_is_cached_by_source_content_hash(tmp_path: Path, monkeypat
         def __init__(self, command: list[str], **_kwargs: object) -> None:
             nonlocal calls
             calls += 1
+            assert f"pdf:{export_filter}" in command
             output_dir = Path(command[command.index("--outdir") + 1])
             (output_dir / "source.pdf").write_bytes(make_pdf())
 
@@ -59,11 +66,11 @@ def test_pptx_preview_is_cached_by_source_content_hash(tmp_path: Path, monkeypat
     monkeypatch.setattr(pptx_preview, "ManagedJobObject", FakeJob)
     monkeypatch.setattr(pptx_preview.subprocess, "Popen", FakeProcess)
 
-    first_path, first_pages, first_cache_hit = pptx_preview.get_or_create_pptx_preview(
-        source, "a" * 64, settings
+    first_path, first_pages, first_cache_hit = pptx_preview.get_or_create_office_preview(
+        source, "a" * 64, document_type, settings
     )
-    second_path, second_pages, second_cache_hit = pptx_preview.get_or_create_pptx_preview(
-        source, "a" * 64, settings
+    second_path, second_pages, second_cache_hit = pptx_preview.get_or_create_office_preview(
+        source, "a" * 64, document_type, settings
     )
 
     assert first_path == second_path
@@ -98,10 +105,10 @@ def test_pptx_preview_timeout_is_reported_and_child_is_killed(tmp_path: Path, mo
     monkeypatch.setattr(pptx_preview, "ManagedJobObject", FakeJob)
     monkeypatch.setattr(pptx_preview.subprocess, "Popen", FakeProcess)
 
-    with pytest.raises(PptxPreviewError) as error:
-        pptx_preview.get_or_create_pptx_preview(source, "b" * 64, settings)
+    with pytest.raises(OfficePreviewError) as error:
+        pptx_preview.get_or_create_office_preview(source, "b" * 64, "PPTX", settings)
 
-    assert error.value.code == "PPTX_RENDER_TIMEOUT"
+    assert error.value.code == "OFFICE_RENDER_TIMEOUT"
     assert killed == [True]
 
 
@@ -125,7 +132,7 @@ def test_pptx_preview_requires_valid_pdf_output(tmp_path: Path, monkeypatch) -> 
     monkeypatch.setattr(pptx_preview, "ManagedJobObject", FakeJob)
     monkeypatch.setattr(pptx_preview.subprocess, "Popen", FakeProcess)
 
-    with pytest.raises(PptxPreviewError) as error:
-        pptx_preview.get_or_create_pptx_preview(source, "c" * 64, settings)
+    with pytest.raises(OfficePreviewError) as error:
+        pptx_preview.get_or_create_office_preview(source, "c" * 64, "PPTX", settings)
 
-    assert error.value.code == "PPTX_RENDER_OUTPUT_INVALID"
+    assert error.value.code == "OFFICE_RENDER_OUTPUT_INVALID"

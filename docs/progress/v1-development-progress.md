@@ -1,5 +1,14 @@
 # V1 开发进度
 
+## 第八十九批：DOCX 原版式预览（2026-10-10）
+
+- 用户反馈 DOCX 的段落/表格重排预览不是期望效果；详情页改为使用已暂存的 LibreOffice Writer 转 PDF 画面，解析文本收纳到辅助折叠区。
+- 复用 `get_or_create_office_preview(..., "DOCX", ...)`、同一受限 LibreOffice 运行时和缓存机制；DOCX/PPTX 按格式分开缓存；新增 `GET /api/v1/files/{file_id}/docx-preview`，无 DB migration 和新依赖。
+- 自动化覆盖 DOCX/PPTX 两种 LibreOffice 导出过滤器、同哈希缓存、超时/无效输出、DOCX PDF API 响应和运行时缺失错误。用户演示 DOCX 实际转换为 23 页、`991,564` 字节 PDF；Poppler 检查首页封面和末页表格，页面内容清晰。
+- 自动化：Office 定向后端 `22 passed`；前端全量 `18 files / 96 tests passed`；Ruff、Pyright 0 errors、compileall、typecheck、lint、build 通过。
+- 运行状态：当前端口服务仍是旧版 API，DOCX preview 路由 `404`；Codex 启动命令被自动审批 `429` 拦截，未执行。详情页浏览器人工验收待服务重启后完成。
+- 变更单：`docs/project/changes/CHG-20261010-DOCX-RENDERING.md`；报告：`docs/test-reports/stage-89-docx-rendered-preview.md`。
+
 ## 第八十八批：PPTX 原版式预览（2026-10-10）
 
 - 用户反馈详情页的 PPTX 文本块卡片不是期望效果，并确认以 LibreOffice 在本地转 PDF，按幻灯片画面查看。
@@ -7,7 +16,8 @@
 - 前端 PPTX 详情改为获取 PDF Blob 并复用浏览器 PDF 查看器，文本提取折叠为辅助内容；正在转换和失败时均有状态，失败不再显示伪幻灯片文本卡片。
 - 新增运行时暂存脚本，保留版本、许可证清单和 `soffice.exe` SHA-256；构建可用 `-LibreOfficeHome` 指向完整本地运行时。无数据库迁移或新 Python/npm 依赖。
 - 验证：后端 `test_pptx_preview.py` `3 passed`，阶段 4 文件测试 `18 passed`（含 PDF API 响应、源/输出页数不匹配和缺失 LibreOffice 的 503）；前端全量 `18 files / 96 tests passed`；定向 Ruff、Pyright（0 errors）、compileall、typecheck、lint、build 和 OpenAPI/客户端类型生成通过。
-- 未完成：开发机未安装/未提供 LibreOffice Windows runtime，因此实际 62 页文件没有转换/视觉验收；正式 PyInstaller/Inno Setup 属于阶段 10，尚无安装工程。运行时已缺失的后端提示验证为 `PPTX_RENDERER_UNAVAILABLE`；实际页面视觉结果需提供已校验 LibreOffice 目录后验收。
+- 真实演示：LibreOffice `26.8.1.1` 已由用户安装，并暂存到 `build/runtime/libreoffice`；`01_springboot基础篇.pptx` 实际生成 62 页、`2,493,325` 字节 PDF；Poppler 渲染检查了首页标题/图形和末页品牌页，均正常。
+- 未完成：MindMate 本地 API/Web 服务尚未重启，普通浏览器内详情页人工点击验收未完成；Codex 的启动命令连续两次被自动审批 `429` 拦截，命令均未执行。正式 PyInstaller/Inno Setup 属于阶段 10，当前还没有最终安装工程。
 - 变更单与详细验收状态：`docs/project/changes/CHG-20261010-PPTX-RENDERING.md`；报告：`docs/test-reports/stage-88-pptx-rendered-preview.md`。
 
 ## 第八十七批：XMind 原版式预览（2026-10-10）
