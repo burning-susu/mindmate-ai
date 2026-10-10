@@ -10,7 +10,7 @@
 - 最后更新时间：`2026-10-10`
 - 当前开发阶段：阶段 8 开发中，状态 `PARTIAL`；阶段 5、阶段 6、阶段 7 继续 `PARTIAL`
 - 交付顺序：Demo 首先完成，完整 V1 以后精进。求职 Demo 优先文件整理/导入、建库、带来源问答、最小学习陪练和重启恢复。Demo 可用性与完整 V1 阶段状态分开报告。
-- 当前批次状态：第七十九批文件重复导入决策修复 `CODE PASS / AUTOMATED PASS / BROWSER NOT RUN`；阶段 8 `PARTIAL`，完整 V1 状态未改变。用户截图所示文件先导入后移入回收站，再上传相同内容，会因 SHA-256 内容对象仍保留而进入重复决策；原“复用现有”只查活动文件，导致决策响应可将条目标为已复用但实际没有活动文件。前端同时优先显示重复决策前缓存的 `BLOCKED` 任务，因此按钮请求成功也看似无响应。现已修复任务缓存即时更新、显示待决策/失败计数、展示决策错误；选择复用且唯一匹配文件在回收站时恢复该文件。后端文件导入契约 `7 passed`，前端文件页 `5 passed`、typecheck、lint、build 通过，定向 Ruff 与 `git diff --check` 通过；未做普通浏览器 Network/截图验收。阶段报告见 `docs/test-reports/stage-79-file-import-duplicate-resolution.md`。此前第七十六批历史对话/学习交互的状态和阶段 8 未完成项继续以其原证据为准。
+- 当前批次状态：第八十批文件夹内重复复用与扩大拖放区域 `CODE PASS / AUTOMATED PASS / BROWSER NOT RUN`；阶段 8 `PARTIAL`，完整 V1 状态未改变。重复内容选“复用现有”时，活动 FileRecord 现在移动到本次明确选中的文件夹，并刷新文件列表与目录计数；未选择文件夹时保留原目录。拖放监听覆盖右侧整个文件工作区，拖入时出现整区释放提示。后端文件契约 `7 passed`，前端文件页 `6 passed`，typecheck、lint、build、定向 Ruff 通过；未做普通浏览器 Network/截图验收。第七十九批有关回收站复用、旧任务缓存及其原证据见 `docs/test-reports/stage-79-file-import-duplicate-resolution.md`；本批报告见 `docs/test-reports/stage-80-folder-reuse-and-drop-target.md`。阶段 8 未完成项仍以既有证据为准。
 
 ## 已完成阶段
 

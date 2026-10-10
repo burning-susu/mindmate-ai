@@ -1055,14 +1055,30 @@ def decide_duplicates(
                     .order_by(FileRecord.deleted_at.desc())
                     .limit(1)
                 )
-                if existing_file is not None:
+            if existing_file is not None:
+                changed = False
+                if existing_file.deleted_at is not None:
+                    existing_file.deleted_at = None
+                    existing_file.purge_after = None
+                    existing_file.status = _restored_file_status(settings, existing_file)
                     if existing_file.folder_id:
                         folder = session.get(Folder, existing_file.folder_id)
                         if folder is None or folder.deleted_at is not None:
                             existing_file.folder_id = None
-                    existing_file.deleted_at = None
-                    existing_file.purge_after = None
-                    existing_file.status = _restored_file_status(settings, existing_file)
+                    changed = True
+                target_folder_id = context.get("folder_id")
+                if target_folder_id:
+                    _validate_context(session, str(target_folder_id), [], None)
+                    if existing_file.folder_id != target_folder_id:
+                        existing_file.folder_id = str(target_folder_id)
+                        existing_file.display_name = _unique_display_name(
+                            session,
+                            existing_file.display_name,
+                            existing_file.folder_id,
+                            exclude_file_id=existing_file.file_id,
+                        )
+                        changed = True
+                if changed:
                     existing_file.updated_at = utc_now()
                     existing_file.row_version += 1
             item.update(

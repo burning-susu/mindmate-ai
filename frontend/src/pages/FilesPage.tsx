@@ -176,6 +176,7 @@ export default function FilesPage() {
       setImportResult(result)
       queryClient.setQueryData(['file-import', result.import_id], result)
       void queryClient.invalidateQueries({ queryKey: ['files'] })
+      void queryClient.invalidateQueries({ queryKey: ['folders'] })
     },
   })
 
@@ -225,6 +226,35 @@ export default function FilesPage() {
     if (incoming.length) uploadMutation.mutate(incoming)
   }
 
+  function isFileDrag(event: React.DragEvent<HTMLDivElement>) {
+    return Array.from(event.dataTransfer.types).includes('Files')
+  }
+
+  function handleDragEnter(event: React.DragEvent<HTMLDivElement>) {
+    if (!isFileDrag(event)) return
+    event.preventDefault()
+    setDragging(true)
+  }
+
+  function handleDragOver(event: React.DragEvent<HTMLDivElement>) {
+    if (!isFileDrag(event)) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'copy'
+  }
+
+  function handleDragLeave(event: React.DragEvent<HTMLDivElement>) {
+    if (!isFileDrag(event)) return
+    if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return
+    setDragging(false)
+  }
+
+  function handleDrop(event: React.DragEvent<HTMLDivElement>) {
+    if (!isFileDrag(event)) return
+    event.preventDefault()
+    setDragging(false)
+    chooseFiles(event.dataTransfer.files)
+  }
+
   function toggleSelected(fileId: string) {
     setSelected((current) => current.includes(fileId) ? current.filter((id) => id !== fileId) : [...current, fileId])
   }
@@ -268,7 +298,7 @@ export default function FilesPage() {
           </form>
         </aside>
 
-        <div className="files-main">
+        <div className="files-main" onDragEnter={handleDragEnter} onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
           <div className="files-toolbar">
             <label className="search-field"><Search size={16} aria-hidden="true" /><input value={query} onChange={(event) => updateFilter('q', event.target.value)} placeholder="搜索名称、标签或正文" aria-label="搜索文件" /></label>
             <select value={folderId ?? ''} onChange={(event) => updateFilter('folder_id', event.target.value)} aria-label="按文件夹筛选"><option value="">所有文件夹</option>{folders.map((folder) => <option value={folder.folder_id} key={folder.folder_id}>{folder.name}</option>)}</select>
@@ -279,8 +309,8 @@ export default function FilesPage() {
             <span className="toolbar-meta">{files.length} 个文件 · 支持 PDF、DOCX、PPTX、TXT、Markdown</span>
           </div>
 
-          <div className={`drop-zone ${dragging ? 'drop-zone--active' : ''}`} onDragEnter={(event) => { event.preventDefault(); setDragging(true) }} onDragOver={(event) => event.preventDefault()} onDragLeave={() => setDragging(false)} onDrop={(event) => { event.preventDefault(); setDragging(false); chooseFiles(event.dataTransfer.files) }}>
-            <FileUp size={19} aria-hidden="true" /><span>拖放文件到这里，或 <button type="button" onClick={() => inputRef.current?.click()}>选择文件</button></span><small>单文件 50 MB · 单批 20 个 · 总量 500 MB</small>
+          <div className="drop-zone">
+            <FileUp size={19} aria-hidden="true" /><span>拖放文件到文件工作区，或 <button type="button" onClick={() => inputRef.current?.click()}>选择文件</button></span><small>单文件 50 MB · 单批 20 个 · 总量 500 MB</small>
           </div>
 
           {activeImportResult && <div className="import-summary" role="status"><div><strong>导入任务 {activeImportResult.status === 'BLOCKED' ? '等待重复决策' : activeImportResult.status === 'QUEUED' || activeImportResult.status === 'RUNNING' || activeImportResult.status === 'PARSING' ? '解析处理中' : activeImportResult.status === 'FAILED' ? '解析失败' : '已完成'}</strong><span>{joinedImportCount} 个已加入，{pendingDuplicates.length} 个待决策，{failedImportCount} 个失败</span></div><button type="button" className="icon-button" onClick={() => setImportResult(null)} aria-label="关闭导入结果"><X size={16} aria-hidden="true" /></button>{pendingDuplicates.map((item) => <div className="duplicate-row" key={item.item_index}><span>{item.original_name}</span><button type="button" disabled={duplicateMutation.isPending} onClick={() => duplicateMutation.mutate({ importId: activeImportResult.import_id, itemIndex: item.item_index, decision: 'REUSE_EXISTING' })}>{duplicateMutation.isPending ? '正在处理' : '复用现有'}</button><button type="button" disabled={duplicateMutation.isPending} onClick={() => duplicateMutation.mutate({ importId: activeImportResult.import_id, itemIndex: item.item_index, decision: 'CREATE_SEPARATE_RECORD' })}>{duplicateMutation.isPending ? '正在处理' : '另存记录'}</button><button type="button" disabled={duplicateMutation.isPending} onClick={() => duplicateMutation.mutate({ importId: activeImportResult.import_id, itemIndex: item.item_index, decision: 'SKIP' })}>{duplicateMutation.isPending ? '正在处理' : '跳过'}</button></div>)}{duplicateMutation.isError && <div className="inline-error" role="alert">{duplicateMutation.error instanceof Error ? duplicateMutation.error.message : '重复文件决策未完成，请重试。'}</div>}</div>}
@@ -296,6 +326,7 @@ export default function FilesPage() {
           {uploadMutation.isPending && <div className="inline-progress">正在校验并复制文件…</div>}
           {uploadMutation.isError && <div className="inline-error">{uploadMutation.error instanceof Error ? uploadMutation.error.message : '导入失败，请稍后重试。'}</div>}
           {tags.length > 0 && <div className="tag-hint"><TagIcon size={15} aria-hidden="true" />已创建 {tags.length} 个标签，可在文件详情中编辑。</div>}
+          {dragging && <div className="files-drop-overlay" role="status"><FileUp size={28} aria-hidden="true" /><strong>释放文件以导入</strong><span>文件将加入当前文件夹</span></div>}
         </div>
       </div>
       {versionConflict && <div className="inline-error" role="alert"><span>{versionConflict}</span><button type="button" className="quiet-button" onClick={() => { setVersionConflict(null); void queryClient.invalidateQueries({ queryKey: ['folders'] }); void queryClient.invalidateQueries({ queryKey: ['files'] }) }}>重新加载</button></div>}

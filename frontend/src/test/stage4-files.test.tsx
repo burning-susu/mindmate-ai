@@ -37,8 +37,9 @@ describe('stage 4 file workspace', () => {
   })
 
   it('updates the visible import task after resolving a duplicate', async () => {
-    window.history.pushState({}, '', '/files')
+    window.history.pushState({}, '', '/files?folder_id=folder-target')
     const requestedUrls: string[] = []
+    let uploadedFolderId: FormDataEntryValue | null = null
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
       requestedUrls.push(url)
@@ -46,7 +47,10 @@ describe('stage 4 file workspace', () => {
       if (url.endsWith('/api/v1/health')) return new Response(JSON.stringify({ status: 'ok', version: '0.1.0' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
       if (url.includes('/api/v1/files?')) return new Response(JSON.stringify({ items: [], next_cursor: null }), { status: 200, headers: { 'Content-Type': 'application/json' } })
       if (url.endsWith('/api/v1/folders') || url.endsWith('/api/v1/tags')) return new Response(JSON.stringify({ items: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
-      if (url.endsWith('/api/v1/file-imports') && init?.method === 'POST') return new Response(JSON.stringify({ import_id: 'import-duplicate', task_id: 'import-duplicate', status: 'BLOCKED', phase: 'WAITING_DUPLICATE_DECISION', progress: 100, items: [{ item_index: 0, original_name: 'copy.txt', status: 'BLOCKED', duplicate_status: 'PENDING_DECISION' }] }), { status: 202, headers: { 'Content-Type': 'application/json' } })
+      if (url.endsWith('/api/v1/file-imports') && init?.method === 'POST') {
+        uploadedFolderId = (init.body as FormData).get('folder_id')
+        return new Response(JSON.stringify({ import_id: 'import-duplicate', task_id: 'import-duplicate', status: 'BLOCKED', phase: 'WAITING_DUPLICATE_DECISION', progress: 100, items: [{ item_index: 0, original_name: 'copy.txt', status: 'BLOCKED', duplicate_status: 'PENDING_DECISION' }] }), { status: 202, headers: { 'Content-Type': 'application/json' } })
+      }
       if (url.endsWith('/api/v1/file-imports/import-duplicate')) return new Response(JSON.stringify({ import_id: 'import-duplicate', task_id: 'import-duplicate', status: 'BLOCKED', phase: 'WAITING_DUPLICATE_DECISION', progress: 100, items: [{ item_index: 0, original_name: 'copy.txt', status: 'BLOCKED', duplicate_status: 'PENDING_DECISION' }] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
       if (url.endsWith('/duplicate-decisions') && init?.method === 'POST') return new Response(JSON.stringify({ import_id: 'import-duplicate', task_id: 'import-duplicate', status: 'COMPLETED', phase: 'COMPLETED', progress: 100, items: [{ item_index: 0, original_name: 'copy.txt', status: 'REUSED', duplicate_status: 'REUSED', file_id: 'restored-file' }] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
       return new Response(JSON.stringify({ status: 'ok', version: '0.1.0' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
@@ -64,6 +68,38 @@ describe('stage 4 file workspace', () => {
     expect(screen.getByText('1 个已加入，0 个待决策，0 个失败')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '复用现有' })).not.toBeInTheDocument()
     expect(requestedUrls.some((url) => url.endsWith('/duplicate-decisions'))).toBe(true)
+    expect(uploadedFolderId).toBe('folder-target')
+    expect(requestedUrls.filter((url) => url.endsWith('/api/v1/folders')).length).toBeGreaterThan(1)
+  })
+
+  it('accepts file drops across the file workspace', async () => {
+    window.history.pushState({}, '', '/files')
+    let importedName = ''
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.includes('/system/session')) return new Response(JSON.stringify({ status: 'ready' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      if (url.endsWith('/api/v1/health')) return new Response(JSON.stringify({ status: 'ok', version: '0.1.0' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      if (url.includes('/api/v1/files?')) return new Response(JSON.stringify({ items: [], next_cursor: null }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      if (url.endsWith('/api/v1/folders') || url.endsWith('/api/v1/tags')) return new Response(JSON.stringify({ items: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      if (url.endsWith('/api/v1/file-imports') && init?.method === 'POST') {
+        importedName = ((init.body as FormData).getAll('files')[0] as File).name
+        return new Response(JSON.stringify({ import_id: 'drop-import', task_id: 'drop-import', status: 'COMPLETED', phase: 'COMPLETED', progress: 100, items: [{ item_index: 0, original_name: importedName, status: 'IMPORTED', duplicate_status: 'NOT_DUPLICATE', file_id: 'drop-file', parse_status: 'PARSED' }] }), { status: 202, headers: { 'Content-Type': 'application/json' } })
+      }
+      if (url.endsWith('/api/v1/file-imports/drop-import')) return new Response(JSON.stringify({ import_id: 'drop-import', task_id: 'drop-import', status: 'COMPLETED', phase: 'COMPLETED', progress: 100, items: [{ item_index: 0, original_name: importedName, status: 'IMPORTED', duplicate_status: 'NOT_DUPLICATE', file_id: 'drop-file', parse_status: 'PARSED' }] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      return new Response(JSON.stringify({ status: 'ok', version: '0.1.0' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }))
+
+    render(<BrowserRouter><App /></BrowserRouter>)
+    const workspace = document.querySelector('.files-main')
+    expect(workspace).not.toBeNull()
+    const droppedFile = new File(['notes'], 'dropped.txt', { type: 'text/plain' })
+    const dataTransfer = { files: [droppedFile], types: ['Files'], dropEffect: 'none' }
+    fireEvent.dragEnter(workspace as HTMLElement, { dataTransfer })
+    expect(await screen.findByText('释放文件以导入')).toBeInTheDocument()
+
+    fireEvent.drop(workspace as HTMLElement, { dataTransfer })
+    expect(await screen.findByText('1 个已加入，0 个待决策，0 个失败')).toBeInTheDocument()
+    expect(importedName).toBe('dropped.txt')
   })
 
   it('sends the folder version and shows a conflict reload action', async () => {

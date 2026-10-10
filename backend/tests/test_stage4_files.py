@@ -125,6 +125,35 @@ def test_duplicate_requires_decision_and_separate_record_reuses_content(file_cli
     assert {item["file_id"] for item in listed} == {first_file_id, second_file_id}
 
 
+def test_reusing_duplicate_moves_file_to_selected_folder(file_client) -> None:
+    client, _ = file_client
+    folder = create_folder(client, "面试题", "duplicate-folder-target").json()
+    first = import_one(client, "interview.md", b"same-interview-content", "import-folder-duplicate-1")
+    first_file_id = first.json()["items"][0]["file_id"]
+    duplicate = client.post(
+        "/api/v1/file-imports",
+        headers=write_headers("import-folder-duplicate-2"),
+        data={"folder_id": folder["folder_id"]},
+        files={"files": ("interview-copy.md", b"same-interview-content", "text/markdown")},
+    )
+    assert duplicate.status_code == 202
+    import_id = duplicate.json()["import_id"]
+
+    decided = client.post(
+        f"/api/v1/file-imports/{import_id}/duplicate-decisions",
+        headers=write_headers("reuse-into-folder"),
+        json={"decisions": [{"item_index": 0, "decision": "REUSE_EXISTING"}]},
+    )
+    assert decided.status_code == 200
+    assert decided.json()["items"][0]["file_id"] == first_file_id
+
+    file_detail = client.get(f"/api/v1/files/{first_file_id}").json()
+    assert file_detail["folder_id"] == folder["folder_id"]
+    assert client.get(f"/api/v1/files?folder_id={folder['folder_id']}").json()["items"][0]["file_id"] == first_file_id
+    folder_list = client.get("/api/v1/folders").json()["items"]
+    assert next(item["file_count"] for item in folder_list if item["folder_id"] == folder["folder_id"]) == 1
+
+
 def test_reusing_duplicate_restores_matching_file_from_trash(file_client) -> None:
     client, _ = file_client
     first = import_one(client, "trashed.txt", b"trashed-content", "import-trashed-duplicate-1")
