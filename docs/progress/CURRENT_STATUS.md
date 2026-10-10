@@ -10,7 +10,7 @@
 - 最后更新时间：`2026-10-10`
 - 当前开发阶段：阶段 8 开发中，状态 `PARTIAL`；阶段 5、阶段 6、阶段 7 继续 `PARTIAL`
 - 交付顺序：Demo 首先完成，完整 V1 以后精进。求职 Demo 优先文件整理/导入、建库、带来源问答、最小学习陪练和重启恢复。Demo 可用性与完整 V1 阶段状态分开报告。
-- 当前批次状态：第八十七批 XMind 原版式预览 `CODE PASS / AUTOMATED PASS / LOCAL RUNTIME RESTART REQUIRED`。详情页优先读取 `.xmind` 包内固定路径 `Thumbnails/thumbnail.png`，以原图显示；图片缺失/无效时回退到主题树。新增只读 `image/png` 预览接口，检查签名、大小和像素上限，不落盘、不新增依赖。后端 XMind 定向 `3 passed`，前端预览 `5 passed`，Ruff、typecheck、lint、build、OpenAPI 生成通过；真实演示文件提取图像 `1794×732`。当前 8001 后端进程仍为旧代码，接口实测 `404`，需重启后才能使用。本批未终止无法确认归属的运行进程；普通浏览器截图未验收。报告见 `docs/test-reports/stage-87-xmind-native-thumbnail.md`。
+- 当前批次状态：第八十八批 PPTX 原版式预览 `CODE PASS / AUTOMATED PASS / LIBREOFFICE RUNTIME PENDING`。已用隔离 LibreOffice 转 PDF 的受限接口替代文本块卡片；PDF 按源哈希缓存、核对页数、限制输入/输出/超时/内存并原子发布，前端显示 PDF 画面、保留折叠文本及失败提示。后端文件测试、缓存/超时/输出校验定向测试，前端 `96 passed`，Ruff、Pyright、compileall、typecheck、lint、build 和 OpenAPI 类型生成通过。当前机器没有 LibreOffice 或可校验安装包，真实 62 页转换和正式安装包验收未完成；接口在运行时缺失时明确返回 `PPTX_RENDERER_UNAVAILABLE`。暂存脚本与剩余条件见 `docs/project/changes/CHG-20261010-PPTX-RENDERING.md`。
 
 ## 已完成阶段
 

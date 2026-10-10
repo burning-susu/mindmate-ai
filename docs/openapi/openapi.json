@@ -4566,6 +4566,79 @@
         }
       }
     },
+    "/api/v1/files/{file_id}/pptx-preview": {
+      "get": {
+        "tags": [
+          "files"
+        ],
+        "summary": "File Pptx Preview",
+        "operationId": "file_pptx_preview_api_v1_files__file_id__pptx_preview_get",
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "File Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PPTX 的本地 PDF 版式预览。",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "PPTX 超过预览输入或输出限制。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "PPTX 无法转换为有效 PDF。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "LibreOffice 运行时不可用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "PPTX 转换超时。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/files/{file_id}/preview": {
       "get": {
         "tags": [

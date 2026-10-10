@@ -1,5 +1,15 @@
 # V1 开发进度
 
+## 第八十八批：PPTX 原版式预览（2026-10-10）
+
+- 用户反馈详情页的 PPTX 文本块卡片不是期望效果，并确认以 LibreOffice 在本地转 PDF，按幻灯片画面查看。
+- 新增 LibreOffice runtime 定位和 `GET /api/v1/files/{file_id}/pptx-preview`；输出 PDF 以源 `ContentObject.sha256` 缓存到应用 `previews/pptx`，采用原子发布、跨请求/进程单并发锁、独立 profile/workdir、Windows Job Object 内存限制、180 秒超时、50 MiB 输入、200 MiB PDF 和 2000 页限制；转换页数与 PPTX 解析页数不符时失败。
+- 前端 PPTX 详情改为获取 PDF Blob 并复用浏览器 PDF 查看器，文本提取折叠为辅助内容；正在转换和失败时均有状态，失败不再显示伪幻灯片文本卡片。
+- 新增运行时暂存脚本，保留版本、许可证清单和 `soffice.exe` SHA-256；构建可用 `-LibreOfficeHome` 指向完整本地运行时。无数据库迁移或新 Python/npm 依赖。
+- 验证：后端 `test_pptx_preview.py` `3 passed`，阶段 4 文件测试 `18 passed`（含 PDF API 响应、源/输出页数不匹配和缺失 LibreOffice 的 503）；前端全量 `18 files / 96 tests passed`；定向 Ruff、Pyright（0 errors）、compileall、typecheck、lint、build 和 OpenAPI/客户端类型生成通过。
+- 未完成：开发机未安装/未提供 LibreOffice Windows runtime，因此实际 62 页文件没有转换/视觉验收；正式 PyInstaller/Inno Setup 属于阶段 10，尚无安装工程。运行时已缺失的后端提示验证为 `PPTX_RENDERER_UNAVAILABLE`；实际页面视觉结果需提供已校验 LibreOffice 目录后验收。
+- 变更单与详细验收状态：`docs/project/changes/CHG-20261010-PPTX-RENDERING.md`；报告：`docs/test-reports/stage-88-pptx-rendered-preview.md`。
+
 ## 第八十七批：XMind 原版式预览（2026-10-10）
 
 - 用户希望在预览前转换格式，以保留 XMind 原图效果。检查真实 `.xmind` 包后发现其自带 `Thumbnails/thumbnail.png`，尺寸为 `1794×732`，呈现与原 XMind 画布一致；无需再安装或实现另一套格式转换器。

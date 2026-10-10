@@ -44,6 +44,7 @@ from mindmate.application.files import (
     validate_managed_content_path,
     validate_upload_mime,
 )
+from mindmate.application.pptx_preview import PptxPreviewError, get_or_create_pptx_preview
 from mindmate.application.source_snapshots import purge_source_snapshots_for_files
 from mindmate.application.tasks import (
     add_event,
@@ -1433,6 +1434,56 @@ def file_xmind_thumbnail(
             "X-Content-Type-Options": "nosniff",
         },
     )
+
+
+@router.get(
+    "/files/{file_id}/pptx-preview",
+    tags=["files"],
+    response_class=FileResponse,
+    responses={
+        200: {
+            "description": "PPTX 的本地 PDF 版式预览。",
+            "content": {"application/pdf": {"schema": {"type": "string", "format": "binary"}}},
+        },
+        413: {"model": ProblemDetail, "description": "PPTX 超过预览输入或输出限制。"},
+        422: {"model": ProblemDetail, "description": "PPTX 无法转换为有效 PDF。"},
+        503: {"model": ProblemDetail, "description": "LibreOffice 运行时不可用。"},
+        504: {"model": ProblemDetail, "description": "PPTX 转换超时。"},
+    },
+)
+def file_pptx_preview(
+    file_id: str,
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> FileResponse:
+    record = _get_file_or_404(session, file_id)
+    if record.document_type != "PPTX":
+        raise FileApiError("FILE_TYPE_UNSUPPORTED", "该文件不是 PPTX 文件。", 404)
+    content = session.get(ContentObject, record.content_object_id)
+    if content is None or content.storage_state != "READY":
+        raise FileApiError("FILE_CONTENT_UNAVAILABLE", "PPTX 原文件不可用。", 409)
+    source = _record_content_path(session, settings, record)
+    try:
+        preview_path, page_count, _ = get_or_create_pptx_preview(source, content.sha256, settings)
+    except PptxPreviewError as exc:
+        raise FileApiError(exc.code, exc.detail, exc.status) from exc
+    parsed = read_parsed_text(settings, record.file_id)
+    metadata = parsed.get("metadata") if parsed else None
+    expected_pages = metadata.get("slide_count") if isinstance(metadata, dict) else None
+    if isinstance(expected_pages, int) and expected_pages > 0 and page_count != expected_pages:
+        raise FileApiError(
+            "PPTX_RENDER_PAGE_COUNT_MISMATCH",
+            "转换后的幻灯片页数与原文件不一致，请打开原文查看。",
+            422,
+        )
+    response = FileResponse(
+        preview_path,
+        media_type="application/pdf",
+        content_disposition_type="inline",
+    )
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Cache-Control"] = "private, max-age=300"
+    return response
 
 
 @router.get("/files/{file_id}/preview", tags=["files"])

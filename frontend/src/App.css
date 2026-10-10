@@ -193,6 +193,7 @@
 .slide-document-preview__blocks li { min-width: 0; padding: 12px 14px; border: 1px solid var(--border); border-radius: 6px; background: #fff; }
 .slide-document-preview__blocks li > span { color: var(--muted); font-size: 11px; }
 .slide-document-preview__blocks p { margin: 5px 0 0; color: var(--text); font-size: 14px; line-height: 1.65; white-space: pre-wrap; }
+.slide-document-preview iframe { display: block; width: 100%; height: min(76vh, 900px); min-height: 560px; border: 1px solid var(--border); border-radius: 7px; background: #eef1f2; }
 .xmind-document-preview__sheets { display: grid; gap: 14px; }
 .xmind-document-preview__sheets > section { padding: 16px 18px; border: 1px solid var(--border); border-radius: 6px; background: #fff; }
 .xmind-document-preview__sheets h3 { margin: 0 0 14px; font-size: 15px; }

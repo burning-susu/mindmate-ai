@@ -1366,6 +1366,9 @@ export interface operations {
   "GET /api/v1/files/{file_id}/xmind-thumbnail": {
     operationId: "file_xmind_thumbnail_api_v1_files__file_id__xmind_thumbnail_get"
   };
+  "GET /api/v1/files/{file_id}/pptx-preview": {
+    operationId: "file_pptx_preview_api_v1_files__file_id__pptx_preview_get"
+  };
   "GET /api/v1/files/{file_id}/preview": {
     operationId: "file_preview_api_v1_files__file_id__preview_get"
   };

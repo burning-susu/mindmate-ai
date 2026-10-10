@@ -1,5 +1,12 @@
+[CmdletBinding()]
+param([string]$LibreOfficeHome = '')
+
 $ErrorActionPreference = 'Stop'
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..')
+
+if ($LibreOfficeHome) {
+    & (Join-Path $PSScriptRoot 'stage-libreoffice.ps1') -SourceDirectory $LibreOfficeHome
+}
 
 Push-Location (Join-Path $repoRoot 'frontend')
 npm run build

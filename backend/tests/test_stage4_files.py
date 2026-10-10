@@ -400,14 +400,14 @@ def test_folder_tree_restore_and_permanent_purge(file_client) -> None:
 
 
 def test_office_documents_use_isolated_parsers_and_blank_pdf_is_not_marked_parsed(
-    file_client,
+    file_client, monkeypatch
 ) -> None:
     from docx import Document
     from pptx import Presentation
     from pptx.util import Inches
     from pypdf import PdfWriter
 
-    client, _ = file_client
+    client, data_dir = file_client
     docx_buffer = io.BytesIO()
     document = Document()
     document.add_heading("学习主题", level=1)
@@ -454,6 +454,37 @@ def test_office_documents_use_isolated_parsers_and_blank_pdf_is_not_marked_parse
     pptx_preview = client.get(f"/api/v1/files/{pptx_item['file_id']}/preview").json()
     assert "第一张幻灯片" in pptx_preview["text"]
     assert pptx_preview["metadata"]["slide_count"] == 1
+    rendered_pdf = data_dir / "rendered-preview.pdf"
+    rendered = PdfWriter()
+    rendered.add_blank_page(width=72, height=72)
+    rendered.write(str(rendered_pdf))
+    monkeypatch.setattr(
+        files_api,
+        "get_or_create_pptx_preview",
+        lambda _source, _sha, _settings: (rendered_pdf, 1, False),
+    )
+    rendered_response = client.get(f"/api/v1/files/{pptx_item['file_id']}/pptx-preview")
+    assert rendered_response.status_code == 200
+    assert rendered_response.headers["content-type"] == "application/pdf"
+    assert rendered_response.headers["x-content-type-options"] == "nosniff"
+    assert rendered_response.content.startswith(b"%PDF-")
+
+    monkeypatch.setattr(
+        files_api,
+        "get_or_create_pptx_preview",
+        lambda _source, _sha, _settings: (rendered_pdf, 2, False),
+    )
+    mismatch_response = client.get(f"/api/v1/files/{pptx_item['file_id']}/pptx-preview")
+    assert mismatch_response.status_code == 422
+    assert mismatch_response.json()["code"] == "PPTX_RENDER_PAGE_COUNT_MISMATCH"
+
+    monkeypatch.undo()
+    from mindmate.application import pptx_preview as pptx_preview_service
+
+    monkeypatch.setattr(pptx_preview_service, "find_libreoffice", lambda _settings: None)
+    unavailable_response = client.get(f"/api/v1/files/{pptx_item['file_id']}/pptx-preview")
+    assert unavailable_response.status_code == 503
+    assert unavailable_response.json()["code"] == "PPTX_RENDERER_UNAVAILABLE"
 
     pdf_buffer = io.BytesIO()
     writer = PdfWriter()

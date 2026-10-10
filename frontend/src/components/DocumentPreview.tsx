@@ -1,5 +1,7 @@
-import { ExternalLink, FileText } from 'lucide-react'
-import { useState } from 'react'
+import { ExternalLink, FileText, LoaderCircle } from 'lucide-react'
+import { useEffect, useState } from 'react'
+
+import { apiRequestBlob, ApiError, LocalBackendUnavailableError } from '../api/client'
 
 type ParsedMetadata = {
   page_count?: number
@@ -100,12 +102,40 @@ function WordDocumentPreview({ text, metadata }: { text: string; metadata: Parse
   )
 }
 
-function PowerPointDocumentPreview({ text, metadata }: { text: string; metadata: ParsedMetadata | null | undefined }) {
-  const blocks = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+function PowerPointDocumentPreview({ fileId, text, metadata }: { fileId: string; text: string; metadata: ParsedMetadata | null | undefined }) {
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    let active = true
+    let objectUrl: string | null = null
+    void apiRequestBlob(`/api/v1/files/${fileId}/pptx-preview`, { signal: controller.signal })
+      .then((blob) => {
+        if (!active) return
+        objectUrl = URL.createObjectURL(blob)
+        setPreviewUrl(objectUrl)
+      })
+      .catch((reason: unknown) => {
+        if (!active) return
+        if (reason instanceof ApiError) setError(reason.problem.detail)
+        else if (reason instanceof LocalBackendUnavailableError) setError(reason.message)
+        else setError('无法生成幻灯片版式预览，请打开原文查看。')
+      })
+    return () => {
+      active = false
+      controller.abort()
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [fileId])
+
   return (
-    <article className="slide-document-preview" aria-label="PowerPoint 幻灯片解析内容">
-      <div className="office-document-preview__meta">共 {metadata?.slide_count ?? 0} 张幻灯片 · 以下为提取文本块，原始版式请打开原文查看</div>
-      <ol className="slide-document-preview__blocks">{blocks.map((block, index) => <li key={`shape-${index}`}><span>文本块 {index + 1}</span><p>{block}</p></li>)}</ol>
+    <article className="slide-document-preview" aria-label="PowerPoint 幻灯片原版式预览">
+      <div className="office-document-preview__meta">共 {metadata?.slide_count ?? 0} 张幻灯片 · 本地转换为 PDF 预览</div>
+      {previewUrl ? <iframe title="PowerPoint 原版式预览" src={`${previewUrl}#navpanes=0&zoom=100`} />
+        : error ? <div className="detail-empty" role="alert"><FileText size={18} aria-hidden="true" /><span>{error}</span></div>
+          : <div className="detail-empty" role="status"><LoaderCircle size={18} className="spin" aria-hidden="true" /><span>正在转换幻灯片预览…</span></div>}
+      {text ? <details className="pdf-document-preview__text"><summary>查看提取文本</summary><pre className="text-preview">{text}</pre></details> : null}
     </article>
   )
 }
@@ -135,9 +165,9 @@ export default function DocumentPreview({
     ) : <div className="detail-empty"><FileText size={20} aria-hidden="true" /><span>原始 PDF 文件当前不可用。</span></div>
   }
 
+  if (documentType === 'PPTX') return <PowerPointDocumentPreview key={fileId} fileId={fileId} text={text} metadata={metadata} />
   if (!previewAvailable) return <div className="detail-empty"><FileText size={20} aria-hidden="true" /><span>当前文件还没有可用的解析文本。</span></div>
   if (documentType === 'DOCX') return <WordDocumentPreview text={text} metadata={metadata} />
-  if (documentType === 'PPTX') return <PowerPointDocumentPreview text={text} metadata={metadata} />
   if (documentType === 'XMIND') return metadata?.xmind_outline ? <XMindDocumentPreview fileId={fileId} metadata={metadata} /> : <div className="detail-empty"><FileText size={20} aria-hidden="true" /><span>XMind 主题结构无法读取。</span></div>
   return <div className="plain-document-preview">{text}</div>
 }

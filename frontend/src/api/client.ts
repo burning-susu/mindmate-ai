@@ -127,6 +127,27 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
   return (await response.json()) as T
 }
 
+export async function apiRequestBlob(path: string, init: RequestInit = {}): Promise<Blob> {
+  await ensureLocalSession()
+  const headers = new Headers(init.headers)
+  headers.set('X-Request-ID', uuidv7())
+  let response: Response
+  try {
+    response = await fetch(path, {
+      ...init,
+      headers,
+      credentials: 'same-origin',
+      cache: 'no-store',
+    })
+  } catch {
+    throw new LocalBackendUnavailableError()
+  }
+  if (!response.ok) {
+    throw new ApiError(response.status, await readProblem(response))
+  }
+  return response.blob()
+}
+
 export async function apiUpload<T>(
   path: string,
   files: File[],
