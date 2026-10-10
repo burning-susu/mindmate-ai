@@ -181,7 +181,7 @@ export default function KnowledgeBaseNewPage() {
         </div>
         <div className="knowledge-intake__source">
           <div className="knowledge-intake__source-heading"><div><h3>上传本地文件</h3><p>提交后复用文件工作台的格式、大小、重复内容和持久解析任务。</p></div><button className="quiet-button" type="button" onClick={() => localInputRef.current?.click()}><FileUp size={15} aria-hidden="true" />选择文件</button></div>
-          <input ref={localInputRef} className="visually-hidden" type="file" multiple accept=".pdf,.docx,.pptx,.txt,.md,.markdown" aria-label="上传本地文件" onChange={selectLocalFiles} />
+          <input ref={localInputRef} className="visually-hidden" type="file" multiple accept=".pdf,.docx,.pptx,.xmind,.txt,.md,.markdown" aria-label="上传本地文件" onChange={selectLocalFiles} />
           {localFiles.length === 0 && <div className="knowledge-intake__empty">尚未选择本地文件。</div>}
           {localFiles.length > 0 && <div className="knowledge-intake__files">{localFiles.map((file, index) => <div className="knowledge-intake__file" key={`${file.name}-${file.lastModified}-${index}`}><FileUp size={16} aria-hidden="true" /><span><strong>{file.name}</strong><small>{file.type || '按扩展名校验'} · {Math.ceil(file.size / 1024)} KB</small></span><button className="icon-button" type="button" aria-label={`移除待上传文件 ${file.name}`} title="移除待上传文件" onClick={() => setLocalFiles((current) => current.filter((_, currentIndex) => currentIndex !== index))}><X size={15} aria-hidden="true" /></button></div>)}</div>}
           <p className="knowledge-intake__hint">本地 File 对象只在当前页面保留。刷新前尚未提交的选择不会被伪装成已导入，请重新选择。</p>

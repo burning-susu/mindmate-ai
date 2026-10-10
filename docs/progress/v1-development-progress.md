@@ -1,5 +1,14 @@
 # V1 开发进度
 
+## 第八十五批：XMind 思维导图文件支持（2026-10-10）
+
+- 用户明确要求支持 `.xmind`。变更记录 `CHG-20261010-XMIND-SUPPORT` 已按授权新增，本地实现状态 `IMPLEMENTED_LOCAL`。
+- 支持链路：文件扩展名/MIME/ZIP 根结构校验；文件管理与知识库所有上传入口及类型筛选；现有隔离解析子进程读取现代 `content.json` 与旧版 `content.xml`；解析元数据保留工作表、主题及递归子主题，文本进入全文搜索和现有索引；详情页渲染可访问的主题树。
+- 安全：不解压归档到磁盘，不访问外链，不处理附件或宏；拒绝重复 ZIP 条目；复用既有 10,000 ZIP 条目、200 MiB 解压体积、100:1 压缩比限制，并限制主数据 20 MiB、深度 100、主题 200,000。继续受解析子进程 30 秒/512 MiB 和 20 MiB 输出上限约束。
+- 证据：后端 `tests/test_stage4_files.py` `14 passed`，覆盖 JSON/XML 导入解析和伪装 ZIP 拒绝；前端 document-preview / file workspace `15 passed`；定向 Ruff、Pyright、compileall、typecheck、lint、build 通过。未做真实第三方 `.xmind` 文件浏览器验收。
+- 范围：无外部依赖、数据库迁移或 OpenAPI shape 变更；`DEC-FILE-002` 已扩展。压缩包其他格式仍不支持。
+- 报告：`docs/test-reports/stage-85-xmind-support.md`。
+
 ## 第八十四批：PDF 默认查看状态（2026-10-10）
 
 - 修改 PDF 内嵌查看器的打开参数：默认收起左侧导航面板，缩放设为 100%。

@@ -53,6 +53,8 @@ Windows PowerShell 等价脚本位于 `scripts/`。完成阶段 0 后使用：
 
 ## 求职 Demo
 
+文件工作区支持 PDF、DOCX、PPTX、XMind、TXT 和 Markdown。XMind 导入会读取思维导图主题结构并用于详情预览、搜索和知识库索引；包内附件不会被解压或执行。
+
 可重复的网页全链路写在 [`docs/demo/求职Demo三分钟操作.md`](docs/demo/求职Demo三分钟操作.md)。它从空库上传一份公开合成 TXT，用本地 ONNX 建索引，再做带来源的 Mock 问答和一题学习。聊天页写着“Mock 生成，不会外发”，学习页写着“本地规则模拟演示，未调用真实 DeepSeek”。这两句都要照实讲，不能说成已经调用 DeepSeek。
 
 已经准备好固定样本、只想打开现成知识库时，用：

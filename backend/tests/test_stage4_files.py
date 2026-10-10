@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import io
+import json
 import os
 import time
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -467,6 +469,89 @@ def test_office_documents_use_isolated_parsers_and_blank_pdf_is_not_marked_parse
     pdf_result = pdf_task["items"][0]
     assert pdf_result["parse_status"] == "PARSE_FAILED"
     assert "OCR" in pdf_result["parse_error"]
+
+
+def test_xmind_json_and_xml_import_as_searchable_topic_trees(file_client) -> None:
+    client, _ = file_client
+    modern = [
+        {
+            "class": "sheet",
+            "title": "职业规划",
+            "rootTopic": {
+                "id": "root",
+                "title": "前端工程师",
+                "children": {
+                    "attached": [
+                        {
+                            "id": "html",
+                            "title": "HTML 基础",
+                            "children": {"attached": [{"id": "semantic", "title": "语义化标签"}]},
+                        },
+                        {"id": "css", "title": "CSS 布局"},
+                    ]
+                },
+            },
+        }
+    ]
+    modern_buffer = io.BytesIO()
+    with zipfile.ZipFile(modern_buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("content.json", json.dumps(modern, ensure_ascii=False))
+        archive.writestr("metadata.json", "{}")
+    modern_response = client.post(
+        "/api/v1/file-imports",
+        headers=write_headers("import-xmind-json"),
+        files={"files": ("职业规划.xmind", modern_buffer.getvalue(), "application/vnd.xmind.workbook")},
+    )
+    assert modern_response.status_code == 202
+    modern_item = modern_response.json()["items"][0]
+    assert modern_item["status"] == "IMPORTED"
+    wait_for_file(client, modern_item["file_id"], {"PARSED"})
+    modern_preview = client.get(f"/api/v1/files/{modern_item['file_id']}/preview").json()
+    assert "语义化标签" in modern_preview["text"]
+    assert modern_preview["metadata"]["sheet_count"] == 1
+    assert modern_preview["metadata"]["topic_count"] == 4
+    outline = modern_preview["metadata"]["xmind_outline"][0]
+    assert outline["title"] == "职业规划"
+    assert outline["root"]["children"][0]["children"][0]["title"] == "语义化标签"
+
+    classic_xml = '''<?xml version="1.0" encoding="UTF-8"?>
+    <xmap-content xmlns="urn:xmind:xmap:xmlns:content:2.0" version="2.0">
+      <sheet id="s1"><title>旧版工作表</title>
+        <topic id="r"><title>核心主题</title><children><topics type="attached">
+          <topic id="c"><title>子主题</title></topic>
+        </topics></children></topic>
+      </sheet>
+    </xmap-content>'''.encode()
+    classic_buffer = io.BytesIO()
+    with zipfile.ZipFile(classic_buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("content.xml", classic_xml)
+        archive.writestr("META-INF/manifest.xml", "<manifest/>")
+    classic_response = client.post(
+        "/api/v1/file-imports",
+        headers=write_headers("import-xmind-xml"),
+        files={"files": ("classic.xmind", classic_buffer.getvalue(), "application/x-xmind")},
+    )
+    assert classic_response.status_code == 202
+    classic_item = classic_response.json()["items"][0]
+    assert classic_item["status"] == "IMPORTED"
+    wait_for_file(client, classic_item["file_id"], {"PARSED"})
+    classic_preview = client.get(f"/api/v1/files/{classic_item['file_id']}/preview").json()
+    assert "子主题" in classic_preview["text"]
+    assert classic_preview["metadata"]["xmind_outline"][0]["root"]["children"][0]["title"] == "子主题"
+
+
+def test_xmind_extension_requires_an_xmind_zip_signature(file_client) -> None:
+    client, _ = file_client
+    fake = io.BytesIO()
+    with zipfile.ZipFile(fake, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("notes.txt", "not an XMind map")
+    response = client.post(
+        "/api/v1/file-imports",
+        headers=write_headers("fake-xmind-package"),
+        files={"files": ("fake.xmind", fake.getvalue(), "application/zip")},
+    )
+    assert response.status_code == 202
+    assert response.json()["items"][0]["error_code"] == "FILE_SIGNATURE_INVALID"
 
 
 def test_mime_size_and_batch_limits_are_enforced(file_client, monkeypatch) -> None:

@@ -27,6 +27,16 @@ describe('DocumentPreview', () => {
     expect(screen.getByText('要点二')).toBeInTheDocument()
   })
 
+  it('renders XMind sheets and nested topic branches as an outline', () => {
+    render(<DocumentPreview fileId="xmind-1" documentType="XMIND" contentAvailable previewAvailable text="root branch leaf" metadata={{ sheet_count: 1, topic_count: 3, xmind_outline: [{ title: '工作计划', root: { title: '年度目标', children: [{ title: '第一季度', children: [{ title: '完成项目', children: [] }] }] } }] }} />)
+
+    expect(screen.getByRole('article', { name: 'XMind 思维导图结构' })).toBeInTheDocument()
+    expect(screen.getByText('1 个主题 · 3 个分支')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 3, name: '工作计划' })).toBeInTheDocument()
+    expect(screen.getByRole('treeitem', { name: /第一季度/ })).toBeInTheDocument()
+    expect(screen.getByText('完成项目')).toBeInTheDocument()
+  })
+
   it('keeps plain text readable without monospace source styling', () => {
     const { container } = render(<DocumentPreview fileId="txt-1" documentType="TXT" contentAvailable previewAvailable text={'第一段\n第二段'} metadata={null} />)
 

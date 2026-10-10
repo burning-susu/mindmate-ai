@@ -711,7 +711,7 @@ Content-Type: multipart/form-data
 
 - 单文件 50 MB；
 - 单次总量 500 MB；
-- 只允许 PDF、DOCX、PPTX、TXT、Markdown；
+- 只允许 PDF、DOCX、PPTX、XMind、TXT、Markdown；
 - 后端根据实际内容验证类型；
 - 流式写入 staging，不把全部文件读入内存。
 

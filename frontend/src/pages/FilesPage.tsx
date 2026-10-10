@@ -293,7 +293,7 @@ export default function FilesPage() {
         <div className="heading-actions">
           <Link className="quiet-button" to="/trash"><Trash2 size={16} aria-hidden="true" />回收站</Link>
           <button className="primary-button" type="button" onClick={() => inputRef.current?.click()}><FileUp size={16} aria-hidden="true" />导入文件</button>
-          <input ref={inputRef} className="visually-hidden" type="file" multiple accept=".pdf,.docx,.pptx,.txt,.md,.markdown" onChange={(event) => { if (event.target.files) chooseFiles(event.target.files); event.currentTarget.value = '' }} />
+          <input ref={inputRef} className="visually-hidden" type="file" multiple accept=".pdf,.docx,.pptx,.xmind,.txt,.md,.markdown" onChange={(event) => { if (event.target.files) chooseFiles(event.target.files); event.currentTarget.value = '' }} />
         </div>
       </div>
 
@@ -317,10 +317,10 @@ export default function FilesPage() {
             <label className="search-field"><Search size={16} aria-hidden="true" /><input value={query} onChange={(event) => updateFilter('q', event.target.value)} placeholder="搜索名称、标签或正文" aria-label="搜索文件" /></label>
             <select value={folderId ?? ''} onChange={(event) => updateFilter('folder_id', event.target.value)} aria-label="按文件夹筛选"><option value="">所有文件夹</option>{folders.map((folder) => <option value={folder.folder_id} key={folder.folder_id}>{folder.name}</option>)}</select>
             <select value={tagId ?? ''} onChange={(event) => updateFilter('tag_id', event.target.value)} aria-label="按标签筛选"><option value="">所有标签</option>{tags.map((tag) => <option value={tag.tag_id} key={tag.tag_id}>{tag.name}</option>)}</select>
-            <select value={documentType ?? ''} onChange={(event) => updateFilter('document_type', event.target.value)} aria-label="按类型筛选"><option value="">所有类型</option>{['PDF', 'DOCX', 'PPTX', 'TXT', 'MARKDOWN'].map((type) => <option value={type} key={type}>{type}</option>)}</select>
+            <select value={documentType ?? ''} onChange={(event) => updateFilter('document_type', event.target.value)} aria-label="按类型筛选"><option value="">所有类型</option>{['PDF', 'DOCX', 'PPTX', 'XMIND', 'TXT', 'MARKDOWN'].map((type) => <option value={type} key={type}>{type === 'XMIND' ? 'XMind' : type}</option>)}</select>
             <select value={status ?? ''} onChange={(event) => updateFilter('status', event.target.value)} aria-label="按状态筛选"><option value="">所有状态</option>{Object.entries(statusLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select>
             <select value={sort} onChange={(event) => updateFilter('sort', event.target.value === 'updated_at' ? undefined : event.target.value)} aria-label="排序"><option value="updated_at">最近更新</option><option value="created_at">最近导入</option><option value="name">文件名</option><option value="size">大小</option><option value="type">类型</option></select>
-            <span className="toolbar-meta">{files.length} 个文件 · 支持 PDF、DOCX、PPTX、TXT、Markdown</span>
+            <span className="toolbar-meta">{files.length} 个文件 · 支持 PDF、DOCX、PPTX、XMind、TXT、Markdown</span>
           </div>
 
           <div className="drop-zone">

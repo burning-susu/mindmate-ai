@@ -56,6 +56,7 @@ SUPPORTED_DOCUMENTS: dict[str, DocumentSpec] = {
     ".txt": DocumentSpec(".txt", "TXT", "text/plain"),
     ".md": DocumentSpec(".md", "MARKDOWN", "text/markdown"),
     ".markdown": DocumentSpec(".markdown", "MARKDOWN", "text/markdown"),
+    ".xmind": DocumentSpec(".xmind", "XMIND", "application/vnd.xmind.workbook"),
 }
 
 CONTROL_CHARACTERS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
@@ -135,7 +136,7 @@ def document_spec(name: str) -> DocumentSpec:
     if spec is None:
         raise FileValidationError(
             "FILE_TYPE_UNSUPPORTED",
-            "仅支持 PDF、DOCX、PPTX、TXT 和 Markdown 文件。",
+            "仅支持 PDF、DOCX、PPTX、XMind、TXT 和 Markdown 文件。",
         )
     return spec
 
@@ -178,10 +179,12 @@ def _zip_package_kind(path: Path) -> str | None:
             if expanded_size > compressed_size * MAX_ARCHIVE_COMPRESSION_RATIO:
                 return None
             names = {name.replace("\\", "/") for name in archive.namelist()}
-            if "[Content_Types].xml" not in names:
-                return None
             has_word = any(name.startswith("word/") for name in names)
             has_ppt = any(name.startswith("ppt/") for name in names)
+            if ("content.json" in names or "content.xml" in names) and not has_word and not has_ppt:
+                return "XMIND"
+            if "[Content_Types].xml" not in names:
+                return None
             if has_word and not has_ppt:
                 return "DOCX"
             if has_ppt and not has_word:
@@ -213,6 +216,10 @@ def validate_file_format(path: Path, spec: DocumentSpec, header: bytes) -> None:
         if detected != spec.document_type:
             raise FileValidationError("FILE_SIGNATURE_INVALID", "Office 文件包类型与扩展名不匹配。")
         return
+    if spec.document_type == "XMIND":
+        if not header.startswith(b"PK") or _zip_package_kind(path) != "XMIND":
+            raise FileValidationError("FILE_SIGNATURE_INVALID", "文件扩展名与 XMind 思维导图包不匹配。")
+        return
     if not _text_header_is_readable(header):
         raise FileValidationError("FILE_SIGNATURE_INVALID", "文本文件无法按受支持的编码读取。")
 
@@ -226,6 +233,7 @@ def validate_upload_mime(spec: DocumentSpec, supplied_mime: str | None) -> None:
         "PDF": {"application/pdf"},
         "DOCX": {spec.mime_type},
         "PPTX": {spec.mime_type},
+        "XMIND": {"application/vnd.xmind.workbook", "application/x-xmind", "application/zip"},
     }
     if supplied_mime.casefold() not in aliases[spec.document_type]:
         raise FileValidationError("FILE_MIME_INVALID", "文件 MIME 类型与扩展名不匹配。")

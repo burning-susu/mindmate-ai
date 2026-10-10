@@ -60,6 +60,8 @@ describe('stage 4 file workspace', () => {
     fireEvent.click((await screen.findAllByRole('button', { name: '导入文件' }))[0])
     const fileInput = document.querySelector<HTMLInputElement>('input[type="file"]')
     expect(fileInput).not.toBeNull()
+    expect(fileInput?.accept).toContain('.xmind')
+    expect(fileInput?.accept).toContain('.xmind')
     fireEvent.change(fileInput as HTMLInputElement, { target: { files: [new File(['copy'], 'copy.txt', { type: 'text/plain' })] } })
 
     expect(await screen.findByText('0 个已加入，1 个待决策，0 个失败')).toBeInTheDocument()
