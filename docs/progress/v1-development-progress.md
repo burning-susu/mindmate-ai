@@ -1,5 +1,13 @@
 # V1 开发进度
 
+## 第七十九批：文件重复导入决策与回收站复用修复（2026-10-10）
+
+- 现象：重复导入进入 `BLOCKED / WAITING_DUPLICATE_DECISION`。旧文件已在回收站时，内容对象仍可用，重复检测仍要求用户选择；“复用现有”只查活动 FileRecord，返回成功状态却没有 file_id。文件页又优先使用决策前的 React Query 任务快照，按钮成功后仍显示旧的待决策状态，且原计数把待决策项显示为“0 个未完成”。
+- 修复：复用决策在无活动匹配项时恢复同内容的最近一条回收站记录，再按既有路径附加知识库关系；文件页在决策成功时同步任务缓存、禁用重复提交、展示接口错误，并分别展示已加入/待决策/失败数量。
+- 证据：后端 `tests/test_stage4_files.py` `7 passed`，包含“导入→解析→移入回收站→同内容再导入→复用恢复原 file_id”；前端 `src/test/stage4-files.test.tsx` `5 passed`，覆盖待决策计数与按钮决策后状态更新。前端 typecheck、lint、build，后端定向 Ruff 和 `git diff --check` 通过。没有普通浏览器 Network/截图验收，也没有调用真实 Provider。
+- 范围：未改变 SHA-256 去重、30 天回收站期限或重复决策选项；没有数据库迁移、OpenAPI 契约或 Provider 变更。阶段 8 和完整 V1 状态保持 `PARTIAL`。
+- 报告：`docs/test-reports/stage-79-file-import-duplicate-resolution.md`。
+
 ## 第六十四批：求职 Demo 浏览器验收与学习入口收口（2026-09-28）
 
 - 浏览器截图证据：知识库问答正例可打开 `服务超时策略.txt` 来源；“磁盘配额”资料外问题严格提示资料不足且无来源按钮，均为 `PASS`。学习入口空白主题/目标时按钮禁用但没有字段错误；填入“回收站 / 回收站学习”后会话 `01a0e5e2-7828-796c-8c8f-24e0f459f550` 因 `VECTOR_SIMILARITY_BELOW_THRESHOLD` 以 `EVIDENCE_INSUFFICIENT` 结束，完成 `0/1`，这是证据门禁拒答而非题目渲染缺陷。

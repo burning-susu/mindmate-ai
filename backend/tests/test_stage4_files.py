@@ -125,6 +125,40 @@ def test_duplicate_requires_decision_and_separate_record_reuses_content(file_cli
     assert {item["file_id"] for item in listed} == {first_file_id, second_file_id}
 
 
+def test_reusing_duplicate_restores_matching_file_from_trash(file_client) -> None:
+    client, _ = file_client
+    first = import_one(client, "trashed.txt", b"trashed-content", "import-trashed-duplicate-1")
+    first_file_id = first.json()["items"][0]["file_id"]
+    wait_for_file(client, first_file_id, {"PARSED"})
+    first_detail = client.get(f"/api/v1/files/{first_file_id}").json()
+    trashed = client.delete(
+        f"/api/v1/files/{first_file_id}",
+        params={"expected_version": first_detail["row_version"]},
+        headers=write_headers("trash-duplicate-source"),
+    )
+    assert trashed.status_code == 200
+
+    duplicate = import_one(client, "copy.txt", b"trashed-content", "import-trashed-duplicate-2")
+    duplicate_payload = duplicate.json()
+    assert duplicate_payload["status"] == "BLOCKED"
+
+    decided = client.post(
+        f"/api/v1/file-imports/{duplicate_payload['import_id']}/duplicate-decisions",
+        headers=write_headers("reuse-trashed-duplicate"),
+        json={"decisions": [{"item_index": 0, "decision": "REUSE_EXISTING"}]},
+    )
+    assert decided.status_code == 200
+    assert decided.json()["status"] == "COMPLETED"
+    assert decided.json()["items"][0]["status"] == "REUSED"
+    assert decided.json()["items"][0]["file_id"] == first_file_id
+
+    restored = client.get(f"/api/v1/files/{first_file_id}").json()
+    assert restored["deleted_at"] is None
+    assert restored["status"] == "PARSED"
+    assert [item["file_id"] for item in client.get("/api/v1/files").json()["items"]] == [first_file_id]
+    assert client.get("/api/v1/trash").json()["files"] == []
+
+
 def test_knowledge_base_import_reuses_source_and_persists_membership(file_client) -> None:
     client, _ = file_client
     knowledge_base = client.post(

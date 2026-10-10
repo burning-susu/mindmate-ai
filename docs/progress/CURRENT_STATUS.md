@@ -7,10 +7,10 @@
 - 第七十四批进场：分支 `feat/v1-bootstrap`；LOCAL / REMOTE 均为 `ae75945991a3890a6c5d2811e29ab70ca5432e7f`；工作区干净。
 - 第七十五批进场：分支 `feat/v1-bootstrap`；LOCAL / REMOTE 均为 `1f80fddfb4c74639aabcc89d97af98bd190d9135`；工作区干净。
 - 第七十六批进场：分支 `feat/v1-bootstrap`；LOCAL / REMOTE 均为 `ca58c4e936196555e0a495dcfef84bd66dd1dbf6`；工作区干净。
-- 最后更新时间：`2026-09-29`
+- 最后更新时间：`2026-10-10`
 - 当前开发阶段：阶段 8 开发中，状态 `PARTIAL`；阶段 5、阶段 6、阶段 7 继续 `PARTIAL`
 - 交付顺序：Demo 首先完成，完整 V1 以后精进。求职 Demo 优先文件整理/导入、建库、带来源问答、最小学习陪练和重启恢复。Demo 可用性与完整 V1 阶段状态分开报告。
-- 当前批次状态：第七十六批 `DEMO_STABLE=PASS（沿用第42/64批；本批只做历史交互回归）`，`STAGE8_FULL_V1=PARTIAL`。用户报告第七十五批六项均完成且无功能问题，唯一体验反馈是第六项确认界面；未提供逐项对象 ID、URL、Network 计数或可读取截图，标为 `USER_REPORTED_PASS`，不当作代理亲测。对话/学习历史共用居中危险模态，前端定向 Vitest `15 passed`、typecheck、lint、build 通过；Playwright Chromium 启动遇 `spawn EPERM`，提权重试未执行（自动审批服务 404），因此新 UI 的浏览器验收仍待补。第七十五批隔离 Mock API 证据继续沿用；Windows 恢复 `WinError 5 / RESTORE_DATABASE_LOCKED` 根因未确认、Credential Manager `WinError 1312` 为 `ENV_BLOCKED`、`PACKAGED_LAUNCHER=PACKAGED_LAUNCHER_PARTIAL`、`AC-LEARN-006=PARTIAL`、真实 Provider smoke 和账单核对为 `PENDING`。阶段报告见 `docs/test-reports/stage-76-history-delete-dialog.md`，变更记录见 `docs/project/changes/CHG-20260929-HISTORY-DELETE-DIALOG.md`，修订人工卡见 `docs/test-reports/stage-70-stage8-browser-acceptance.md`。
+- 当前批次状态：第七十九批文件重复导入决策修复 `CODE PASS / AUTOMATED PASS / BROWSER NOT RUN`；阶段 8 `PARTIAL`，完整 V1 状态未改变。用户截图所示文件先导入后移入回收站，再上传相同内容，会因 SHA-256 内容对象仍保留而进入重复决策；原“复用现有”只查活动文件，导致决策响应可将条目标为已复用但实际没有活动文件。前端同时优先显示重复决策前缓存的 `BLOCKED` 任务，因此按钮请求成功也看似无响应。现已修复任务缓存即时更新、显示待决策/失败计数、展示决策错误；选择复用且唯一匹配文件在回收站时恢复该文件。后端文件导入契约 `7 passed`，前端文件页 `5 passed`、typecheck、lint、build 通过，定向 Ruff 与 `git diff --check` 通过；未做普通浏览器 Network/截图验收。阶段报告见 `docs/test-reports/stage-79-file-import-duplicate-resolution.md`。此前第七十六批历史对话/学习交互的状态和阶段 8 未完成项继续以其原证据为准。
 
 ## 已完成阶段
 

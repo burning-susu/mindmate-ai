@@ -3,9 +3,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { BrowserRouter } from 'react-router-dom'
 
 import App from '../App'
+import { queryClient } from '../queryClient'
 
 describe('stage 4 file workspace', () => {
-  afterEach(() => vi.unstubAllGlobals())
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    queryClient.clear()
+  })
 
   it('renders real file controls and empty state', async () => {
     window.history.pushState({}, '', '/files')
@@ -32,6 +36,36 @@ describe('stage 4 file workspace', () => {
     )
   })
 
+  it('updates the visible import task after resolving a duplicate', async () => {
+    window.history.pushState({}, '', '/files')
+    const requestedUrls: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      requestedUrls.push(url)
+      if (url.includes('/system/session')) return new Response(JSON.stringify({ status: 'ready' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      if (url.endsWith('/api/v1/health')) return new Response(JSON.stringify({ status: 'ok', version: '0.1.0' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      if (url.includes('/api/v1/files?')) return new Response(JSON.stringify({ items: [], next_cursor: null }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      if (url.endsWith('/api/v1/folders') || url.endsWith('/api/v1/tags')) return new Response(JSON.stringify({ items: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      if (url.endsWith('/api/v1/file-imports') && init?.method === 'POST') return new Response(JSON.stringify({ import_id: 'import-duplicate', task_id: 'import-duplicate', status: 'BLOCKED', phase: 'WAITING_DUPLICATE_DECISION', progress: 100, items: [{ item_index: 0, original_name: 'copy.txt', status: 'BLOCKED', duplicate_status: 'PENDING_DECISION' }] }), { status: 202, headers: { 'Content-Type': 'application/json' } })
+      if (url.endsWith('/api/v1/file-imports/import-duplicate')) return new Response(JSON.stringify({ import_id: 'import-duplicate', task_id: 'import-duplicate', status: 'BLOCKED', phase: 'WAITING_DUPLICATE_DECISION', progress: 100, items: [{ item_index: 0, original_name: 'copy.txt', status: 'BLOCKED', duplicate_status: 'PENDING_DECISION' }] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      if (url.endsWith('/duplicate-decisions') && init?.method === 'POST') return new Response(JSON.stringify({ import_id: 'import-duplicate', task_id: 'import-duplicate', status: 'COMPLETED', phase: 'COMPLETED', progress: 100, items: [{ item_index: 0, original_name: 'copy.txt', status: 'REUSED', duplicate_status: 'REUSED', file_id: 'restored-file' }] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      return new Response(JSON.stringify({ status: 'ok', version: '0.1.0' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }))
+
+    render(<BrowserRouter><App /></BrowserRouter>)
+    fireEvent.click((await screen.findAllByRole('button', { name: '导入文件' }))[0])
+    const fileInput = document.querySelector<HTMLInputElement>('input[type="file"]')
+    expect(fileInput).not.toBeNull()
+    fireEvent.change(fileInput as HTMLInputElement, { target: { files: [new File(['copy'], 'copy.txt', { type: 'text/plain' })] } })
+
+    expect(await screen.findByText('0 个已加入，1 个待决策，0 个失败')).toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button', { name: '复用现有' }))
+    expect(await screen.findByText('导入任务 已完成')).toBeInTheDocument()
+    expect(screen.getByText('1 个已加入，0 个待决策，0 个失败')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '复用现有' })).not.toBeInTheDocument()
+    expect(requestedUrls.some((url) => url.endsWith('/duplicate-decisions'))).toBe(true)
+  })
+
   it('sends the folder version and shows a conflict reload action', async () => {
     window.history.pushState({}, '', '/files')
     vi.spyOn(window, 'confirm').mockReturnValue(true)
@@ -40,6 +74,7 @@ describe('stage 4 file workspace', () => {
       const url = String(input)
       requestedUrls.push(url)
       if (url.includes('/system/session')) return new Response(JSON.stringify({ status: 'ready' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      if (url.endsWith('/api/v1/health')) return new Response(JSON.stringify({ status: 'ok', version: '0.1.0' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
       if (url.includes('/api/v1/files?')) return new Response(JSON.stringify({ items: [], next_cursor: null }), { status: 200, headers: { 'Content-Type': 'application/json' } })
       if (url.endsWith('/api/v1/folders')) return new Response(JSON.stringify({ items: [{ folder_id: 'folder-7', parent_folder_id: null, name: '冲突目录', file_count: 0, row_version: 7, created_at: '2026-09-22T00:00:00Z', updated_at: '2026-09-22T00:00:00Z' }] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
       if (url.endsWith('/api/v1/tags')) return new Response(JSON.stringify({ items: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
