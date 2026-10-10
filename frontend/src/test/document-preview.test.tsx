@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
 import DocumentPreview from '../components/DocumentPreview'
@@ -27,11 +27,14 @@ describe('DocumentPreview', () => {
     expect(screen.getByText('要点二')).toBeInTheDocument()
   })
 
-  it('renders XMind sheets and nested topic branches as an outline', () => {
+  it('prefers the embedded native XMind preview and falls back to the topic tree', () => {
     const { container } = render(<DocumentPreview fileId="xmind-1" documentType="XMIND" contentAvailable previewAvailable text="root branch leaf" metadata={{ sheet_count: 1, topic_count: 4, xmind_outline: [{ title: '工作计划', root: { title: '年度目标', children: [{ title: '第一季度', children: [{ title: '完成项目', children: [] }] }, { title: '第二季度', children: [] }] } }] }} />)
 
     expect(screen.getByRole('article', { name: 'XMind 思维导图结构' })).toBeInTheDocument()
     expect(screen.getByText('1 个工作表 · 4 个主题节点')).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: '工作计划 XMind 原版式预览' })).toHaveAttribute('src', '/api/v1/files/xmind-1/xmind-thumbnail')
+    expect(screen.getByRole('link', { name: '打开原尺寸' })).toHaveAttribute('href', '/api/v1/files/xmind-1/xmind-thumbnail')
+    fireEvent.error(screen.getByRole('img', { name: '工作计划 XMind 原版式预览' }))
     expect(screen.getByRole('heading', { level: 3, name: '工作计划' })).toBeInTheDocument()
     expect(screen.getByRole('treeitem', { name: /第一季度/ })).toBeInTheDocument()
     expect(screen.getByText('完成项目')).toBeInTheDocument()

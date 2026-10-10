@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import struct
 import time
 import zipfile
 from pathlib import Path
@@ -494,9 +495,14 @@ def test_xmind_json_and_xml_import_as_searchable_topic_trees(file_client) -> Non
         }
     ]
     modern_buffer = io.BytesIO()
+    native_thumbnail = bytes.fromhex(
+        "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+        "0000000b49444154789c636000020000050001a5f645400000000049454e44ae426082"
+    )
     with zipfile.ZipFile(modern_buffer, "w", zipfile.ZIP_DEFLATED) as archive:
         archive.writestr("content.json", json.dumps(modern, ensure_ascii=False))
         archive.writestr("metadata.json", "{}")
+        archive.writestr("Thumbnails/thumbnail.png", native_thumbnail)
     modern_response = client.post(
         "/api/v1/file-imports",
         headers=write_headers("import-xmind-json"),
@@ -513,6 +519,11 @@ def test_xmind_json_and_xml_import_as_searchable_topic_trees(file_client) -> Non
     outline = modern_preview["metadata"]["xmind_outline"][0]
     assert outline["title"] == "职业规划"
     assert outline["root"]["children"][0]["children"][0]["title"] == "语义化标签"
+    thumbnail_response = client.get(f"/api/v1/files/{modern_item['file_id']}/xmind-thumbnail")
+    assert thumbnail_response.status_code == 200
+    assert thumbnail_response.headers["content-type"] == "image/png"
+    assert thumbnail_response.headers["x-content-type-options"] == "nosniff"
+    assert thumbnail_response.content == native_thumbnail
 
     classic_xml = '''<?xml version="1.0" encoding="UTF-8"?>
     <xmap-content xmlns="urn:xmind:xmap:xmlns:content:2.0" version="2.0">
@@ -538,6 +549,7 @@ def test_xmind_json_and_xml_import_as_searchable_topic_trees(file_client) -> Non
     classic_preview = client.get(f"/api/v1/files/{classic_item['file_id']}/preview").json()
     assert "子主题" in classic_preview["text"]
     assert classic_preview["metadata"]["xmind_outline"][0]["root"]["children"][0]["title"] == "子主题"
+    assert client.get(f"/api/v1/files/{classic_item['file_id']}/xmind-thumbnail").status_code == 204
 
 
 def test_xmind_extension_requires_an_xmind_zip_signature(file_client) -> None:
@@ -552,6 +564,18 @@ def test_xmind_extension_requires_an_xmind_zip_signature(file_client) -> None:
     )
     assert response.status_code == 202
     assert response.json()["items"][0]["error_code"] == "FILE_SIGNATURE_INVALID"
+
+
+def test_xmind_thumbnail_rejects_excessive_pixel_dimensions(tmp_path: Path) -> None:
+    image = bytearray(24)
+    image[:8] = b"\x89PNG\r\n\x1a\n"
+    image[12:16] = b"IHDR"
+    image[16:24] = struct.pack(">II", 10_000, 10_000)
+    package = tmp_path / "large-thumbnail.xmind"
+    with zipfile.ZipFile(package, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("Thumbnails/thumbnail.png", image)
+
+    assert files_api._read_xmind_thumbnail(package) is None
 
 
 def test_mime_size_and_batch_limits_are_enforced(file_client, monkeypatch) -> None:

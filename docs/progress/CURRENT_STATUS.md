@@ -10,7 +10,7 @@
 - 最后更新时间：`2026-10-10`
 - 当前开发阶段：阶段 8 开发中，状态 `PARTIAL`；阶段 5、阶段 6、阶段 7 继续 `PARTIAL`
 - 交付顺序：Demo 首先完成，完整 V1 以后精进。求职 Demo 优先文件整理/导入、建库、带来源问答、最小学习陪练和重启恢复。Demo 可用性与完整 V1 阶段状态分开报告。
-- 当前批次状态：第八十六批 XMind 思维导图预览布局 `CODE PASS / AUTOMATED PASS / BROWSER NOT RUN`。根据截图反馈，将单列主题长列表改为中心主题居中、一级分支交错分布于左右两侧、子主题在分支下递归展开的可滚动画布；主题数文案调整为“主题节点”。预览组件 `5 passed`，typecheck 和 lint 通过；未做真实第三方 XMind 浏览器截图复验。记录见 `docs/test-reports/stage-86-xmind-map-layout.md`。第八十五批导入/解析支持保持不变。
+- 当前批次状态：第八十七批 XMind 原版式预览 `CODE PASS / AUTOMATED PASS / LOCAL RUNTIME RESTART REQUIRED`。详情页优先读取 `.xmind` 包内固定路径 `Thumbnails/thumbnail.png`，以原图显示；图片缺失/无效时回退到主题树。新增只读 `image/png` 预览接口，检查签名、大小和像素上限，不落盘、不新增依赖。后端 XMind 定向 `3 passed`，前端预览 `5 passed`，Ruff、typecheck、lint、build、OpenAPI 生成通过；真实演示文件提取图像 `1794×732`。当前 8001 后端进程仍为旧代码，接口实测 `404`，需重启后才能使用。本批未终止无法确认归属的运行进程；普通浏览器截图未验收。报告见 `docs/test-reports/stage-87-xmind-native-thumbnail.md`。
 
 ## 已完成阶段
 

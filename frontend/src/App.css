@@ -196,6 +196,9 @@
 .xmind-document-preview__sheets { display: grid; gap: 14px; }
 .xmind-document-preview__sheets > section { padding: 16px 18px; border: 1px solid var(--border); border-radius: 6px; background: #fff; }
 .xmind-document-preview__sheets h3 { margin: 0 0 14px; font-size: 15px; }
+.xmind-native-preview__actions { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+.xmind-native-preview { max-height: 680px; overflow: auto; border: 1px solid var(--border); border-radius: 6px; background: #fff; }
+.xmind-native-preview img { display: block; width: auto; max-width: none; height: auto; }
 .xmind-map-scroll { max-height: 680px; overflow: auto; border: 1px solid var(--border); border-radius: 6px; background-color: #fff; background-image: radial-gradient(#d9e2e4 .7px, transparent .7px); background-size: 18px 18px; }
 .xmind-map { display: grid; grid-template-columns: minmax(0, 1fr) 210px minmax(0, 1fr); align-items: center; gap: 28px; min-width: 760px; min-height: 460px; padding: 30px 24px; }
 .xmind-map__side { position: relative; display: grid; align-content: center; gap: 16px; min-width: 0; }

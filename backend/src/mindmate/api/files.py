@@ -4,6 +4,8 @@ from __future__ import annotations
 # ruff: noqa: B008
 import json
 import mimetypes
+import struct
+import zipfile
 from collections.abc import Iterator
 from copy import deepcopy
 from datetime import datetime, timedelta
@@ -12,7 +14,7 @@ from typing import Any
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, delete, exists, func, or_, select, update
 from sqlalchemy.orm import Session
@@ -69,6 +71,9 @@ from mindmate.infrastructure.models import (
 from mindmate.infrastructure.vector_store import SqliteVecAdapter, VectorStoreError
 
 router = APIRouter(prefix="/api/v1")
+
+MAX_XMIND_THUMBNAIL_BYTES = 8 * 1024 * 1024
+MAX_XMIND_THUMBNAIL_PIXELS = 40_000_000
 
 
 def _delete_unbuilt_index_snapshots_for_files(session: Session, file_ids: list[str]) -> None:
@@ -1370,6 +1375,64 @@ def file_content(
         f"inline; filename*=UTF-8''{quote(record.display_name, safe='')}"
     )
     return response
+
+
+def _read_xmind_thumbnail(path: Path) -> bytes | None:
+    try:
+        with zipfile.ZipFile(path) as archive:
+            entries = archive.infolist()
+            names = [entry.filename.replace("\\", "/") for entry in entries]
+            if len(names) != len(set(names)):
+                return None
+            info = archive.getinfo("Thumbnails/thumbnail.png")
+            if info.file_size > MAX_XMIND_THUMBNAIL_BYTES:
+                return None
+            if info.file_size > max(1, info.compress_size) * 100:
+                return None
+            image = archive.read(info)
+    except (OSError, RuntimeError, zipfile.BadZipFile, KeyError):
+        return None
+
+    if len(image) < 24 or not image.startswith(b"\x89PNG\r\n\x1a\n") or image[12:16] != b"IHDR":
+        return None
+    width, height = struct.unpack(">II", image[16:24])
+    if width < 1 or height < 1 or width * height > MAX_XMIND_THUMBNAIL_PIXELS:
+        return None
+    return image
+
+
+@router.get(
+    "/files/{file_id}/xmind-thumbnail",
+    tags=["files"],
+    response_class=Response,
+    responses={
+        200: {
+            "description": "XMind 包中嵌入的 PNG 原生预览图。",
+            "content": {"image/png": {"schema": {"type": "string", "format": "binary"}}},
+        },
+        204: {"description": "XMind 包中没有可用的原生预览图。"},
+    },
+)
+def file_xmind_thumbnail(
+    file_id: str,
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> Response:
+    record = _get_file_or_404(session, file_id)
+    if record.document_type != "XMIND":
+        raise FileApiError("FILE_TYPE_UNSUPPORTED", "该文件不是 XMind 文件。", 404)
+    path = _record_content_path(session, settings, record)
+    image = _read_xmind_thumbnail(path)
+    if image is None:
+        return Response(status_code=204, headers={"Cache-Control": "no-store"})
+    return Response(
+        content=image,
+        media_type="image/png",
+        headers={
+            "Cache-Control": "private, max-age=300",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @router.get("/files/{file_id}/preview", tags=["files"])

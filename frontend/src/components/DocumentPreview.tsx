@@ -1,4 +1,5 @@
-import { FileText } from 'lucide-react'
+import { ExternalLink, FileText } from 'lucide-react'
+import { useState } from 'react'
 
 type ParsedMetadata = {
   page_count?: number
@@ -34,12 +35,21 @@ function XMindBranches({ topics }: { topics: XMindTopic[] }) {
   )
 }
 
-function XMindDocumentPreview({ metadata }: { metadata: ParsedMetadata | null | undefined }) {
+function XMindDocumentPreview({ fileId, metadata }: { fileId: string; metadata: ParsedMetadata | null | undefined }) {
+  const [thumbnailUnavailable, setThumbnailUnavailable] = useState(false)
   const sheets = metadata?.xmind_outline ?? []
+  const thumbnailUrl = `/api/v1/files/${fileId}/xmind-thumbnail`
   return (
     <article className="xmind-document-preview" aria-label="XMind 思维导图结构">
       <div className="office-document-preview__meta">{metadata?.sheet_count ?? sheets.length} 个工作表 · {metadata?.topic_count ?? 0} 个主题节点</div>
-      <div className="xmind-document-preview__sheets">
+      {!thumbnailUnavailable && sheets.length > 0 ? (
+        <>
+          <div className="xmind-native-preview__actions"><a className="quiet-button" href={thumbnailUrl} target="_blank" rel="noreferrer"><ExternalLink size={15} aria-hidden="true" />打开原尺寸</a></div>
+          <div className="xmind-native-preview">
+            <img src={thumbnailUrl} alt={`${sheets[0].title} XMind 原版式预览`} onError={() => setThumbnailUnavailable(true)} />
+          </div>
+        </>
+      ) : <div className="xmind-document-preview__sheets">
         {sheets.map((sheet, index) => (
           <section key={`${sheet.title}-${index}`} aria-labelledby={`xmind-sheet-${index}`}>
             <h3 id={`xmind-sheet-${index}`}>{sheet.title}</h3>
@@ -54,7 +64,7 @@ function XMindDocumentPreview({ metadata }: { metadata: ParsedMetadata | null | 
             ) : <p>此工作表没有可显示的主题。</p>}
           </section>
         ))}
-      </div>
+      </div>}
     </article>
   )
 }
@@ -128,6 +138,6 @@ export default function DocumentPreview({
   if (!previewAvailable) return <div className="detail-empty"><FileText size={20} aria-hidden="true" /><span>当前文件还没有可用的解析文本。</span></div>
   if (documentType === 'DOCX') return <WordDocumentPreview text={text} metadata={metadata} />
   if (documentType === 'PPTX') return <PowerPointDocumentPreview text={text} metadata={metadata} />
-  if (documentType === 'XMIND') return metadata?.xmind_outline ? <XMindDocumentPreview metadata={metadata} /> : <div className="detail-empty"><FileText size={20} aria-hidden="true" /><span>XMind 主题结构无法读取。</span></div>
+  if (documentType === 'XMIND') return metadata?.xmind_outline ? <XMindDocumentPreview fileId={fileId} metadata={metadata} /> : <div className="detail-empty"><FileText size={20} aria-hidden="true" /><span>XMind 主题结构无法读取。</span></div>
   return <div className="plain-document-preview">{text}</div>
 }

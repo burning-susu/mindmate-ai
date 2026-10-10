@@ -4520,6 +4520,52 @@
         }
       }
     },
+    "/api/v1/files/{file_id}/xmind-thumbnail": {
+      "get": {
+        "tags": [
+          "files"
+        ],
+        "summary": "File Xmind Thumbnail",
+        "operationId": "file_xmind_thumbnail_api_v1_files__file_id__xmind_thumbnail_get",
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "File Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "XMind 包中嵌入的 PNG 原生预览图。",
+            "content": {
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "XMind 包中没有可用的原生预览图。"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/files/{file_id}/preview": {
       "get": {
         "tags": [
