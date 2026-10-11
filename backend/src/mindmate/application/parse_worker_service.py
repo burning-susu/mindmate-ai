@@ -21,6 +21,7 @@ from mindmate.application.files import (
     terminate_active_parser_processes,
     write_parsed_text,
 )
+from mindmate.application.pptx_preview import find_libreoffice
 from mindmate.application.tasks import (
     add_event,
     claim_next_task,
@@ -256,6 +257,9 @@ class ParsingWorker:
                     timeout_seconds=self._settings.parser_timeout_seconds,
                     memory_limit_bytes=self._settings.parser_memory_limit_bytes,
                     stop_event=cancel_event,
+                    libreoffice_path=(
+                        find_libreoffice(self._settings) if document_type == "PPT" else None
+                    ),
                 )
         except FileValidationError as exc:
             if exc.code == "PARSER_CANCELLED" and (self._stop_event.is_set() or cancel_event.is_set()):

@@ -10,7 +10,7 @@
 - 最后更新时间：`2026-10-10`
 - 当前开发阶段：阶段 8 开发中，状态 `PARTIAL`；阶段 5、阶段 6、阶段 7 继续 `PARTIAL`
 - 交付顺序：Demo 首先完成，完整 V1 以后精进。求职 Demo 优先文件整理/导入、建库、带来源问答、最小学习陪练和重启恢复。Demo 可用性与完整 V1 阶段状态分开报告。
-- 当前批次状态：第八十九批 DOCX 原版式预览 `CODE PASS / AUTOMATED PASS / REAL DOCX CONVERSION PASS / APP RESTART PENDING`。复用已暂存的 LibreOffice；详情页现用 Writer PDF 渲染真实页布局，文本提取折叠保留。演示 DOCX 已真实转换为 23 页、991,564 字节 PDF，并检查首页/末页。后端 Office 定向测试 `22 passed`，前端全量 `18 files / 96 tests passed`；Ruff、Pyright、compileall、typecheck、lint、build 通过。当前端口仍运行旧版 API，`/docx-preview` 返回 `404`；自动审批 `429` 阻止了重启命令，浏览器内验收待重启。PPTX 实际转换也已完成。DOCX 变更见 `docs/project/changes/CHG-20261010-DOCX-RENDERING.md`。
+- 当前批次状态：第九十批跟进用户测试完成。全窗口拖放覆盖非文件列表路由；`.ppt` 签名接受有效 OLE PPT 与扩展名为 `.ppt` 的 PPTX ZIP 包；XLSX 预览为逐工作表 HTML 沙箱表格。真实 API 中 PPT 导入为 `PARSED`，XLSX 预览返回 `200 text/html`（474 行、3318 单元格、CSP sandbox）。后端定向 `33 passed`，前端 `18 files / 99 tests passed`，Ruff/Pyright、typecheck/lint/build 和 OpenAPI 类型同步通过。新实例运行于 `127.0.0.1:5175` / API `8002`，隔离数据目录；旧实例及原演示数据未改动。浏览器截图验收未执行，Computer Use 初始化被审批服务 `429` 限流。
 
 ## 已完成阶段
 
@@ -23,7 +23,7 @@
 
 ## 当前已实现能力
 
-- 后端：5 类文件导入、托管复制、哈希去重、持久解析 Worker、隔离解析、搜索筛选、文件/文件夹/标签、批量操作、受控内容读取、回收站和永久删除；Folder/Tag 修改、删除与恢复使用数据库原子 `row_version` 乐观锁。
+- 后端：PDF、DOCX、PPT、PPTX、XLSX、XMind、TXT、Markdown 文件导入、托管复制、哈希去重、持久解析 Worker、隔离解析、搜索筛选、文件/文件夹/标签、批量操作、受控内容读取、回收站和永久删除；Folder/Tag 修改、删除与恢复使用数据库原子 `row_version` 乐观锁。
 - 任务与资源安全：复用 `BackgroundTask` 实现文件导入/重新处理及知识库成员准入；解析 Worker 与成员 Worker 按任务类型隔离领取，均使用原子领取、租约、过期恢复、关闭中断与取消状态；第七十一批新增回收站目标匹配、取消原因/事件、解析子进程取消监视器和索引输入范围复核；新增持久 `tasks.concurrency` 配置，统一执行默认重任务 `2`、Embedding/vector 写 `1` 及可下调 `1/1` 的跨进程领取边界；Windows 解析子进程使用 Job Object 的 `KILL_ON_JOB_CLOSE` 与进程内存上限，默认 `512 MiB`。
 - 前端：真实 API 文件工作台、嵌套目录、筛选排序、导入与重复决策、详情编辑/预览、文件和文件夹回收站操作；列表查询参数、详情返回后的筛选/排序/滚动恢复；返回前刷新列表避免旧 `row_version` 竞态；版本冲突提示并引导重新加载，不自动覆盖；第二十四批在知识库详情页增加高级“测试检索”区域，调用现有只读 API，展示三种判定、候选定位与排序信号。
 - 第六十九批全局恢复：`AppShell` 顶栏新增跨路由持久任务抽屉，读取真实任务类型/阶段/进度/终态和脱敏失败摘要；只对后端支持的文件导入、索引、知识库成员和模型安装任务显示取消。新增本地 health 直读阻断页、回环网络异常分类、Chat/学习在线模式离线前置守卫，以及知识库/学习会话 404 专用返回状态。自动化回归覆盖任务取消一次、服务断开和错误提示安全边界；普通 Chrome/Edge 页面证据仍 `BROWSER_PARTIAL`。

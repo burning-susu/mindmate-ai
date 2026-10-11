@@ -1,6 +1,7 @@
 import { QueryClientProvider, useQuery } from '@tanstack/react-query'
 import { Activity, BookOpen, Boxes, FileText, History, Home, Menu, MessageSquare, RefreshCw, ServerOff, Settings2, Trash2 } from 'lucide-react'
-import { Link, NavLink, Route, Routes } from 'react-router-dom'
+import { useState, type DragEvent } from 'react'
+import { Link, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { create } from 'zustand'
 
 import { LocalBackendUnavailableError } from './api/client'
@@ -100,9 +101,58 @@ function Placeholder({ title, description, action }: { title: string; descriptio
 function AppShell() {
   const { sidebarOpen, toggleSidebar } = useUiStore()
   const backendHealth = useBackendHealth()
+  const location = useLocation()
+  const navigate = useNavigate()
+  const [globalFileDrop, setGlobalFileDrop] = useState(false)
+
+  function isFileDrag(event: DragEvent<HTMLDivElement>) {
+    return Array.from(event.dataTransfer.types).includes('Files')
+  }
+
+  function handleGlobalDragEnter(event: DragEvent<HTMLDivElement>) {
+    if (event.defaultPrevented || !isFileDrag(event)) return
+    event.preventDefault()
+    setGlobalFileDrop(true)
+  }
+
+  function handleGlobalDragOver(event: DragEvent<HTMLDivElement>) {
+    if (event.defaultPrevented || !isFileDrag(event)) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'copy'
+    setGlobalFileDrop(true)
+  }
+
+  function handleGlobalDragLeave(event: DragEvent<HTMLDivElement>) {
+    if (!isFileDrag(event)) return
+    if (event.relatedTarget instanceof Element && event.relatedTarget.closest('.files-main')) {
+      setGlobalFileDrop(false)
+      return
+    }
+    if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return
+    setGlobalFileDrop(false)
+  }
+
+  function handleGlobalDrop(event: DragEvent<HTMLDivElement>) {
+    if (!isFileDrag(event)) return
+    setGlobalFileDrop(false)
+    if (event.defaultPrevented) return
+    event.preventDefault()
+    const files = Array.from(event.dataTransfer.files)
+    if (!files.length) return
+    const destination = location.pathname === '/files'
+      ? `${location.pathname}${location.search}`
+      : '/files'
+    navigate(destination, { state: { droppedFiles: files } })
+  }
 
   return (
-    <div className={`app-shell ${sidebarOpen ? '' : 'app-shell--collapsed'}`}>
+    <div
+      className={`app-shell ${sidebarOpen ? '' : 'app-shell--collapsed'}`}
+      onDragEnter={handleGlobalDragEnter}
+      onDragOver={handleGlobalDragOver}
+      onDragLeave={handleGlobalDragLeave}
+      onDrop={handleGlobalDrop}
+    >
       <aside className="sidebar" aria-label="主导航">
         <div className="brand-block">
           <div className="brand-mark">M</div>
@@ -173,6 +223,7 @@ function AppShell() {
           </div>
         )}
       </main>
+      {globalFileDrop && <div className="app-file-drop-overlay" role="status"><FileText size={28} aria-hidden="true" /><strong>释放文件以导入</strong><span>导入后将在文件列表中显示</span></div>}
     </div>
   )
 }

@@ -53,6 +53,12 @@ SUPPORTED_DOCUMENTS: dict[str, DocumentSpec] = {
         "PPTX",
         "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     ),
+    ".ppt": DocumentSpec(".ppt", "PPT", "application/vnd.ms-powerpoint"),
+    ".xlsx": DocumentSpec(
+        ".xlsx",
+        "XLSX",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ),
     ".txt": DocumentSpec(".txt", "TXT", "text/plain"),
     ".md": DocumentSpec(".md", "MARKDOWN", "text/markdown"),
     ".markdown": DocumentSpec(".markdown", "MARKDOWN", "text/markdown"),
@@ -136,7 +142,7 @@ def document_spec(name: str) -> DocumentSpec:
     if spec is None:
         raise FileValidationError(
             "FILE_TYPE_UNSUPPORTED",
-            "仅支持 PDF、DOCX、PPTX、XMind、TXT 和 Markdown 文件。",
+            "仅支持 PDF、DOCX、PPT、PPTX、XLSX、XMind、TXT 和 Markdown 文件。",
         )
     return spec
 
@@ -181,14 +187,22 @@ def _zip_package_kind(path: Path) -> str | None:
             names = {name.replace("\\", "/") for name in archive.namelist()}
             has_word = any(name.startswith("word/") for name in names)
             has_ppt = any(name.startswith("ppt/") for name in names)
-            if ("content.json" in names or "content.xml" in names) and not has_word and not has_ppt:
+            has_excel = any(name.startswith("xl/") for name in names)
+            if (
+                ("content.json" in names or "content.xml" in names)
+                and not has_word
+                and not has_ppt
+                and not has_excel
+            ):
                 return "XMIND"
             if "[Content_Types].xml" not in names:
                 return None
-            if has_word and not has_ppt:
+            if has_word and not has_ppt and not has_excel:
                 return "DOCX"
-            if has_ppt and not has_word:
+            if has_ppt and not has_word and not has_excel:
                 return "PPTX"
+            if has_excel and not has_word and not has_ppt:
+                return "XLSX"
     except (OSError, zipfile.BadZipFile):
         return None
     return None
@@ -211,10 +225,18 @@ def validate_file_format(path: Path, spec: DocumentSpec, header: bytes) -> None:
         if not header.startswith(b"%PDF-"):
             raise FileValidationError("FILE_SIGNATURE_INVALID", "文件扩展名与 PDF 文件头不匹配。")
         return
-    if spec.document_type in {"DOCX", "PPTX"}:
+    if spec.document_type in {"DOCX", "PPTX", "XLSX"}:
         detected = _zip_package_kind(path)
         if detected != spec.document_type:
             raise FileValidationError("FILE_SIGNATURE_INVALID", "Office 文件包类型与扩展名不匹配。")
+        return
+    if spec.document_type == "PPT":
+        is_legacy_ppt = header.startswith(bytes.fromhex("D0CF11E0A1B11AE1"))
+        is_ooxml_presentation = header.startswith(b"PK") and _zip_package_kind(path) == "PPTX"
+        if not is_legacy_ppt and not is_ooxml_presentation:
+            raise FileValidationError(
+                "FILE_SIGNATURE_INVALID", "文件扩展名与旧版 PowerPoint 文件头不匹配。"
+            )
         return
     if spec.document_type == "XMIND":
         if not header.startswith(b"PK") or _zip_package_kind(path) != "XMIND":
@@ -233,6 +255,13 @@ def validate_upload_mime(spec: DocumentSpec, supplied_mime: str | None) -> None:
         "PDF": {"application/pdf"},
         "DOCX": {spec.mime_type},
         "PPTX": {spec.mime_type},
+        "PPT": {
+            spec.mime_type,
+            "application/x-ole-storage",
+            "application/zip",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        },
+        "XLSX": {spec.mime_type},
         "XMIND": {"application/vnd.xmind.workbook", "application/x-xmind", "application/zip"},
     }
     if supplied_mime.casefold() not in aliases[spec.document_type]:
@@ -351,6 +380,7 @@ def parse_document_in_subprocess(
     timeout_seconds: float = PARSER_TIMEOUT_SECONDS,
     memory_limit_bytes: int = 512 * 1024 * 1024,
     stop_event: threading.Event | None = None,
+    libreoffice_path: Path | None = None,
 ) -> dict[str, object]:
     worker = Path(__file__).with_name("parser_worker.py")
     with tempfile.TemporaryDirectory(prefix="mindmate-parser-") as temporary_value:
@@ -363,7 +393,15 @@ def parse_document_in_subprocess(
             raise FileValidationError("PARSER_RESOURCE_LIMIT", safe_parse_failure_message(exc.code)) from exc
         try:
             process = subprocess.Popen(
-                [sys.executable, "-I", str(worker), document_type, str(path), str(output)],
+                [
+                    sys.executable,
+                    "-I",
+                    str(worker),
+                    document_type,
+                    str(path),
+                    str(output),
+                    str(libreoffice_path) if libreoffice_path else "",
+                ],
                 cwd=temporary,
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
@@ -373,6 +411,15 @@ def parse_document_in_subprocess(
                     "PATH": os.environ.get("PATH", ""),
                     "TEMP": str(temporary),
                     "TMP": str(temporary),
+                    **{
+                        key: os.environ[key]
+                        for key in (
+                            "ProgramFiles",
+                            "ProgramFiles(x86)",
+                            "MINDMATE_LIBREOFFICE_PATH",
+                        )
+                        if os.environ.get(key)
+                    },
                 },
             )
             try:

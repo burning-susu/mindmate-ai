@@ -132,12 +132,45 @@ describe('stage 8 global recovery', () => {
     const drawer = await screen.findByRole('dialog', { name: '后台任务' })
     expect(within(drawer).getByText('导入文件')).toBeInTheDocument()
     expect(within(drawer).getByText('阶段：PARSING · 进度：20%')).toBeInTheDocument()
+    expect(within(drawer).getByLabelText('任务排队')).toBeInTheDocument()
     expect(within(drawer).getByRole('button', { name: '取消任务' })).toBeInTheDocument()
 
     fireEvent.click(within(drawer).getByRole('button', { name: '取消任务' }))
     await waitFor(() => expect(calls.filter((call) => call.method === 'POST' && call.url.endsWith('/file-imports/import-task-1/cancel'))).toHaveLength(1))
     await waitFor(() => expect(within(drawer).getAllByText('已取消').length).toBeGreaterThan(0))
+    expect(within(drawer).getByLabelText('任务已取消')).toBeInTheDocument()
     expect(calls.filter((call) => call.method === 'POST' && call.url.endsWith('/file-imports/import-task-1/cancel'))).toHaveLength(1)
+  })
+
+  it('uses status-specific icons for completed, failed, and paused tasks', async () => {
+    window.history.pushState({}, '', '/files')
+    const primaryTask = {
+      task_id: 'status-queued', task_type: 'FILE_IMPORT', status: 'QUEUED', phase: 'QUEUED',
+      progress_percent: 0, failure_code: null, failure_summary: null, updated_at: '2026-09-28T12:00:00Z',
+    }
+    const payload = overview(primaryTask)
+    payload.tasks.recent = [
+      { ...primaryTask, task_id: 'status-complete', status: 'COMPLETED' },
+      { ...primaryTask, task_id: 'status-failed', status: 'FAILED' },
+      { ...primaryTask, task_id: 'status-paused', status: 'PAUSED' },
+    ]
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/system/session')) return response({ status: 'ready' })
+      if (url.endsWith('/api/v1/health')) return response({ status: 'ok', version: '0.1.0' })
+      if (url.includes('/home/overview')) return response(payload)
+      if (url.includes('/api/v1/files')) return response({ items: [], next_cursor: null })
+      if (url.includes('/api/v1/folders') || url.includes('/api/v1/tags')) return response({ items: [] })
+      return response({ status: 'ok' })
+    }))
+
+    render(<BrowserRouter><App /></BrowserRouter>)
+    fireEvent.click(await screen.findByRole('button', { name: /打开全局任务/ }))
+    const drawer = await screen.findByRole('dialog', { name: '后台任务' })
+
+    expect(within(drawer).getByLabelText('任务已完成')).toBeInTheDocument()
+    expect(within(drawer).getByLabelText('任务失败')).toBeInTheDocument()
+    expect(within(drawer).getByLabelText('任务已暂停')).toBeInTheDocument()
   })
 
   it('shows a blocking local service state when the loopback API cannot connect', async () => {

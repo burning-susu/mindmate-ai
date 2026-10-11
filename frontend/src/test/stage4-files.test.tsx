@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { BrowserRouter } from 'react-router-dom'
 
@@ -74,6 +74,62 @@ describe('stage 4 file workspace', () => {
     expect(requestedUrls.filter((url) => url.endsWith('/api/v1/folders')).length).toBeGreaterThan(1)
   })
 
+  it('moves selected files to a folder from all-files view and reports batch errors', async () => {
+    window.history.pushState({}, '', '/files')
+    let moveBody: Record<string, unknown> | null = null
+    const files = [
+      { file_id: 'file-a', display_name: 'a.txt', source_name: 'a.txt', extension: '.txt', document_type: 'TXT', folder_id: null, folder_name: null, status: 'PARSED', content_hash: 'hash-a', byte_size: 10, created_at: '2026-10-10T00:00:00Z', updated_at: '2026-10-10T00:00:00Z', deleted_at: null, purge_after: null, row_version: 1, tags: [], parsed_metadata: null, has_parsed_text: true, content_available: true, parse_failure_stage: null, parse_error_id: null, parse_retry_count: 0, can_reprocess: true },
+    ]
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.includes('/system/session')) return new Response(JSON.stringify({ status: 'ready' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      if (url.endsWith('/api/v1/health')) return new Response(JSON.stringify({ status: 'ok', version: '0.1.0' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      if (url.includes('/api/v1/files?')) return new Response(JSON.stringify({ items: files, next_cursor: null }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      if (url.endsWith('/api/v1/folders')) return new Response(JSON.stringify({ items: [{ folder_id: 'folder-target', parent_folder_id: null, name: '面试题', file_count: 0, row_version: 1, created_at: '2026-10-10T00:00:00Z', updated_at: '2026-10-10T00:00:00Z' }] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      if (url.endsWith('/api/v1/tags')) return new Response(JSON.stringify({ items: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      if (url.endsWith('/api/v1/files/batch') && init?.method === 'POST') {
+        moveBody = JSON.parse(String(init.body)) as Record<string, unknown>
+        return new Response(JSON.stringify({ status: 'ok', items: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      return new Response(JSON.stringify({ status: 'ok', version: '0.1.0' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }))
+
+    render(<BrowserRouter><App /></BrowserRouter>)
+    fireEvent.click(await screen.findByRole('checkbox', { name: '选择 a.txt' }))
+    fireEvent.change(screen.getByRole('combobox', { name: '批量目标文件夹' }), { target: { value: 'folder-target' } })
+    fireEvent.click(screen.getByRole('button', { name: '移动' }))
+
+    await waitFor(() => expect(moveBody).toEqual({ file_ids: ['file-a'], action: 'MOVE', folder_id: 'folder-target' }))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('lets a folder choose any already imported file', async () => {
+    window.history.pushState({}, '', '/files?folder_id=folder-target')
+    let movedIds: unknown = null
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.includes('/system/session')) return new Response(JSON.stringify({ status: 'ready' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      if (url.endsWith('/api/v1/health')) return new Response(JSON.stringify({ status: 'ok', version: '0.1.0' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      if (url.includes('/api/v1/files?')) return new Response(JSON.stringify({ items: [{ file_id: 'file-other', display_name: 'other.md', source_name: 'other.md', extension: '.md', document_type: 'MARKDOWN', folder_id: null, folder_name: null, status: 'PARSED', content_hash: 'hash-other', byte_size: 10, created_at: '2026-10-10T00:00:00Z', updated_at: '2026-10-10T00:00:00Z', deleted_at: null, purge_after: null, row_version: 1, tags: [], parsed_metadata: null, has_parsed_text: true, content_available: true, parse_failure_stage: null, parse_error_id: null, parse_retry_count: 0, can_reprocess: true }], next_cursor: null }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      if (url.endsWith('/api/v1/folders')) return new Response(JSON.stringify({ items: [{ folder_id: 'folder-target', parent_folder_id: null, name: '面试题', file_count: 0, row_version: 1, created_at: '2026-10-10T00:00:00Z', updated_at: '2026-10-10T00:00:00Z' }] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      if (url.endsWith('/api/v1/tags')) return new Response(JSON.stringify({ items: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      if (url.endsWith('/api/v1/files/batch') && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body)) as { file_ids?: unknown }
+        movedIds = body.file_ids
+        return new Response(JSON.stringify({ status: 'ok', items: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      return new Response(JSON.stringify({ status: 'ok', version: '0.1.0' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }))
+
+    render(<BrowserRouter><App /></BrowserRouter>)
+    fireEvent.click(await screen.findByRole('button', { name: '添加已导入文件' }))
+    const picker = await screen.findByRole('region', { name: '添加已导入文件' })
+    fireEvent.click(within(picker).getByRole('checkbox', { name: '选择 other.md' }))
+    fireEvent.click(within(picker).getByRole('button', { name: '移动所选 (1)' }))
+
+    await waitFor(() => expect(movedIds).toEqual(['file-other']))
+  })
+
   it('accepts file drops across the file workspace', async () => {
     window.history.pushState({}, '', '/files')
     let importedName = ''
@@ -96,12 +152,48 @@ describe('stage 4 file workspace', () => {
     expect(workspace).not.toBeNull()
     const droppedFile = new File(['notes'], 'dropped.txt', { type: 'text/plain' })
     const dataTransfer = { files: [droppedFile], types: ['Files'], dropEffect: 'none' }
+    const appShell = document.querySelector('.app-shell')
+    expect(appShell).not.toBeNull()
+    fireEvent.dragEnter(appShell as HTMLElement, { dataTransfer })
+    expect(await screen.findByText('释放文件以导入')).toBeInTheDocument()
+    fireEvent.dragLeave(appShell as HTMLElement, { dataTransfer, relatedTarget: workspace })
+
     fireEvent.dragEnter(workspace as HTMLElement, { dataTransfer })
     expect(await screen.findByText('释放文件以导入')).toBeInTheDocument()
 
     fireEvent.drop(workspace as HTMLElement, { dataTransfer })
     expect(await screen.findByText('1 个已加入，0 个待决策，0 个失败')).toBeInTheDocument()
     expect(importedName).toBe('dropped.txt')
+  })
+
+  it('routes a file dropped on another app page to file import', async () => {
+    window.history.pushState({}, '', '/learning')
+    let importedName = ''
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.includes('/system/session')) return new Response(JSON.stringify({ status: 'ready' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      if (url.endsWith('/api/v1/health')) return new Response(JSON.stringify({ status: 'ok', version: '0.1.0' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      if (url.includes('/api/v1/files?')) return new Response(JSON.stringify({ items: [], next_cursor: null }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      if (url.endsWith('/api/v1/folders') || url.endsWith('/api/v1/tags')) return new Response(JSON.stringify({ items: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      if (url.endsWith('/api/v1/file-imports') && init?.method === 'POST') {
+        importedName = ((init.body as FormData).getAll('files')[0] as File).name
+        return new Response(JSON.stringify({ import_id: 'global-drop-import', task_id: 'global-drop-import', status: 'COMPLETED', phase: 'COMPLETED', progress: 100, items: [{ item_index: 0, original_name: importedName, status: 'IMPORTED', duplicate_status: 'NOT_DUPLICATE', file_id: 'global-drop-file', parse_status: 'PARSED' }] }), { status: 202, headers: { 'Content-Type': 'application/json' } })
+      }
+      if (url.endsWith('/api/v1/file-imports/global-drop-import')) return new Response(JSON.stringify({ import_id: 'global-drop-import', task_id: 'global-drop-import', status: 'COMPLETED', phase: 'COMPLETED', progress: 100, items: [{ item_index: 0, original_name: importedName, status: 'IMPORTED', duplicate_status: 'NOT_DUPLICATE', file_id: 'global-drop-file', parse_status: 'PARSED' }] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      return new Response(JSON.stringify({ status: 'ok', version: '0.1.0' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }))
+
+    render(<BrowserRouter><App /></BrowserRouter>)
+    const appShell = document.querySelector('.app-shell')
+    expect(appShell).not.toBeNull()
+    const droppedFile = new File(['legacy deck'], 'deck.ppt', { type: 'application/vnd.ms-powerpoint' })
+    const dataTransfer = { files: [droppedFile], types: ['Files'], dropEffect: 'none' }
+    fireEvent.dragEnter(appShell as HTMLElement, { dataTransfer })
+    expect(await screen.findByText('释放文件以导入')).toBeInTheDocument()
+
+    fireEvent.drop(appShell as HTMLElement, { dataTransfer })
+    expect(await screen.findByText('1 个已加入，0 个待决策，0 个失败')).toBeInTheDocument()
+    expect(importedName).toBe('deck.ppt')
   })
 
   it('refreshes global and folder counts after trashing a filtered file', async () => {
@@ -138,7 +230,9 @@ describe('stage 4 file workspace', () => {
     expect(allFilesButton.querySelector('small')).toHaveTextContent('3')
     expect(folderCountButton.querySelector('small')).toHaveTextContent('2')
 
-    fireEvent.click(await screen.findByRole('button', { name: '移入回收站 interview.md' }))
+    const trashButton = await screen.findByRole('button', { name: '移入回收站 interview.md' })
+    expect(trashButton.querySelector('svg')).toHaveClass('lucide-trash2')
+    fireEvent.click(trashButton)
     await waitFor(() => expect(allFilesButton.querySelector('small')).toHaveTextContent('2'))
     await waitFor(() => expect(folderCountButton.querySelector('small')).toHaveTextContent('1'))
   })

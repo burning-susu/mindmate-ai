@@ -37,7 +37,12 @@ class FakeJob:
 
 @pytest.mark.parametrize(
     ("document_type", "extension", "export_filter"),
-    [("DOCX", ".docx", "writer_pdf_Export"), ("PPTX", ".pptx", "impress_pdf_Export")],
+    [
+        ("DOCX", ".docx", "writer_pdf_Export"),
+        ("PPT", ".ppt", "impress_pdf_Export"),
+        ("PPTX", ".pptx", "impress_pdf_Export"),
+        ("XLSX", ".xlsx", "calc_pdf_Export"),
+    ],
 )
 def test_office_preview_uses_matching_filter_and_cache(
     tmp_path: Path, monkeypatch, document_type: str, extension: str, export_filter: str

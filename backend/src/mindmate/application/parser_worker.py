@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 import sys
+import tempfile
 import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
@@ -15,6 +18,8 @@ MAX_ARCHIVE_ENTRIES = 10_000
 MAX_ARCHIVE_EXPANDED_SIZE = 200 * 1024 * 1024
 MAX_ARCHIVE_COMPRESSION_RATIO = 100
 MAX_XMIND_CONTENT_SIZE = 20 * 1024 * 1024
+MAX_SPREADSHEET_CELLS = 500_000
+MAX_SPREADSHEET_SHARED_STRINGS = 500_000
 
 
 class ParseFailure(Exception):
@@ -25,7 +30,7 @@ def _append(parts: list[str], locations: list[dict[str, Any]], text: str, **loca
     value = text.strip()
     if not value:
         return
-    current_size = sum(len(part) for part in parts) + max(0, len(parts) - 1)
+    current_size = int(locations[-1]["start"]) + int(locations[-1]["length"]) if locations else 0
     if current_size + len(value) > MAX_TEXT_CHARACTERS:
         raise ParseFailure("解析文本超过安全输出上限。")
     start = current_size
@@ -149,6 +154,177 @@ def _parse_pptx(path: Path) -> dict[str, Any]:
         },
         "locations": locations,
     }
+
+
+def _parse_ppt(path: Path, executable_value: str) -> dict[str, Any]:
+    from pypdf import PdfReader
+
+    executable = Path(executable_value) if executable_value else None
+    if executable is None or not executable.is_file():
+        raise ParseFailure("缺少本地 LibreOffice，无法解析旧版 PowerPoint 文件。")
+    with tempfile.TemporaryDirectory(prefix="mindmate-ppt-parse-") as temporary:
+        workdir = Path(temporary)
+        source = workdir / "source.ppt"
+        source.write_bytes(path.read_bytes())
+        profile = workdir / "profile"
+        profile.mkdir()
+        command = [
+            str(executable),
+            "--headless",
+            "--nologo",
+            "--nodefault",
+            "--nolockcheck",
+            "--norestore",
+            f"-env:UserInstallation={profile.resolve().as_uri()}",
+            "--convert-to",
+            "pdf:impress_pdf_Export",
+            "--outdir",
+            str(workdir),
+            str(source),
+        ]
+        env = {
+            key: os.environ[key]
+            for key in ("SystemRoot", "WINDIR", "PATH", "USERPROFILE", "APPDATA", "LOCALAPPDATA")
+            if os.environ.get(key)
+        }
+        env["TEMP"] = str(workdir)
+        env["TMP"] = str(workdir)
+        process: subprocess.Popen[bytes] | None = None
+        try:
+            process = subprocess.Popen(
+                command,
+                cwd=workdir,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                env=env,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            process.wait(timeout=25)
+        except subprocess.TimeoutExpired as exc:
+            if process is not None:
+                process.kill()
+                process.wait()
+            raise ParseFailure("旧版 PowerPoint 转换超时。") from exc
+        except OSError as exc:
+            raise ParseFailure("无法启动旧版 PowerPoint 转换器。") from exc
+        pdf_path = workdir / "source.pdf"
+        if process is None or process.returncode != 0 or not pdf_path.is_file():
+            raise ParseFailure("旧版 PowerPoint 无法转换为可解析页面。")
+        if pdf_path.stat().st_size > 200 * 1024 * 1024:
+            raise ParseFailure("旧版 PowerPoint 转换结果超过安全上限。")
+        reader = PdfReader(pdf_path, strict=True)
+        if reader.is_encrypted or len(reader.pages) > MAX_PAGES:
+            raise ParseFailure("旧版 PowerPoint 页数超过安全上限或文件已加密。")
+        parts: list[str] = []
+        locations: list[dict[str, Any]] = []
+        for page_number, page in enumerate(reader.pages, start=1):
+            _append(parts, locations, page.extract_text() or "", slide=page_number)
+        return {
+            "text": "\n".join(parts),
+            "metadata": {"slide_count": len(reader.pages), "character_count": sum(map(len, parts))},
+            "locations": locations,
+        }
+
+
+def _parse_xlsx(path: Path) -> dict[str, Any]:
+    def local_name(tag: str) -> str:
+        return tag.rsplit("}", 1)[-1]
+
+    try:
+        with zipfile.ZipFile(path) as archive:
+            entries = archive.infolist()
+            names = [item.filename.replace("\\", "/") for item in entries]
+            if len(entries) > MAX_ARCHIVE_ENTRIES or len(names) != len(set(names)):
+                raise ParseFailure("Excel 文件包条目数量超限或存在重复条目。")
+            expanded = sum(item.file_size for item in entries)
+            compressed = sum(max(1, item.compress_size) for item in entries)
+            if (
+                expanded > MAX_ARCHIVE_EXPANDED_SIZE
+                or expanded > compressed * MAX_ARCHIVE_COMPRESSION_RATIO
+            ):
+                raise ParseFailure("Excel 文件包展开体积或压缩比例超过安全上限。")
+            name_set = set(names)
+            shared_strings: list[str] = []
+            if "xl/sharedStrings.xml" in name_set:
+                root = ET.fromstring(archive.read("xl/sharedStrings.xml"))
+                for item in root:
+                    if local_name(item.tag) != "si":
+                        continue
+                    shared_strings.append(
+                        "".join(
+                            text.text or "" for text in item.iter() if local_name(text.tag) == "t"
+                        )
+                    )
+                    if len(shared_strings) > MAX_SPREADSHEET_SHARED_STRINGS:
+                        raise ParseFailure("Excel 共享字符串数量超过安全上限。")
+            workbook = ET.fromstring(archive.read("xl/workbook.xml"))
+            relationships: dict[str, str] = {}
+            if "xl/_rels/workbook.xml.rels" in name_set:
+                rel_root = ET.fromstring(archive.read("xl/_rels/workbook.xml.rels"))
+                for relation in rel_root:
+                    if local_name(relation.tag) == "Relationship":
+                        target = relation.attrib.get("Target", "")
+                        if target.startswith("/") or ".." in Path(target).parts:
+                            continue
+                        relationships[relation.attrib.get("Id", "")] = "xl/" + target.lstrip("/")
+            sheets = []
+            for sheet in workbook.iter():
+                if local_name(sheet.tag) == "sheet":
+                    rel_id = next(
+                        (value for key, value in sheet.attrib.items() if key.endswith("}id")), ""
+                    )
+                    target = relationships.get(rel_id)
+                    if target in name_set:
+                        sheets.append((sheet.attrib.get("name", "工作表"), target))
+            parts: list[str] = []
+            locations: list[dict[str, Any]] = []
+            cell_count = 0
+            for sheet_index, (sheet_name, target) in enumerate(sheets, start=1):
+                root = ET.fromstring(archive.read(target))
+                for cell in (node for node in root.iter() if local_name(node.tag) == "c"):
+                    cell_count += 1
+                    if cell_count > MAX_SPREADSHEET_CELLS:
+                        raise ParseFailure("Excel 单元格数量超过安全上限。")
+                    address = cell.attrib.get("r", "")
+                    cell_type = cell.attrib.get("t", "")
+                    value_node = next((node for node in cell if local_name(node.tag) == "v"), None)
+                    if cell_type == "inlineStr":
+                        value = "".join(
+                            node.text or "" for node in cell.iter() if local_name(node.tag) == "t"
+                        )
+                    elif value_node is None:
+                        continue
+                    elif cell_type == "s":
+                        try:
+                            value = shared_strings[int(value_node.text or "")]
+                        except (ValueError, IndexError):
+                            continue
+                    else:
+                        value = value_node.text or ""
+                    _append(
+                        parts,
+                        locations,
+                        value,
+                        sheet=sheet_index,
+                        sheet_name=sheet_name,
+                        cell=address,
+                    )
+            if not sheets:
+                raise ParseFailure("Excel 工作簿没有可读取的工作表。")
+            text = "\n".join(parts)
+            return {
+                "text": text,
+                "metadata": {
+                    "sheet_count": len(sheets),
+                    "xlsx_sheets": [name for name, _ in sheets],
+                    "cell_count": cell_count,
+                    "character_count": len(text),
+                },
+                "locations": locations,
+            }
+    except (OSError, zipfile.BadZipFile, ET.ParseError, KeyError, RuntimeError) as exc:
+        raise ParseFailure("Excel 文件包损坏或内容无法读取。") from exc
 
 
 def _title_text(value: Any) -> str:
@@ -329,16 +505,16 @@ def _parse_xmind(path: Path) -> dict[str, Any]:
 
 
 def main() -> int:
-    if len(sys.argv) != 4:
+    if len(sys.argv) != 5:
         return 2
-    document_type, source_value, output_value = sys.argv[1:]
+    document_type, source_value, output_value, libreoffice_value = sys.argv[1:]
     source = Path(source_value).resolve(strict=True)
     output = Path(output_value).resolve()
-    parsers = {"PDF": _parse_pdf, "DOCX": _parse_docx, "PPTX": _parse_pptx, "XMIND": _parse_xmind}
+    parsers = {"PDF": _parse_pdf, "DOCX": _parse_docx, "PPT": _parse_ppt, "PPTX": _parse_pptx, "XLSX": _parse_xlsx, "XMIND": _parse_xmind}
     parser = parsers.get(document_type)
     if parser is None:
         raise ParseFailure("解析类型不受支持。")
-    payload = parser(source)
+    payload = _parse_ppt(source, libreoffice_value) if document_type == "PPT" else parser(source)
     output.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
     return 0
 

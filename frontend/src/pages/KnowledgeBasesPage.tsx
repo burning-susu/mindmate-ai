@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { ArrowRight, BookOpen, Plus, RefreshCw } from 'lucide-react'
+import { ArrowRight, BookOpen, LoaderCircle, Plus } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import { apiRequest } from '../api/client'
@@ -31,7 +31,7 @@ export default function KnowledgeBasesPage() {
         <Link className="primary-button" to="/knowledge-bases/new"><Plus size={16} aria-hidden="true" />新建知识库</Link>
       </div>
 
-      {query.isLoading && <div className="empty-state"><RefreshCw size={22} aria-hidden="true" /><strong>正在加载知识库</strong></div>}
+      {query.isLoading && <div className="empty-state"><LoaderCircle className="spin" size={22} aria-hidden="true" /><strong>正在加载知识库</strong></div>}
       {query.isError && <div className="empty-state" role="alert"><strong>知识库加载失败</strong><span>{query.error instanceof Error ? query.error.message : '请稍后重试。'}</span><button className="quiet-button" type="button" onClick={() => void query.refetch()}>重试</button></div>}
       {!query.isLoading && !query.isError && query.data?.items.length === 0 && <div className="empty-state"><BookOpen size={26} aria-hidden="true" /><strong>还没有知识库</strong><span>创建知识库后，可从已导入文件中批量添加成员。</span><Link className="primary-button" to="/knowledge-bases/new"><Plus size={16} aria-hidden="true" />创建第一个知识库</Link></div>}
       <div className="knowledge-grid">

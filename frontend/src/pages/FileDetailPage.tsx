@@ -142,7 +142,7 @@ export default function FileDetailPage() {
       </div>
       <div className="detail-grid">
         <section className="detail-section">
-          <h2>{file.document_type === 'PDF' ? 'PDF 原版式预览' : file.document_type === 'DOCX' ? 'Word 原版式预览' : file.document_type === 'PPTX' ? '幻灯片原版式预览' : file.document_type === 'XMIND' ? '思维导图预览' : '文档预览'}</h2>
+          <h2>{file.document_type === 'PDF' ? 'PDF 原版式预览' : file.document_type === 'DOCX' ? 'Word 原版式预览' : ['PPT', 'PPTX'].includes(file.document_type) ? '幻灯片原版式预览' : file.document_type === 'XLSX' ? 'Excel 原版式预览' : file.document_type === 'XMIND' ? '思维导图预览' : '文档预览'}</h2>
           {previewQuery.isLoading ? <div className="detail-empty">正在加载文件预览…</div> : previewQuery.isError ? <div className="detail-empty">文件预览加载失败。</div> : file.document_type === 'MARKDOWN' ? previewQuery.data?.preview_available ? <MarkdownPreview source={previewQuery.data.text ?? ''} /> : <div className="detail-empty"><FileText size={20} aria-hidden="true" /><span>当前文件还没有可用的解析文本。</span></div> : <DocumentPreview fileId={file.file_id} documentType={file.document_type} contentAvailable={file.content_available} previewAvailable={previewQuery.data?.preview_available ?? false} text={previewQuery.data?.text ?? ''} metadata={previewQuery.data?.metadata} />}
         </section>
         <section className="detail-section">

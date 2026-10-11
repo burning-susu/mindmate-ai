@@ -1,4 +1,4 @@
-import { Ban, CheckCircle2, Clock3, ListTodo, LoaderCircle, X } from 'lucide-react'
+import { CheckCircle2, CircleAlert, CirclePause, CircleX, Clock3, ListTodo, LoaderCircle, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 
@@ -47,6 +47,19 @@ const TASK_TYPE_LABEL: Record<string, string> = {
 
 function taskStatusLabel(status: string): string {
   return TASK_STATUS_LABEL[status] ?? status
+}
+
+function TaskStatusIcon({ status }: { status: string }) {
+  if (status === 'RUNNING') return <LoaderCircle className="spin" size={15} aria-label="任务运行中" />
+  if (status === 'PAUSED') return <CirclePause size={15} aria-label="任务已暂停" />
+  if (status === 'CANCELLED') return <CircleX size={15} aria-label="任务已取消" />
+  if (status === 'SUCCEEDED' || status === 'COMPLETED') {
+    return <CheckCircle2 size={15} aria-label="任务已完成" />
+  }
+  if (status === 'PARTIAL' || status === 'FAILED' || status === 'INTERRUPTED') {
+    return <CircleAlert size={15} aria-label={`任务${taskStatusLabel(status)}`} />
+  }
+  return <Clock3 size={15} aria-label={`任务${taskStatusLabel(status)}`} />
 }
 
 function taskTypeLabel(taskType: string): string {
@@ -200,7 +213,7 @@ export default function GlobalTaskDrawer() {
                           <strong>{taskTypeLabel(task.task_type)}</strong>
                           <span>{taskStatusLabel(task.status)}</span>
                         </div>
-                        {task.status === 'RUNNING' ? <LoaderCircle className="spin" size={15} aria-hidden="true" /> : <Clock3 size={15} aria-hidden="true" />}
+                        <TaskStatusIcon status={task.status} />
                       </div>
                       <p className="global-task-panel__meta">阶段：{task.phase || '未记录'} · 进度：{taskProgressText(task)}</p>
                       {typeof task.progress_percent === 'number' ? <progress max="100" value={task.progress_percent} aria-label={`${taskTypeLabel(task.task_type)}进度`} /> : null}
@@ -222,7 +235,7 @@ export default function GlobalTaskDrawer() {
                           disabled={Boolean(cancellingId)}
                           onClick={() => void cancelTask(task)}
                         >
-                          <Ban size={14} aria-hidden="true" />
+                          <CircleX size={14} aria-hidden="true" />
                           {cancellingId === task.task_id ? '正在取消' : '取消任务'}
                         </button>
                       ) : null}

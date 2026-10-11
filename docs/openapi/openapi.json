@@ -4639,6 +4639,142 @@
         }
       }
     },
+    "/api/v1/files/{file_id}/ppt-preview": {
+      "get": {
+        "tags": [
+          "files"
+        ],
+        "summary": "File Ppt Preview",
+        "operationId": "file_ppt_preview_api_v1_files__file_id__ppt_preview_get",
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "File Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PPT 的本地 PDF 版式预览。",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/files/{file_id}/xlsx-preview": {
+      "get": {
+        "tags": [
+          "files"
+        ],
+        "summary": "File Xlsx Preview",
+        "operationId": "file_xlsx_preview_api_v1_files__file_id__xlsx_preview_get",
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "File Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "XLSX 第一个工作表的沙箱 HTML 预览。",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/files/{file_id}/xlsx-preview/{sheet_index}": {
+      "get": {
+        "tags": [
+          "files"
+        ],
+        "summary": "File Xlsx Sheet Preview",
+        "operationId": "file_xlsx_sheet_preview_api_v1_files__file_id__xlsx_preview__sheet_index__get",
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "File Id"
+            }
+          },
+          {
+            "name": "sheet_index",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Sheet Index"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "XLSX 指定工作表的沙箱 HTML 预览。",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/files/{file_id}/docx-preview": {
       "get": {
         "tags": [

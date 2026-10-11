@@ -1369,6 +1369,15 @@ export interface operations {
   "GET /api/v1/files/{file_id}/pptx-preview": {
     operationId: "file_pptx_preview_api_v1_files__file_id__pptx_preview_get"
   };
+  "GET /api/v1/files/{file_id}/ppt-preview": {
+    operationId: "file_ppt_preview_api_v1_files__file_id__ppt_preview_get"
+  };
+  "GET /api/v1/files/{file_id}/xlsx-preview": {
+    operationId: "file_xlsx_preview_api_v1_files__file_id__xlsx_preview_get"
+  };
+  "GET /api/v1/files/{file_id}/xlsx-preview/{sheet_index}": {
+    operationId: "file_xlsx_sheet_preview_api_v1_files__file_id__xlsx_preview__sheet_index__get"
+  };
   "GET /api/v1/files/{file_id}/docx-preview": {
     operationId: "file_docx_preview_api_v1_files__file_id__docx_preview_get"
   };

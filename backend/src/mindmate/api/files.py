@@ -44,7 +44,11 @@ from mindmate.application.files import (
     validate_managed_content_path,
     validate_upload_mime,
 )
-from mindmate.application.pptx_preview import OfficePreviewError, get_or_create_office_preview
+from mindmate.application.pptx_preview import (
+    OfficePreviewError,
+    get_or_create_office_preview,
+    get_or_create_xlsx_sheet_preview,
+)
 from mindmate.application.source_snapshots import purge_source_snapshots_for_files
 from mindmate.application.tasks import (
     add_event,
@@ -1454,12 +1458,14 @@ def _office_preview_response(
         )
     except OfficePreviewError as exc:
         raise FileApiError(exc.code, exc.detail, exc.status) from exc
-    parsed = read_parsed_text(settings, record.file_id) if document_type == "PPTX" else None
+    parsed = (
+        read_parsed_text(settings, record.file_id) if document_type in {"PPT", "PPTX"} else None
+    )
     metadata = parsed.get("metadata") if parsed else None
     expected_pages = metadata.get("slide_count") if isinstance(metadata, dict) else None
     if isinstance(expected_pages, int) and expected_pages > 0 and page_count != expected_pages:
         raise FileApiError(
-            "PPTX_RENDER_PAGE_COUNT_MISMATCH",
+            f"{document_type}_RENDER_PAGE_COUNT_MISMATCH",
             "转换后的幻灯片页数与原文件不一致，请打开原文查看。",
             422,
         )
@@ -1494,6 +1500,105 @@ def file_pptx_preview(
     settings: Settings = Depends(get_settings),
 ) -> FileResponse:
     return _office_preview_response(_get_file_or_404(session, file_id), "PPTX", session, settings)
+
+
+@router.get(
+    "/files/{file_id}/ppt-preview",
+    tags=["files"],
+    response_class=FileResponse,
+    responses={
+        200: {
+            "description": "PPT 的本地 PDF 版式预览。",
+            "content": {"application/pdf": {"schema": {"type": "string", "format": "binary"}}},
+        }
+    },
+)
+def file_ppt_preview(
+    file_id: str,
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> FileResponse:
+    return _office_preview_response(_get_file_or_404(session, file_id), "PPT", session, settings)
+
+
+def _xlsx_sheet_preview_response(
+    file_id: str,
+    sheet_index: int,
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> FileResponse:
+    record = _get_file_or_404(session, file_id)
+    if record.document_type != "XLSX":
+        raise FileApiError("FILE_TYPE_UNSUPPORTED", "文件类型与预览格式不匹配。", 404)
+    parsed = read_parsed_text(settings, record.file_id)
+    metadata = parsed.get("metadata") if parsed else None
+    sheets = metadata.get("xlsx_sheets") if isinstance(metadata, dict) else None
+    sheet_count = metadata.get("sheet_count") if isinstance(metadata, dict) else None
+    if not isinstance(sheets, list) and isinstance(sheet_count, int) and sheet_count > 0:
+        sheets = [f"工作表 {index + 1}" for index in range(sheet_count)]
+    if not isinstance(sheets, list) or sheet_index < 0 or sheet_index >= len(sheets):
+        raise FileApiError("XLSX_PREVIEW_SHEET_NOT_FOUND", "工作表不存在或尚未解析。", 404)
+    content = session.get(ContentObject, record.content_object_id)
+    if content is None or content.storage_state != "READY":
+        raise FileApiError("FILE_CONTENT_UNAVAILABLE", "Excel 原文件不可用。", 409)
+    source = _record_content_path(session, settings, record)
+    try:
+        preview_path = get_or_create_xlsx_sheet_preview(
+            source, content.sha256, sheet_index, settings
+        )
+    except OfficePreviewError as exc:
+        raise FileApiError(exc.code, exc.detail, exc.status) from exc
+    response = FileResponse(
+        preview_path,
+        media_type="text/html",
+        content_disposition_type="inline",
+    )
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Cache-Control"] = "private, max-age=300"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:; "
+        "base-uri 'none'; form-action 'none'; frame-ancestors 'self'; sandbox"
+    )
+    return response
+
+
+@router.get(
+    "/files/{file_id}/xlsx-preview",
+    tags=["files"],
+    response_class=FileResponse,
+    responses={
+        200: {
+            "description": "XLSX 第一个工作表的沙箱 HTML 预览。",
+            "content": {"text/html": {"schema": {"type": "string"}}},
+        }
+    },
+)
+def file_xlsx_preview(
+    file_id: str,
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> FileResponse:
+    return _xlsx_sheet_preview_response(file_id, 0, session, settings)
+
+
+@router.get(
+    "/files/{file_id}/xlsx-preview/{sheet_index}",
+    tags=["files"],
+    response_class=FileResponse,
+    responses={
+        200: {
+            "description": "XLSX 指定工作表的沙箱 HTML 预览。",
+            "content": {"text/html": {"schema": {"type": "string"}}},
+        }
+    },
+)
+def file_xlsx_sheet_preview(
+    file_id: str,
+    sheet_index: int,
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> FileResponse:
+    return _xlsx_sheet_preview_response(file_id, sheet_index, session, settings)
 
 
 @router.get(

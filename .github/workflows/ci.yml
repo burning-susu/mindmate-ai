@@ -6,7 +6,32 @@ on:
   pull_request:
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+      backend: ${{ steps.filter.outputs.backend }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: filter
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          if ($env:EVENT_NAME -eq 'pull_request') {
+            $baseSha = $env:PR_BASE
+          } else {
+            $baseSha = $env:PUSH_BEFORE
+          }
+          pwsh -File scripts/detect-ci-changes.ps1 -BaseSha $baseSha -HeadSha $env:HEAD_SHA
+
   frontend:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
     runs-on: windows-latest
     defaults:
       run:
@@ -27,6 +52,8 @@ jobs:
       - run: npm run build
 
   backend:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: windows-latest
     defaults:
       run:

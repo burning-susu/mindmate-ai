@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, BookOpen, FilePlus2, FileUp, GraduationCap, MessageSquare, RefreshCw, Save, Trash2, X } from 'lucide-react'
+import { ArrowLeft, BookOpen, FilePlus2, FileUp, GraduationCap, LoaderCircle, MessageSquare, Save, Trash2, X } from 'lucide-react'
 import { v7 as uuidv7 } from 'uuid'
 import { type ChangeEvent, type FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
@@ -222,13 +222,13 @@ function MemberManager({ item }: { item: KnowledgeBaseItem }) {
   }
 
   return <section className="detail-section knowledge-members"><div className="section-heading"><div><h2>资料成员</h2><p>{knowledgeBaseMemberDescription(item.status)}</p></div><span className={`file-status ${knowledgeBaseStatusClass(item.status)}`}>{knowledgeBaseStatusLabel(item.status)}</span></div>
-    {membersQuery.isLoading && <div className="detail-empty"><RefreshCw size={20} aria-hidden="true" />正在加载成员</div>}
+    {membersQuery.isLoading && <div className="detail-empty"><LoaderCircle className="spin" size={20} aria-hidden="true" />正在加载成员</div>}
     {membersQuery.isError && <div className="inline-error" role="alert">成员加载失败。<button className="quiet-button" type="button" onClick={() => void membersQuery.refetch()}>重试</button></div>}
     {(membersQuery.data?.items?.length ?? 0) === 0 && !membersQuery.isLoading && <div className="detail-empty"><BookOpen size={22} aria-hidden="true" /><span>尚未加入任何文件。</span></div>}
     {(membersQuery.data?.items?.length ?? 0) > 0 && <div className="member-list">{membersQuery.data?.items?.map((member) => <div className="member-row" key={member.file_id}><div className="member-row__main"><strong>{member.display_name}</strong><span>{member.document_type} · {fileStatusLabels[member.file_status] ?? member.file_status}</span></div><div className="member-row__state"><span className="file-status file-status--queued">{member.index_state === 'PENDING' ? '待建立索引' : member.index_state}</span><small>{member.unavailable_reason}</small></div><button className="icon-button" type="button" title="移出知识库" aria-label={`移出知识库 ${member.display_name}`} disabled={removeMutation.isPending} onClick={() => removeMutation.mutate(member.file_id)}><X size={16} aria-hidden="true" /></button></div>)}</div>}
 
     <div className="member-picker"><div className="section-heading"><div><h3>添加已导入文件</h3><p>可批量选择；解析中或解析失败的文件会保留真实不可用状态。</p></div><div className="heading-actions"><button className="quiet-button" type="button" onClick={() => uploadInputRef.current?.click()} disabled={uploadMutation.isPending || importRunning}><FileUp size={15} aria-hidden="true" />上传新文件</button><button className="primary-button" type="button" disabled={selected.length === 0 || addMutation.isPending || taskRunning} onClick={() => addMutation.mutate()}><FilePlus2 size={16} aria-hidden="true" />加入 {selected.length > 0 ? `${selected.length} 个` : ''}</button></div></div>
-      <input ref={uploadInputRef} className="visually-hidden" type="file" multiple accept=".pdf,.docx,.pptx,.xmind,.txt,.md,.markdown" aria-label="上传新文件" onChange={selectUploadFiles} />
+      <input ref={uploadInputRef} className="visually-hidden" type="file" multiple accept=".pdf,.docx,.ppt,.pptx,.xlsx,.xmind,.txt,.md,.markdown" aria-label="上传新文件" onChange={selectUploadFiles} />
       {filesQuery.isLoading && <span className="member-picker__hint">正在加载文件…</span>}
       {!filesQuery.isLoading && candidates.length === 0 && <span className="member-picker__hint">没有可添加的已导入文件。</span>}
       <div className="member-options">{candidates.map((file) => <label key={file.file_id}><input type="checkbox" checked={selected.includes(file.file_id)} onChange={() => setSelected((current) => current.includes(file.file_id) ? current.filter((id) => id !== file.file_id) : [...current, file.file_id])} /><span><strong>{file.display_name}</strong><small>{file.document_type} · {fileStatusLabels[file.status] ?? file.status}</small></span></label>)}</div>

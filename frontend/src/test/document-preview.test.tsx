@@ -21,7 +21,7 @@ describe('DocumentPreview', () => {
   it('shows the local original PDF layout even when text extraction is unavailable', () => {
     render(<DocumentPreview fileId="pdf-1" documentType="PDF" contentAvailable previewAvailable={false} text="" metadata={null} />)
 
-    expect(screen.getByTitle('PDF 原版式预览')).toHaveAttribute('src', '/api/v1/files/pdf-1/content#navpanes=0&zoom=100')
+    expect(screen.getByTitle('PDF 原版式预览')).toHaveAttribute('src', '/api/v1/files/pdf-1/content#navpanes=0&zoom=page-fit')
     expect(screen.getByText(/扫描版文字识别暂不支持/)).toBeInTheDocument()
   })
 
@@ -33,8 +33,8 @@ describe('DocumentPreview', () => {
     render(<DocumentPreview fileId="docx-1" documentType="DOCX" contentAvailable previewAvailable text={'标题\n正文内容\n项目\t结果\nA\t通过'} metadata={{ paragraph_count: 2, table_count: 1 }} />)
 
     expect(screen.getByRole('status')).toHaveTextContent('正在转换文档预览')
-    expect(await screen.findByTitle('Word 原版式预览')).toHaveAttribute('src', 'blob:docx-preview#navpanes=0&zoom=100')
-    expect(screen.getByText('Word 文档 · 本地转换为 PDF 原版式预览')).toBeInTheDocument()
+    expect(await screen.findByTitle('Word 原版式预览')).toHaveAttribute('src', 'blob:docx-preview#navpanes=0&zoom=page-width')
+    expect(screen.getByText('Word 文档 · 自动适配预览区域')).toBeInTheDocument()
     expect(screen.getByText('查看提取文本')).toBeInTheDocument()
     expect(screen.queryByRole('cell', { name: '通过' })).not.toBeInTheDocument()
   })
@@ -47,8 +47,8 @@ describe('DocumentPreview', () => {
     render(<DocumentPreview fileId="pptx-1" documentType="PPTX" contentAvailable previewAvailable text={'标题\n要点一\n要点二'} metadata={{ slide_count: 2 }} />)
 
     expect(screen.getByRole('status')).toHaveTextContent('正在转换文档预览')
-    expect(await screen.findByTitle('PowerPoint 原版式预览')).toHaveAttribute('src', 'blob:pptx-preview#navpanes=0&zoom=100')
-    expect(screen.getByText('共 2 张幻灯片 · 本地转换为 PDF 预览')).toBeInTheDocument()
+    expect(await screen.findByTitle('PowerPoint 原版式预览')).toHaveAttribute('src', 'blob:pptx-preview#navpanes=0&zoom=page-fit')
+    expect(screen.getByText('共 2 张幻灯片 · 自动适配预览区域')).toBeInTheDocument()
     expect(screen.getByText('查看提取文本')).toBeInTheDocument()
     expect(screen.queryByText('文本块 1')).not.toBeInTheDocument()
   })
@@ -60,6 +60,34 @@ describe('DocumentPreview', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('无法生成幻灯片版式预览')
     expect(screen.queryByTitle('PowerPoint 原版式预览')).not.toBeInTheDocument()
     expect(screen.getByText('查看提取文本')).toBeInTheDocument()
+  })
+
+  it.each([
+    ['PPT', 'deck-old', 'PowerPoint 原版式预览', '共 2 张幻灯片 · 自动适配预览区域'],
+  ] as const)('renders %s as its converted original-layout PDF', async (documentType, fileId, title, description) => {
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => `blob:${documentType}`) })
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
+    apiRequestBlobMock.mockResolvedValue(new Blob(['%PDF-fixture'], { type: 'application/pdf' }))
+    render(<DocumentPreview fileId={fileId} documentType={documentType} contentAvailable previewAvailable text="提取的辅助文本" metadata={{ slide_count: 2, sheet_count: 3 }} />)
+
+    expect(await screen.findByTitle(title)).toHaveAttribute('src', `blob:${documentType}#navpanes=0&zoom=page-fit`)
+    expect(screen.getByText(description)).toBeInTheDocument()
+    expect(apiRequestBlobMock).toHaveBeenCalledWith(`/api/v1/files/${fileId}/${documentType.toLowerCase()}-preview`, expect.any(Object))
+    expect(screen.getByText('查看提取文本')).toBeInTheDocument()
+  })
+
+  it('renders XLSX as a sandboxed worksheet and switches sheets', async () => {
+    apiRequestBlobMock.mockResolvedValue(new Blob(['<html><body><table></table></body></html>'], { type: 'text/html' }))
+    render(<DocumentPreview fileId="xlsx-1" documentType="XLSX" contentAvailable previewAvailable text="A1\tkey" metadata={{ sheet_count: 2, xlsx_sheets: ['翻译表', '术语表'] }} />)
+
+    const frame = await screen.findByTitle('翻译表 Excel 原版式预览')
+    expect(frame).toHaveAttribute('src', '/api/v1/files/xlsx-1/xlsx-preview/0')
+    expect(frame).toHaveAttribute('sandbox', '')
+    expect(screen.getByRole('tab', { name: '翻译表' })).toHaveAttribute('aria-selected', 'true')
+    fireEvent.click(screen.getByRole('tab', { name: '术语表' }))
+
+    expect(await screen.findByTitle('术语表 Excel 原版式预览')).toHaveAttribute('src', '/api/v1/files/xlsx-1/xlsx-preview/1')
+    expect(apiRequestBlobMock).toHaveBeenCalledWith('/api/v1/files/xlsx-1/xlsx-preview/1', expect.any(Object))
   })
 
   it('prefers the embedded native XMind preview and falls back to the topic tree', () => {

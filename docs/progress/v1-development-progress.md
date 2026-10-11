@@ -809,3 +809,11 @@
 - 证据：前端全量 `16 files / 84 tests passed`、typecheck、lint、build 通过；后端阶段 4 文件 `13 passed`、阶段 5 知识库 `13 passed`；Ruff、compileall、`git diff --check` 通过。报告为 `docs/test-reports/stage-77-knowledge-base-intake.md`，变更记录为 `docs/project/changes/CHG-20260929-KNOWLEDGE-BASE-INTAKE.md`。
 - 状态边界：`KNOWLEDGE_BASE_INTAKE_CODE/FRONTEND/BACKEND=PASS`；普通浏览器页面未取得，`KNOWLEDGE_BASE_INTAKE_BROWSER=BROWSER_PARTIAL`；`DEMO_STABLE=PASS` 仅沿用第 42/64 批，`STAGE8_FULL_V1=PARTIAL`。没有真实 Key、真实 Provider、模型下载或费用。
 - 下一批唯一优先主题：普通 Windows Chrome/Edge Guest profile 复测建库空库/已有文件/本地文件/混合选择、复用/另存/跳过、刷新恢复、部分失败和索引未就绪提示，记录对象 ID、URL、任务 ID、请求次数和截图，不把自动化证据冒充页面验收。
+
+### 第九十批：旧版 PPT 与 XLSX 原版式支持（用户测试跟进）
+
+- 变更：按用户明确要求增加 `.ppt`、`.xlsx`。上传校验区分旧式 OLE PPT、扩展名误标为 `.ppt` 的 PPTX ZIP 包与 XLSX OOXML；PPT 在受限解析子进程中由 LibreOffice Impress 转 PDF 并提取页文本，XLSX 用标准库读取共享字符串、工作表及单元格定位。PPT 详情保持 PDF 版式预览；XLSX 改为每工作表一个 HTML 表格沙箱预览，提供工作表切换和折叠提取文本。
+- 用户测试反馈：拖放文件时若当前页不是文件列表或落在列表内容以外，原监听区域不会收到事件；XLSX 打印设置生成 50 页纵向 PDF，列被拆分且屏幕视图比例未保留。已将拖放覆盖扩展到应用内容区，并在其他路由跳转到文件页继续导入；HTML 预览限制 20 MiB，拒绝脚本/事件处理器/外部资源。
+- 自动化：后端文件格式/预览/阶段 4 定向测试 `33 passed`；Ruff、定向 Pyright `0 errors`、compileall 通过。前端全量 `18 files / 99 tests passed`，typecheck、lint、production build 通过。OpenAPI 3.1 为 `119 schemas / 128 operations`，生成前端类型同步。
+- 真实样本：桌面样本以 `.ppt` 扩展名保存为 PPTX ZIP 容器；修正后 API 导入/隔离解析返回 `PARSED`。旧版 PPT 5 页解析 smoke 证据沿用；XLSX 解析 1 个工作表、3318 个单元格，HTML 预览生成 682,137 字节、474 行/3,318 个单元格表格，API 返回 `200 text/html` 并带 CSP sandbox。只记录结构计数，不输出工作簿正文；原件未被修改。
+- 状态：代码、真实 API 样本和自动化通过；新服务运行于 `127.0.0.1:5175` / API `8002`，数据目录隔离为 `build/mindmate-office-format-test`。普通浏览器截图验收未执行，Computer Use 初始化被审批服务 `429` 限流。阶段 8 仍 `PARTIAL`，完整 V1 状态不因本批改变。变更记录：`docs/project/changes/CHG-20261010-OFFICE-FORMATS.md`。

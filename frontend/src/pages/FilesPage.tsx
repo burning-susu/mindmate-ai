@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { FileUp, Folder, FolderMinus, FolderPlus, MoreHorizontal, Plus, Search, Tag as TagIcon, Trash2, X } from 'lucide-react'
+import { FilePlus2, FileUp, Folder, FolderMinus, FolderPlus, Plus, Search, Tag as TagIcon, Trash2, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 
@@ -26,6 +26,8 @@ type ImportItem = {
   parse_status?: string | null
 }
 type ImportResponse = { import_id: string; status: string; phase?: string | null; progress?: number | null; items: ImportItem[] }
+
+const UNCATEGORIZED_FOLDER = '__uncategorized__'
 
 const statusLabels: Record<string, string> = {
   PARSED: '已解析',
@@ -79,6 +81,12 @@ export default function FilesPage() {
   const [batchFolderId, setBatchFolderId] = useState('')
   const [batchTagId, setBatchTagId] = useState('')
   const [selected, setSelected] = useState<string[]>([])
+  const [existingPickerOpen, setExistingPickerOpen] = useState(false)
+  const [existingSearch, setExistingSearch] = useState('')
+  const [existingCursors, setExistingCursors] = useState<Array<string | null>>([null])
+  const [existingPageIndex, setExistingPageIndex] = useState(0)
+  const [existingSelected, setExistingSelected] = useState<string[]>([])
+  const [batchError, setBatchError] = useState<string | null>(null)
   const [dragging, setDragging] = useState(false)
   const [importResult, setImportResult] = useState<ImportResponse | null>(null)
   const [newFolderName, setNewFolderName] = useState('')
@@ -100,6 +108,17 @@ export default function FilesPage() {
       const data = query.state.data as FileListResponse | undefined
       return data?.items.some((file) => file.status === 'QUEUED' || file.status === 'PARSING') ? 1000 : false
     },
+  })
+  const existingFilesQuery = useQuery({
+    queryKey: ['folder-existing-files', existingSearch, existingCursors[existingPageIndex]],
+    queryFn: () => {
+      const params = new URLSearchParams({ limit: '100', sort: 'name' })
+      if (existingSearch.trim()) params.set('q', existingSearch.trim())
+      const cursor = existingCursors[existingPageIndex]
+      if (cursor) params.set('cursor', cursor)
+      return apiRequest<FileListResponse>(`/api/v1/files?${params}`)
+    },
+    enabled: existingPickerOpen && Boolean(folderId),
   })
   const importTaskQuery = useQuery({
     queryKey: ['file-import', importResult?.import_id],
@@ -128,6 +147,7 @@ export default function FilesPage() {
       void queryClient.invalidateQueries({ queryKey: ['home-overview'] })
     },
   })
+  const submitFileUpload = uploadMutation.mutate
   const deleteMutation = useMutation({
     mutationFn: (file: FileItem) => apiRequest(`/api/v1/files/${file.file_id}?expected_version=${file.row_version}`, { method: 'DELETE' }),
     onSuccess: () => {
@@ -167,15 +187,25 @@ export default function FilesPage() {
     },
   })
   const batchMutation = useMutation({
-    mutationFn: ({ action, folderId: targetFolderId, targetTagId }: { action: string; folderId?: string | null; targetTagId?: string }) => apiRequest('/api/v1/files/batch', {
+    mutationFn: ({ fileIds, action, targetFolderId, targetTagId }: { fileIds: string[]; action: string; targetFolderId?: string | null; targetTagId?: string }) => apiRequest('/api/v1/files/batch', {
       method: 'POST',
-      body: JSON.stringify({ file_ids: selected, action, ...(folderId !== undefined ? { folder_id: targetFolderId } : {}), ...(targetTagId ? { tag_id: targetTagId } : {}) }),
+      body: JSON.stringify({
+        file_ids: fileIds,
+        action,
+        ...(action === 'MOVE' ? { folder_id: targetFolderId ?? null } : {}),
+        ...(targetTagId ? { tag_id: targetTagId } : {}),
+      }),
     }),
     onSuccess: () => {
+      setBatchError(null)
       setSelected([])
+      setExistingSelected([])
       void queryClient.invalidateQueries({ queryKey: ['files'] })
       void queryClient.invalidateQueries({ queryKey: ['folders'] })
       void queryClient.invalidateQueries({ queryKey: ['home-overview'] })
+    },
+    onError: (error) => {
+      setBatchError(error instanceof Error ? error.message : '批量操作失败，请重试。')
     },
   })
   const duplicateMutation = useMutation({
@@ -201,6 +231,28 @@ export default function FilesPage() {
   const joinedImportCount = activeImportResult?.items.filter((item) => item.status === 'IMPORTED' || item.status === 'REUSED').length ?? 0
   const failedImportCount = activeImportResult?.items.filter((item) => item.error || item.parse_status === 'PARSE_FAILED').length ?? 0
   const selectedFiles = files.filter((file) => selected.includes(file.file_id))
+  const existingFileCandidates = (existingFilesQuery.data?.items ?? []).filter(
+    (file) => file.folder_id !== folderId,
+  )
+
+  function submitBatch(input: { fileIds: string[]; action: string; targetFolderId?: string | null; targetTagId?: string }) {
+    setBatchError(null)
+    batchMutation.mutate(input)
+  }
+
+  function toggleExistingFile(fileId: string) {
+    setExistingSelected((current) => current.includes(fileId)
+      ? current.filter((id) => id !== fileId)
+      : [...current, fileId])
+  }
+
+  function closeExistingPicker() {
+    setExistingPickerOpen(false)
+    setExistingSelected([])
+    setExistingSearch('')
+    setExistingCursors([null])
+    setExistingPageIndex(0)
+  }
 
   useEffect(() => {
     if (!activeImportResult || !['COMPLETED', 'FAILED', 'CANCELLED'].includes(activeImportResult.status)) return
@@ -237,8 +289,15 @@ export default function FilesPage() {
 
   function chooseFiles(fileList: FileList | File[]) {
     const incoming = Array.from(fileList)
-    if (incoming.length) uploadMutation.mutate(incoming)
+    if (incoming.length) submitFileUpload(incoming)
   }
+
+  useEffect(() => {
+    const routeState = location.state as { droppedFiles?: File[] } | null
+    if (!routeState?.droppedFiles?.length) return
+    submitFileUpload(routeState.droppedFiles)
+    navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
+  }, [location.key, location.pathname, location.search, location.state, navigate, submitFileUpload])
 
   function isFileDrag(event: React.DragEvent<HTMLDivElement>) {
     return Array.from(event.dataTransfer.types).includes('Files')
@@ -293,7 +352,7 @@ export default function FilesPage() {
         <div className="heading-actions">
           <Link className="quiet-button" to="/trash"><Trash2 size={16} aria-hidden="true" />回收站</Link>
           <button className="primary-button" type="button" onClick={() => inputRef.current?.click()}><FileUp size={16} aria-hidden="true" />导入文件</button>
-          <input ref={inputRef} className="visually-hidden" type="file" multiple accept=".pdf,.docx,.pptx,.xmind,.txt,.md,.markdown" onChange={(event) => { if (event.target.files) chooseFiles(event.target.files); event.currentTarget.value = '' }} />
+          <input ref={inputRef} className="visually-hidden" type="file" multiple accept=".pdf,.docx,.ppt,.pptx,.xlsx,.xmind,.txt,.md,.markdown" onChange={(event) => { if (event.target.files) chooseFiles(event.target.files); event.currentTarget.value = '' }} />
         </div>
       </div>
 
@@ -317,11 +376,31 @@ export default function FilesPage() {
             <label className="search-field"><Search size={16} aria-hidden="true" /><input value={query} onChange={(event) => updateFilter('q', event.target.value)} placeholder="搜索名称、标签或正文" aria-label="搜索文件" /></label>
             <select value={folderId ?? ''} onChange={(event) => updateFilter('folder_id', event.target.value)} aria-label="按文件夹筛选"><option value="">所有文件夹</option>{folders.map((folder) => <option value={folder.folder_id} key={folder.folder_id}>{folder.name}</option>)}</select>
             <select value={tagId ?? ''} onChange={(event) => updateFilter('tag_id', event.target.value)} aria-label="按标签筛选"><option value="">所有标签</option>{tags.map((tag) => <option value={tag.tag_id} key={tag.tag_id}>{tag.name}</option>)}</select>
-            <select value={documentType ?? ''} onChange={(event) => updateFilter('document_type', event.target.value)} aria-label="按类型筛选"><option value="">所有类型</option>{['PDF', 'DOCX', 'PPTX', 'XMIND', 'TXT', 'MARKDOWN'].map((type) => <option value={type} key={type}>{type === 'XMIND' ? 'XMind' : type}</option>)}</select>
+            <select value={documentType ?? ''} onChange={(event) => updateFilter('document_type', event.target.value)} aria-label="按类型筛选"><option value="">所有类型</option>{['PDF', 'DOCX', 'PPT', 'PPTX', 'XLSX', 'XMIND', 'TXT', 'MARKDOWN'].map((type) => <option value={type} key={type}>{type === 'XMIND' ? 'XMind' : type}</option>)}</select>
             <select value={status ?? ''} onChange={(event) => updateFilter('status', event.target.value)} aria-label="按状态筛选"><option value="">所有状态</option>{Object.entries(statusLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select>
             <select value={sort} onChange={(event) => updateFilter('sort', event.target.value === 'updated_at' ? undefined : event.target.value)} aria-label="排序"><option value="updated_at">最近更新</option><option value="created_at">最近导入</option><option value="name">文件名</option><option value="size">大小</option><option value="type">类型</option></select>
-            <span className="toolbar-meta">{files.length} 个文件 · 支持 PDF、DOCX、PPTX、XMind、TXT、Markdown</span>
+            {folderId && <button type="button" className="quiet-button" onClick={() => setExistingPickerOpen((open) => !open)}><FilePlus2 size={15} aria-hidden="true" />添加已导入文件</button>}
+            <span className="toolbar-meta">{files.length} 个文件 · 支持 PDF、DOCX、PPT、PPTX、XLSX、XMind、TXT、Markdown</span>
           </div>
+
+          {existingPickerOpen && folderId && <section className="existing-file-picker" role="region" aria-labelledby="existing-file-picker-title">
+            <div className="existing-file-picker__heading">
+              <div>
+                <h2 id="existing-file-picker-title">添加已导入文件</h2>
+                <p>从其他文件夹或未分类中选择文件，移动到“{folders.find((folder) => folder.folder_id === folderId)?.name ?? '当前文件夹'}”。</p>
+              </div>
+              <button className="icon-button icon-button--small" type="button" aria-label="关闭已导入文件选择" title="关闭" onClick={closeExistingPicker}><X size={16} aria-hidden="true" /></button>
+            </div>
+            <label className="search-field"><Search size={16} aria-hidden="true" /><input value={existingSearch} onChange={(event) => { setExistingSearch(event.target.value); setExistingCursors([null]); setExistingPageIndex(0) }} placeholder="搜索所有已导入文件" aria-label="搜索已导入文件" /></label>
+            {existingFilesQuery.isLoading && <div className="detail-empty">正在加载已导入文件…</div>}
+            {existingFilesQuery.isError && <div className="inline-error" role="alert">{existingFilesQuery.error instanceof Error ? existingFilesQuery.error.message : '读取已导入文件失败。'}<button className="quiet-button" type="button" onClick={() => void existingFilesQuery.refetch()}>重试</button></div>}
+            {!existingFilesQuery.isLoading && !existingFilesQuery.isError && existingFileCandidates.length === 0 && <div className="detail-empty">没有可添加的匹配文件。</div>}
+            <div className="existing-file-picker__list">{existingFileCandidates.map((file) => <label className="existing-file-picker__row" key={file.file_id}><input type="checkbox" aria-label={`选择 ${file.display_name}`} checked={existingSelected.includes(file.file_id)} onChange={() => toggleExistingFile(file.file_id)} /><span><strong>{file.display_name}</strong><small>{file.document_type} · {file.folder_name ?? '未分类'} · {statusLabels[file.status] ?? file.status}</small></span></label>)}</div>
+            <div className="existing-file-picker__footer">
+              <div className="existing-file-picker__pagination"><button className="quiet-button" type="button" disabled={existingPageIndex === 0 || existingFilesQuery.isFetching} onClick={() => setExistingPageIndex((index) => Math.max(0, index - 1))}>上一页</button><span>第 {existingPageIndex + 1} 页</span><button className="quiet-button" type="button" disabled={!existingFilesQuery.data?.next_cursor || existingFilesQuery.isFetching} onClick={() => { const next = existingFilesQuery.data?.next_cursor; if (next) { setExistingCursors((cursors) => [...cursors.slice(0, existingPageIndex + 1), next]); setExistingPageIndex((index) => index + 1) } }}>下一页</button></div>
+              <button className="primary-button" type="button" disabled={!existingSelected.length || batchMutation.isPending} onClick={() => submitBatch({ fileIds: existingSelected, action: 'MOVE', targetFolderId: folderId })}>移动所选 {existingSelected.length ? `(${existingSelected.length})` : ''}</button>
+            </div>
+          </section>}
 
           <div className="drop-zone">
             <FileUp size={19} aria-hidden="true" /><span>拖放文件到文件工作区，或 <button type="button" onClick={() => inputRef.current?.click()}>选择文件</button></span><small>单文件 50 MB · 单批 20 个 · 总量 500 MB</small>
@@ -329,13 +408,14 @@ export default function FilesPage() {
 
           {activeImportResult && <div className="import-summary" role="status"><div><strong>导入任务 {activeImportResult.status === 'BLOCKED' ? '等待重复决策' : activeImportResult.status === 'QUEUED' || activeImportResult.status === 'RUNNING' || activeImportResult.status === 'PARSING' ? '解析处理中' : activeImportResult.status === 'FAILED' ? '解析失败' : '已完成'}</strong><span>{joinedImportCount} 个已加入，{pendingDuplicates.length} 个待决策，{failedImportCount} 个失败</span></div><button type="button" className="icon-button" onClick={() => setImportResult(null)} aria-label="关闭导入结果"><X size={16} aria-hidden="true" /></button>{pendingDuplicates.map((item) => <div className="duplicate-row" key={item.item_index}><span>{item.original_name}</span><button type="button" disabled={duplicateMutation.isPending} onClick={() => duplicateMutation.mutate({ importId: activeImportResult.import_id, itemIndex: item.item_index, decision: 'REUSE_EXISTING' })}>{duplicateMutation.isPending ? '正在处理' : '复用现有'}</button><button type="button" disabled={duplicateMutation.isPending} onClick={() => duplicateMutation.mutate({ importId: activeImportResult.import_id, itemIndex: item.item_index, decision: 'CREATE_SEPARATE_RECORD' })}>{duplicateMutation.isPending ? '正在处理' : '另存记录'}</button><button type="button" disabled={duplicateMutation.isPending} onClick={() => duplicateMutation.mutate({ importId: activeImportResult.import_id, itemIndex: item.item_index, decision: 'SKIP' })}>{duplicateMutation.isPending ? '正在处理' : '跳过'}</button></div>)}{duplicateMutation.isError && <div className="inline-error" role="alert">{duplicateMutation.error instanceof Error ? duplicateMutation.error.message : '重复文件决策未完成，请重试。'}</div>}</div>}
 
-          {selectedFiles.length > 0 && <div className="selection-bar"><strong>已选 {selectedFiles.length} 个</strong><select value={batchFolderId} onChange={(event) => setBatchFolderId(event.target.value)} aria-label="批量目标文件夹"><option value="">未分类</option>{folders.map((folder) => <option key={folder.folder_id} value={folder.folder_id}>{folder.name}</option>)}</select><button type="button" onClick={() => batchMutation.mutate({ action: 'MOVE', folderId: batchFolderId || null })}>移动</button><select value={batchTagId} onChange={(event) => setBatchTagId(event.target.value)} aria-label="批量目标标签"><option value="">选择标签</option>{tags.map((tag) => <option key={tag.tag_id} value={tag.tag_id}>{tag.name}</option>)}</select><button type="button" disabled={!batchTagId} onClick={() => batchMutation.mutate({ action: 'ADD_TAG', targetTagId: batchTagId })}>添加标签</button><button type="button" disabled={!batchTagId} onClick={() => batchMutation.mutate({ action: 'REMOVE_TAG', targetTagId: batchTagId })}>移除标签</button><button type="button" onClick={() => batchMutation.mutate({ action: 'REPROCESS' })}>重新处理</button><button type="button" onClick={() => batchMutation.mutate({ action: 'TRASH' })}><Trash2 size={15} aria-hidden="true" />移入回收站</button><button type="button" onClick={() => setSelected([])}>取消</button></div>}
+          {selectedFiles.length > 0 && <div className="selection-bar"><strong>已选 {selectedFiles.length} 个</strong><select value={batchFolderId} onChange={(event) => setBatchFolderId(event.target.value)} aria-label="批量目标文件夹"><option value="" disabled>选择目标文件夹</option><option value={UNCATEGORIZED_FOLDER}>移出当前文件夹，放到未分类</option>{folders.map((folder) => <option key={folder.folder_id} value={folder.folder_id}>{folder.name}</option>)}</select><button type="button" disabled={!batchFolderId || batchMutation.isPending} onClick={() => submitBatch({ fileIds: selected, action: 'MOVE', targetFolderId: batchFolderId === UNCATEGORIZED_FOLDER ? null : batchFolderId })}>移动</button>{folderId && <small className="selection-bar__hint">移动后文件会离开当前文件夹列表，不会删除。</small>}<select value={batchTagId} onChange={(event) => setBatchTagId(event.target.value)} aria-label="批量目标标签"><option value="">选择标签</option>{tags.map((tag) => <option value={tag.tag_id} key={tag.tag_id}>{tag.name}</option>)}</select><button type="button" disabled={!batchTagId || batchMutation.isPending} onClick={() => submitBatch({ fileIds: selected, action: 'ADD_TAG', targetTagId: batchTagId })}>添加标签</button><button type="button" disabled={!batchTagId || batchMutation.isPending} onClick={() => submitBatch({ fileIds: selected, action: 'REMOVE_TAG', targetTagId: batchTagId })}>移除标签</button><button type="button" disabled={batchMutation.isPending} onClick={() => submitBatch({ fileIds: selected, action: 'REPROCESS' })}>重新处理</button><button type="button" disabled={batchMutation.isPending} onClick={() => submitBatch({ fileIds: selected, action: 'TRASH' })}><Trash2 size={15} aria-hidden="true" />移入回收站</button><button type="button" onClick={() => setSelected([])}>取消</button></div>}
+          {batchMutation.isError && <div className="inline-error" role="alert">{batchError ?? '批量操作失败，请重试。'}</div>}
 
           <div className="file-table-wrap">
-            <table className="file-table"><thead><tr><th><input type="checkbox" checked={files.length > 0 && selected.length === files.length} onChange={selectAll} aria-label="选择全部文件" /></th><th>名称</th><th>类型</th><th>状态</th><th>标签</th><th>大小</th><th>更新</th><th aria-label="操作" /></tr></thead><tbody>{files.map((file) => <tr key={file.file_id}><td><input type="checkbox" checked={selected.includes(file.file_id)} onChange={() => toggleSelected(file.file_id)} aria-label={`选择 ${file.display_name}`} /></td><td><Link className="file-name" to={`/files/${file.file_id}`} onClick={(event) => openFile(event, file.file_id)}><FileTextGlyph type={file.document_type} /><span>{file.display_name}</span></Link></td><td>{file.document_type}</td><td><FileStatus status={file.status} /></td><td><span className="tag-list">{file.tags.map((tag) => <span className="tag-chip" key={tag.tag_id} style={tag.color ? { borderColor: tag.color, color: tag.color } : undefined}><TagIcon size={12} aria-hidden="true" />{tag.name}</span>)}</span></td><td>{formatBytes(file.byte_size)}</td><td>{formatDate(file.updated_at)}</td><td><button className="icon-button icon-button--small" type="button" onClick={() => deleteMutation.mutate(file)} aria-label={`移入回收站 ${file.display_name}`} title="移入回收站"><MoreHorizontal size={16} aria-hidden="true" /></button></td></tr>)}</tbody></table>
+            <table className="file-table"><thead><tr><th><input type="checkbox" checked={files.length > 0 && selected.length === files.length} onChange={selectAll} aria-label="选择全部文件" /></th><th>名称</th><th>类型</th><th>状态</th><th>标签</th><th>大小</th><th>更新</th><th aria-label="操作" /></tr></thead><tbody>{files.map((file) => <tr key={file.file_id}><td><input type="checkbox" checked={selected.includes(file.file_id)} onChange={() => toggleSelected(file.file_id)} aria-label={`选择 ${file.display_name}`} /></td><td><Link className="file-name" to={`/files/${file.file_id}`} onClick={(event) => openFile(event, file.file_id)}><FileTextGlyph type={file.document_type} /><span>{file.display_name}</span></Link></td><td>{file.document_type}</td><td><FileStatus status={file.status} /></td><td><span className="tag-list">{file.tags.map((tag) => <span className="tag-chip" key={tag.tag_id} style={tag.color ? { borderColor: tag.color, color: tag.color } : undefined}><TagIcon size={12} aria-hidden="true" />{tag.name}</span>)}</span></td><td>{formatBytes(file.byte_size)}</td><td>{formatDate(file.updated_at)}</td><td><button className="icon-button icon-button--small" type="button" onClick={() => deleteMutation.mutate(file)} aria-label={`移入回收站 ${file.display_name}`} title="移入回收站"><Trash2 size={16} aria-hidden="true" /></button></td></tr>)}</tbody></table>
             {filesQuery.isLoading && <div className="empty-state"><strong>正在加载文件…</strong></div>}
             {filesQuery.isError && <div className="empty-state"><strong>文件加载失败</strong><span>{filesQuery.error instanceof Error ? filesQuery.error.message : '请稍后重试。'}</span><button type="button" className="quiet-button" onClick={() => void filesQuery.refetch()}>重试</button></div>}
-            {!filesQuery.isLoading && !filesQuery.isError && files.length === 0 && <div className="empty-state"><FileUp size={24} aria-hidden="true" /><strong>{query || folderId || tagId || documentType || status ? '没有匹配的文件' : '还没有文件'}</strong><span>{query || folderId || tagId || documentType || status ? '尝试清除搜索和筛选条件。' : '导入 PDF、DOCX、PPTX、TXT 或 Markdown 开始整理。'}</span><button type="button" className="primary-button" onClick={() => inputRef.current?.click()}>导入文件</button></div>}
+            {!filesQuery.isLoading && !filesQuery.isError && files.length === 0 && <div className="empty-state"><FileUp size={24} aria-hidden="true" /><strong>{query || folderId || tagId || documentType || status ? '没有匹配的文件' : '还没有文件'}</strong><span>{query || folderId || tagId || documentType || status ? '尝试清除搜索和筛选条件。' : '导入 PDF、DOCX、PPT、PPTX、XLSX、XMind、TXT 或 Markdown 开始整理。'}</span><button type="button" className="primary-button" onClick={() => inputRef.current?.click()}>导入文件</button></div>}
           </div>
           {uploadMutation.isPending && <div className="inline-progress">正在校验并复制文件…</div>}
           {uploadMutation.isError && <div className="inline-error">{uploadMutation.error instanceof Error ? uploadMutation.error.message : '导入失败，请稍后重试。'}</div>}
