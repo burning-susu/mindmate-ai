@@ -2,6 +2,15 @@
 
 ## 基本信息
 
+## 第九十一批：首页信息层级与任务状态界面整理（2026-10-11）
+
+- 首页按语雀参考的简洁信息层级收口：保留学习入口、资料计数和最近内容，移除首页后台任务汇总及实现说明文案，避免把用户内容与全局运行状态混在一起。
+- 后台任务继续通过顶栏全局任务抽屉查看；抽屉改用既有 `@radix-ui/react-dialog` primitive，保留状态、进度、失败摘要、详情、取消和焦点/ESC/遮罩行为。
+- 任务记录清理从首页任务面板移到设置页“任务记录”区块，继续使用既有保留策略和确认流程。
+- 统一文件、历史、详情页原生 `<select>` 的箭头、间距、hover、focus-visible 和 disabled 样式；未新增 Select 依赖，当前项目仍未使用 Radix Select/Dropdown Menu。
+- 文案改为面向用户的短提示，保留必要的资料不可用、错误和恢复反馈；没有改变五个一级导航或后台任务数据契约。
+- 证据：前端 `npm run typecheck`、`npm run lint`、`npm run build` 通过；全量前端 `18 files / 102 tests passed`；`git diff --check` 无错误。构建保留既有主包体积 warning。未做普通浏览器截图验收。
+
 - 当前开发分支：`feat/v1-bootstrap`
 - 第七十三批历史进场：分支 `feat/v1-bootstrap`；LOCAL `f113518737b54e368151af420f2341dd99e282d5`，REMOTE `f113518737b54e368151af420f2341dd99e282d5`；核验日期 `2026-09-29`。
 - 第七十四批进场：分支 `feat/v1-bootstrap`；LOCAL / REMOTE 均为 `ae75945991a3890a6c5d2811e29ab70ca5432e7f`；工作区干净。

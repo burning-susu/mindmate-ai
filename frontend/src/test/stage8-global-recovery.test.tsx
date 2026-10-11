@@ -131,7 +131,7 @@ describe('stage 8 global recovery', () => {
     fireEvent.click(trigger)
     const drawer = await screen.findByRole('dialog', { name: '后台任务' })
     expect(within(drawer).getByText('导入文件')).toBeInTheDocument()
-    expect(within(drawer).getByText('阶段：PARSING · 进度：20%')).toBeInTheDocument()
+    expect(within(drawer).getByText('进度：20%')).toBeInTheDocument()
     expect(within(drawer).getByLabelText('任务排队')).toBeInTheDocument()
     expect(within(drawer).getByRole('button', { name: '取消任务' })).toBeInTheDocument()
 

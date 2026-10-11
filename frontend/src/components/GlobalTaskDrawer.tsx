@@ -1,5 +1,6 @@
+import * as Dialog from '@radix-ui/react-dialog'
 import { CheckCircle2, CircleAlert, CirclePause, CircleX, Clock3, ListTodo, LoaderCircle, X } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { apiRequest } from '../api/client'
@@ -68,7 +69,14 @@ function taskTypeLabel(taskType: string): string {
 
 function taskProgressText(task: HomeTaskItem): string {
   if (typeof task.progress_percent === 'number') return `${task.progress_percent}%`
-  if (task.phase) return task.phase
+  const phaseLabels: Record<string, string> = {
+    PARSING: '正在解析',
+    PREPARING: '正在准备',
+    CHUNKING: '正在切分资料',
+    EMBEDDING: '正在生成向量',
+    INDEXING: '正在建立索引',
+  }
+  if (task.phase) return phaseLabels[task.phase] ?? taskStatusLabel(task.status)
   if (task.status === 'RUNNING') return '运行中'
   return taskStatusLabel(task.status)
 }
@@ -90,17 +98,13 @@ function taskCanCancel(task: HomeTaskItem): boolean {
 }
 
 function taskSummary(task: HomeTaskItem): string | null {
-  const parts = [task.failure_code, task.failure_summary].filter(Boolean)
-  return parts.length > 0 ? parts.join(' · ') : null
+  return task.failure_summary || null
 }
 
 export default function GlobalTaskDrawer() {
   const [open, setOpen] = useState(false)
   const [cancellingId, setCancellingId] = useState('')
   const [actionError, setActionError] = useState('')
-  const triggerRef = useRef<HTMLButtonElement>(null)
-  const closeRef = useRef<HTMLButtonElement>(null)
-  const wasOpenRef = useRef(false)
   const queryClient = useQueryClient()
   const query = useQuery({
     queryKey: ['global-task-overview'],
@@ -114,25 +118,6 @@ export default function GlobalTaskDrawer() {
       return false
     },
   })
-
-  useEffect(() => {
-    if (open) {
-      wasOpenRef.current = true
-      closeRef.current?.focus()
-    } else if (wasOpenRef.current) {
-      wasOpenRef.current = false
-      triggerRef.current?.focus()
-    }
-  }, [open])
-
-  useEffect(() => {
-    if (!open) return undefined
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open])
 
   const tasks = query.data?.tasks
   const recent = tasks?.recent ?? []
@@ -158,96 +143,82 @@ export default function GlobalTaskDrawer() {
   }
 
   return (
-    <>
-      <button
-        ref={triggerRef}
-        className="global-task-button"
-        type="button"
-        aria-label={buttonLabel}
-        title="打开全局任务"
-        onClick={() => setOpen(true)}
-      >
-        <ListTodo size={16} aria-hidden="true" />
-        <span>任务</span>
-        {activeCount > 0 ? <strong aria-hidden="true">{activeCount}</strong> : null}
-      </button>
-      {open ? (
-        <div className="global-task-layer" role="presentation" onClick={() => setOpen(false)}>
-          <aside
-            className="global-task-panel"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="global-task-panel-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="global-task-panel__heading">
-              <div>
-                <span className="eyebrow">跨页面状态</span>
-                <h2 id="global-task-panel-title">后台任务</h2>
-              </div>
-              <button ref={closeRef} className="icon-button" type="button" aria-label="关闭全局任务" title="关闭" onClick={() => setOpen(false)}>
+    <Dialog.Root open={open} onOpenChange={setOpen}>
+      <Dialog.Trigger asChild>
+        <button className="global-task-button" type="button" aria-label={buttonLabel} title="任务">
+          <ListTodo size={16} aria-hidden="true" />
+          <span>任务</span>
+          {activeCount > 0 ? <strong aria-hidden="true">{activeCount}</strong> : null}
+        </button>
+      </Dialog.Trigger>
+      <Dialog.Portal>
+        <Dialog.Overlay className="global-task-layer" />
+        <Dialog.Content className="global-task-panel" aria-describedby="global-task-panel-description">
+          <div className="global-task-panel__heading">
+            <Dialog.Title className="global-task-panel__title">后台任务</Dialog.Title>
+            <Dialog.Close asChild>
+              <button className="icon-button" type="button" aria-label="关闭全局任务" title="关闭">
                 <X size={17} aria-hidden="true" />
               </button>
+            </Dialog.Close>
+          </div>
+          <Dialog.Description id="global-task-panel-description" className="global-task-panel__hint">查看正在处理和最近完成的任务。</Dialog.Description>
+          {actionError ? <div className="global-task-panel__error" role="alert">{actionError}</div> : null}
+          {query.isPending && !query.data ? <p className="global-task-panel__state" role="status"><LoaderCircle className="spin" size={16} /> 正在读取任务</p> : null}
+          {query.isError ? (
+            <div className="global-task-panel__state global-task-panel__state--error" role="alert">
+              <span>任务暂时无法读取。</span>
+              <button className="quiet-button" type="button" onClick={() => void query.refetch()}>重新读取</button>
             </div>
-            <p className="global-task-panel__hint">任务状态来自本地持久记录。关闭抽屉不会取消任务；刷新或重启后仍会从这里恢复。</p>
-            {actionError ? <div className="global-task-panel__error" role="alert">{actionError}</div> : null}
-            {query.isPending && !query.data ? <p className="global-task-panel__state" role="status"><LoaderCircle className="spin" size={16} /> 正在读取任务状态</p> : null}
-            {query.isError ? (
-              <div className="global-task-panel__state global-task-panel__state--error" role="alert">
-                <span>任务状态暂时读不出来，当前页面不会因此停止工作。</span>
-                <button className="quiet-button" type="button" onClick={() => void query.refetch()}>重新读取</button>
-              </div>
-            ) : null}
-            {!query.isPending && !query.isError && recent.length === 0 ? (
-              <p className="global-task-panel__state"><CheckCircle2 size={16} aria-hidden="true" /> 当前没有后台任务。</p>
-            ) : null}
-            {recent.length > 0 ? (
-              <ul className="global-task-panel__list">
-                {recent.map((task) => {
-                  const summary = taskSummary(task)
-                  const canCancel = taskCanCancel(task)
-                  return (
-                    <li key={task.task_id} className="global-task-panel__item">
-                      <div className="global-task-panel__item-heading">
-                        <div>
-                          <strong>{taskTypeLabel(task.task_type)}</strong>
-                          <span>{taskStatusLabel(task.status)}</span>
-                        </div>
-                        <TaskStatusIcon status={task.status} />
+          ) : null}
+          {!query.isPending && !query.isError && recent.length === 0 ? (
+            <p className="global-task-panel__state"><CheckCircle2 size={16} aria-hidden="true" /> 当前没有后台任务。</p>
+          ) : null}
+          {recent.length > 0 ? (
+            <ul className="global-task-panel__list">
+              {recent.map((task) => {
+                const summary = taskSummary(task)
+                const canCancel = taskCanCancel(task)
+                return (
+                  <li key={task.task_id} className="global-task-panel__item">
+                    <div className="global-task-panel__item-heading">
+                      <div>
+                        <strong>{taskTypeLabel(task.task_type)}</strong>
+                        <span>{taskStatusLabel(task.status)}</span>
                       </div>
-                      <p className="global-task-panel__meta">阶段：{task.phase || '未记录'} · 进度：{taskProgressText(task)}</p>
-                      {typeof task.progress_percent === 'number' ? <progress max="100" value={task.progress_percent} aria-label={`${taskTypeLabel(task.task_type)}进度`} /> : null}
-                      {summary ? <p className="global-task-panel__failure" role="status">{summary}</p> : null}
-                      <p className="global-task-panel__meta">最近更新：{formatTaskTime(task.updated_at)}</p>
-                      <details>
-                        <summary>查看任务详情</summary>
-                        <dl className="global-task-panel__detail">
-                          <div><dt>任务编号</dt><dd>{task.task_id}</dd></div>
-                          <div><dt>任务类型</dt><dd>{task.task_type}</dd></div>
-                          <div><dt>终态</dt><dd>{taskStatusLabel(task.status)}</dd></div>
-                          <div><dt>失败原因</dt><dd>{summary || '无'}</dd></div>
-                        </dl>
-                      </details>
-                      {canCancel ? (
-                        <button
-                          className="quiet-button global-task-panel__cancel"
-                          type="button"
-                          disabled={Boolean(cancellingId)}
-                          onClick={() => void cancelTask(task)}
-                        >
-                          <CircleX size={14} aria-hidden="true" />
-                          {cancellingId === task.task_id ? '正在取消' : '取消任务'}
-                        </button>
-                      ) : null}
-                    </li>
-                  )
-                })}
-              </ul>
-            ) : null}
-            {tasks && tasks.total_count > recent.length ? <p className="global-task-panel__hint">仅显示最近 30 条；更早的任务仍保留在本地记录中。</p> : null}
-          </aside>
-        </div>
-      ) : null}
-    </>
+                      <TaskStatusIcon status={task.status} />
+                    </div>
+                    <p className="global-task-panel__meta">进度：{taskProgressText(task)}</p>
+                    {typeof task.progress_percent === 'number' ? <progress max="100" value={task.progress_percent} aria-label={`${taskTypeLabel(task.task_type)}进度`} /> : null}
+                    {summary ? <p className="global-task-panel__failure" role="status">{summary}</p> : null}
+                    <p className="global-task-panel__meta">最近更新：{formatTaskTime(task.updated_at)}</p>
+                    <details>
+                      <summary>查看详情</summary>
+                      <dl className="global-task-panel__detail">
+                        <div><dt>任务编号</dt><dd>{task.task_id}</dd></div>
+                        <div><dt>处理阶段</dt><dd>{task.phase || '未记录'}</dd></div>
+                        <div><dt>失败代码</dt><dd>{task.failure_code || '无'}</dd></div>
+                      </dl>
+                    </details>
+                    {canCancel ? (
+                      <button
+                        className="quiet-button global-task-panel__cancel"
+                        type="button"
+                        disabled={Boolean(cancellingId)}
+                        onClick={() => void cancelTask(task)}
+                      >
+                        <CircleX size={14} aria-hidden="true" />
+                        {cancellingId === task.task_id ? '正在取消' : '取消任务'}
+                      </button>
+                    ) : null}
+                  </li>
+                )
+              })}
+            </ul>
+          ) : null}
+          {tasks && tasks.total_count > recent.length ? <p className="global-task-panel__hint">显示最近 30 条任务。</p> : null}
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   )
 }

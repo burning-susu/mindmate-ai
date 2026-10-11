@@ -21,6 +21,7 @@ import { useEffect, useRef, useState } from 'react'
 
 import { ApiError } from '../api/client'
 import { BackupRestorePanel } from './BackupRestorePanel'
+import TaskRetentionSettings from '../components/TaskRetentionSettings'
 import {
   createBackup,
   downloadBackup,
@@ -1343,6 +1344,8 @@ export default function SettingsPage() {
             <p className="settings-hint">OpenAI 最近探测：尚未测试。未配置时显示不可用。</p>
           )}
         </section>
+
+        <TaskRetentionSettings />
 
         <section className="settings-section settings-section--probe" aria-labelledby="backup-heading">
           <div className="settings-section__heading">

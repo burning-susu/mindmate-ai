@@ -1,11 +1,11 @@
 import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
 import { BookOpen, FileText, FileUp, GraduationCap, LoaderCircle, MessageSquare, Plus } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { apiRequest } from '../api/client'
 import { listRecentFiles, type FileItem } from '../api/files'
-import { getHomeOverview, getTaskRetentionPreview, purgeTaskRetention, type HomeOverview, type HomeTaskItem, type TaskRetentionPreview } from '../api/home'
+import { getHomeOverview, type HomeOverview } from '../api/home'
 import { listConversationHistory, listLearningHistory, type ConversationHistoryItem, type LearningHistoryItem } from '../api/history'
 import { listKnowledgeBases, type KnowledgeBaseItem } from '../api/knowledgeBases'
 import { sourceStatusLabel } from '../components/sourceStatus'
@@ -43,21 +43,20 @@ function ContinueLearning() {
       <div>
         <span className="eyebrow">最近学习</span>
         <h2 id="home-continue-title">继续学习</h2>
-        <p>只读取最近一次已保存的学习会话。打开或刷新首页不会创建会话、题目或作答。</p>
       </div>
       {recentQuery.isLoading ? (
         <div className="history-state" role="status"><LoaderCircle className="spin" size={16} /> 正在读取最近学习</div>
       ) : null}
       {recentQuery.isError ? (
         <div className="history-state history-state--error" role="alert">
-          <span>最近学习暂时读不出来，当前不能把它当作可继续的会话。</span>
+          <span>最近学习暂时读不出来。</span>
           <button className="quiet-button" type="button" onClick={() => void recentQuery.refetch()}>重新加载</button>
           <Link className="quiet-button" to="/history?tab=learning">打开学习历史</Link>
         </div>
       ) : null}
       {!recentQuery.isLoading && !recentQuery.isError && !item ? (
         <div className="home-continue__empty">
-          <p>还没有学习记录。开始第一次学习要先在知识库列表里选择一个索引就绪、并且有可用文件的知识库。没有资料时请先导入文件。这里不会用空白知识库直接开题。</p>
+          <p>还没有学习记录。先选择一个索引就绪、并且有可用文件的知识库。</p>
           <div className="home-continue__actions">
             <Link className="primary-button" to="/knowledge-bases">开始第一次学习</Link>
             <Link className="quiet-button" to="/files">先导入资料</Link>
@@ -75,11 +74,9 @@ function ContinueLearning() {
               <div><dt>已作答数量</dt><dd>{item.answered_count} / {item.target_question_count}</dd></div>
               <div><dt>最近学习</dt><dd>{formatTime(item.updated_at)}</dd></div>
             </dl>
-            <p className="home-continue__id">会话 {item.learning_session_id}</p>
             {sourceInvalid(item) ? (
               <p className="home-continue__reason" role="status">
-                不能继续作答：{sourceStatusLabel(item.source_status)}。首页不会绕过资料校验。
-                {item.answered_count > 0 ? '已保存的反馈仍可打开查看。' : '这次还没有可查看的反馈。'}
+                当前资料不可用（{sourceStatusLabel(item.source_status)}）。
               </p>
             ) : null}
             <div className="home-continue__actions">
@@ -149,7 +146,7 @@ function RecentKnowledgeBases() {
         <div>
           <span className="eyebrow">最近更新</span>
           <h2 id="home-knowledge-title">最近知识库</h2>
-          <p>按知识库更新时间排列，最多 4 个。这里没有最近使用时间，打开首页不会记录使用，也不会建立索引。</p>
+          <p>最近知识库</p>
         </div>
         <Link className="quiet-button" to="/knowledge-bases">查看全部</Link>
       </div>
@@ -305,7 +302,7 @@ function RecentConversations() {
         <div>
           <span className="eyebrow">最近活动</span>
           <h2 id="home-conversations-title">最近对话</h2>
-          <p>按对话最近活动时间排列，最多 5 个。打开原对话只读取已保存内容，不会从首页自动续聊。</p>
+          <p>最近对话</p>
         </div>
         <Link className="quiet-button" to="/history">查看全部</Link>
       </div>
@@ -334,7 +331,7 @@ function RecentConversations() {
                     <div><dt>最近活动</dt><dd>{formatTime(item.updated_at)}</dd></div>
                   </dl>
                   {sourceInvalid ? (
-                    <p className="home-recent__reason" role="status">来源已失效：{sourceStatusLabel(item.source_status)}。可以阅读原对话，首页不会自动续聊。</p>
+                    <p className="home-recent__reason" role="status">资料不可用（{sourceStatusLabel(item.source_status)}）。</p>
                   ) : null}
                   <div className="home-recent__actions">
                     <Link to={`/chat/${item.conversation_id}`}>查看对话</Link>
@@ -347,45 +344,6 @@ function RecentConversations() {
       ) : null}
     </section>
   )
-}
-
-const TASK_STATUS_LABEL: Record<string, string> = {
-  CREATED: '已创建',
-  QUEUED: '排队',
-  RUNNING: '运行中',
-  BLOCKED: '等待处理',
-  PAUSED: '已暂停',
-  CANCELLED: '已取消',
-  SUCCEEDED: '已成功',
-  COMPLETED: '已完成',
-  PARTIAL: '部分完成',
-  FAILED: '失败',
-  INTERRUPTED: '已中断',
-}
-
-const TASK_TYPE_LABEL: Record<string, string> = {
-  FILE_IMPORT: '导入文件',
-  FILE_REPROCESS: '重新处理文件',
-  INDEX_PREPROCESS: '索引预处理',
-  INDEX_CHUNK: '索引切块',
-  INDEX_EMBED: '索引向量',
-  INDEX_FTS: '索引全文',
-  KB_MEMBERSHIP: '知识库成员',
-}
-
-function taskStatusLabel(status: string): string {
-  return TASK_STATUS_LABEL[status] ?? status
-}
-
-function taskTypeLabel(taskType: string): string {
-  return TASK_TYPE_LABEL[taskType] ?? taskType
-}
-
-function taskProgressText(task: HomeTaskItem): string {
-  if (typeof task.progress_percent === 'number') return `${task.progress_percent}%`
-  if (task.phase) return task.phase
-  if (task.status === 'RUNNING') return '运行中'
-  return taskStatusLabel(task.status)
 }
 
 function overviewReady(data: HomeOverview | undefined): data is HomeOverview {
@@ -409,36 +367,33 @@ function HomeCounts({ query }: { query: UseQueryResult<HomeOverview> }) {
   if (!data) {
     return (
       <div className="history-state history-state--error" role="alert">
-        <span>概览暂时读不出来，不能把失败显示成 0。</span>
+        <span>概览暂时无法读取。</span>
         <button className="quiet-button" type="button" onClick={() => void query.refetch()}>重新读取概览</button>
       </div>
     )
   }
   const cards = [
-    ['文件', data.files, data.count_scope.files, '/files'],
-    ['知识库', data.knowledge_bases, data.count_scope.knowledge_bases, '/knowledge-bases'],
-    ['对话', data.conversations, data.count_scope.conversations, '/history'],
-    ['学习会话', data.learning_sessions, data.count_scope.learning_sessions, '/history?tab=learning'],
+    ['文件', data.files, '/files'],
+    ['知识库', data.knowledge_bases, '/knowledge-bases'],
+    ['对话', data.conversations, '/history'],
+    ['学习记录', data.learning_sessions, '/history?tab=learning'],
   ] as const
   return (
     <section className="home-overview" aria-labelledby="home-overview-title">
       <div>
-        <span className="eyebrow">本地概览</span>
-        <h2 id="home-overview-title">资料数量</h2>
-        <p>这些数字来自服务端计数。点击只打开已有列表，不会新建资料。</p>
+        <h2 id="home-overview-title">我的资料</h2>
       </div>
       {query.isError ? (
         <div className="history-state history-state--error" role="alert">
-          <span>概览没有刷新成功，下面仍是上次读到的数字。</span>
+          <span>概览没有刷新成功，暂时显示上次结果。</span>
           <button className="quiet-button" type="button" onClick={() => void query.refetch()}>重新读取概览</button>
         </div>
       ) : null}
       <div className="home-overview__counts">
-        {cards.map(([label, count, scope, to]) => (
+        {cards.map(([label, count, to]) => (
           <Link key={label} to={to}>
             <strong>{count}</strong>
             <span>{label}</span>
-            <small>{scope}</small>
           </Link>
         ))}
       </div>
@@ -446,272 +401,27 @@ function HomeCounts({ query }: { query: UseQueryResult<HomeOverview> }) {
   )
 }
 
-function TaskSummary({
-  query,
-  onOpen,
-}: {
-  query: UseQueryResult<HomeOverview>
-  onOpen: () => void
-}) {
-  const data = overviewReady(query.data) ? query.data : undefined
-  if (!data || data.tasks.total_count === 0) return null
-  const tasks = data.tasks
-  const latest = tasks.latest
-  return (
-    <section className="home-tasks" aria-labelledby="home-tasks-title">
-      <div>
-        <span className="eyebrow">后台任务</span>
-        <h2 id="home-tasks-title">任务状态</h2>
-        <p>只读取已经存在的任务。打开或刷新首页不会创建、取消或重试任务。</p>
-      </div>
-      <dl className="home-tasks__counts">
-        <div><dt>排队</dt><dd>{tasks.queued_count}</dd></div>
-        <div><dt>运行</dt><dd>{tasks.running_count}</dd></div>
-        <div><dt>失败</dt><dd>{tasks.failed_count}</dd></div>
-        {tasks.blocked_count > 0 ? <div><dt>等待处理</dt><dd>{tasks.blocked_count}</dd></div> : null}
-        {tasks.interrupted_count > 0 ? <div><dt>已中断</dt><dd>{tasks.interrupted_count}</dd></div> : null}
-      </dl>
-      {latest ? (
-        <p className="home-tasks__latest">
-          最近一条：{taskTypeLabel(latest.task_type)} · {taskStatusLabel(latest.status)} · {taskProgressText(latest)}
-          {latest.failure_code ? ` · ${latest.failure_code}` : ''}
-          {latest.failure_summary ? ` · ${latest.failure_summary}` : ''}
-        </p>
-      ) : null}
-      <button className="quiet-button" type="button" onClick={onOpen}>查看全部任务</button>
-    </section>
-  )
-}
-
-function TaskPanel({
-  query,
-  taskLimit,
-  onClose,
-  onShowMore,
-}: {
-  query: UseQueryResult<HomeOverview>
-  taskLimit: number
-  onClose: () => void
-  onShowMore: () => void
-}) {
-  const queryClient = useQueryClient()
-  const [detailId, setDetailId] = useState('')
-  const [confirmOpen, setConfirmOpen] = useState(false)
-  const [cleanupBusy, setCleanupBusy] = useState(false)
-  const [cleanupMessage, setCleanupMessage] = useState('')
-  const data = overviewReady(query.data) ? query.data : undefined
-  const tasks = data?.tasks
-  const retentionQuery = useQuery({
-    queryKey: ['task-retention-preview'],
-    queryFn: () => getTaskRetentionPreview(),
-    retry: false,
-    staleTime: 0,
-  })
-  const retention = retentionQuery.data
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        if (confirmOpen) setConfirmOpen(false)
-        else onClose()
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose, confirmOpen])
-
-  const runCleanup = async () => {
-    setCleanupBusy(true)
-    setCleanupMessage('')
-    try {
-      const result = await purgeTaskRetention({
-        confirmed: true,
-        clear_success: true,
-        clear_cancelled: true,
-        clear_failed: true,
-        limit: 50,
-      })
-      const skipped = result.skipped_referenced
-      setCleanupMessage(
-        skipped > 0
-          ? `已清除 ${result.purged} 条任务记录；另有 ${skipped} 条因仍被业务引用而跳过。`
-          : `已清除 ${result.purged} 条任务记录。活动任务不受影响。`,
-      )
-      setConfirmOpen(false)
-      await queryClient.invalidateQueries({ queryKey: ['home-overview'] })
-      await queryClient.invalidateQueries({ queryKey: ['task-retention-preview'] })
-    } catch (error) {
-      setCleanupMessage(error instanceof Error ? error.message : '清理失败，请稍后重试。')
-    } finally {
-      setCleanupBusy(false)
-    }
-  }
-
-  return (
-    <div className="home-task-layer" role="presentation" onClick={onClose}>
-      <div
-        className="home-task-panel"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="home-task-panel-title"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="home-task-panel__heading">
-          <h2 id="home-task-panel-title">后台任务</h2>
-          <button className="quiet-button" type="button" onClick={onClose}>关闭</button>
-        </div>
-        {!tasks ? <p>任务列表暂时读不出来。</p> : null}
-        {tasks && tasks.total_count === 0 ? <p>当前没有后台任务。</p> : null}
-        {tasks && tasks.recent.length > 0 ? (
-          <ul className="home-task-panel__list">
-            {tasks.recent.map((task) => (
-              <li key={task.task_id}>
-                <p>{taskTypeLabel(task.task_type)} · {taskStatusLabel(task.status)} · {taskProgressText(task)}</p>
-                <p>任务 {task.task_id}</p>
-                {task.failure_code || task.failure_summary ? (
-                  <p>{[task.failure_code, task.failure_summary].filter(Boolean).join(' · ')}</p>
-                ) : null}
-                <button type="button" onClick={() => setDetailId((current) => current === task.task_id ? '' : task.task_id)}>
-                  {detailId === task.task_id ? '收起详情' : '查看详情'}
-                </button>
-                {detailId === task.task_id ? (
-                  <dl className="home-task-panel__detail">
-                    <div><dt>编号</dt><dd>{task.task_id}</dd></div>
-                    <div><dt>类型</dt><dd>{taskTypeLabel(task.task_type)}</dd></div>
-                    <div><dt>状态</dt><dd>{taskStatusLabel(task.status)}</dd></div>
-                    <div><dt>阶段</dt><dd>{task.phase || '无阶段'}</dd></div>
-                    <div><dt>进度</dt><dd>{taskProgressText(task)}</dd></div>
-                    <div><dt>失败概述</dt><dd>{task.failure_summary || '无'}</dd></div>
-                  </dl>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        ) : null}
-        {tasks && tasks.total_count > tasks.recent.length && taskLimit < 30 ? (
-          <button className="quiet-button" type="button" onClick={onShowMore}>显示最近 30 条</button>
-        ) : null}
-        {tasks && tasks.total_count > tasks.recent.length && taskLimit >= 30 ? (
-          <p>只显示最近 30 条，更早的任务仍留在本地记录里。</p>
-        ) : null}
-        <TaskRetentionControls
-          retention={retention}
-          loading={retentionQuery.isLoading}
-          error={retentionQuery.isError}
-          confirmOpen={confirmOpen}
-          busy={cleanupBusy}
-          message={cleanupMessage}
-          onOpenConfirm={() => setConfirmOpen(true)}
-          onCancelConfirm={() => setConfirmOpen(false)}
-          onConfirm={() => void runCleanup()}
-          onRetry={() => void retentionQuery.refetch()}
-        />
-      </div>
-    </div>
-  )
-}
-
-function TaskRetentionControls({
-  retention,
-  loading,
-  error,
-  confirmOpen,
-  busy,
-  message,
-  onOpenConfirm,
-  onCancelConfirm,
-  onConfirm,
-  onRetry,
-}: {
-  retention: TaskRetentionPreview | undefined
-  loading: boolean
-  error: boolean
-  confirmOpen: boolean
-  busy: boolean
-  message: string
-  onOpenConfirm: () => void
-  onCancelConfirm: () => void
-  onConfirm: () => void
-  onRetry: () => void
-}) {
-  const eligible = retention?.eligible_total ?? 0
-  const skipped = retention?.skipped_referenced ?? 0
-  const canClean = eligible > 0 && !busy
-  return (
-    <section className="home-task-panel__cleanup" aria-labelledby="home-task-cleanup-title">
-      <h3 id="home-task-cleanup-title">清理任务记录</h3>
-      <p>只删除符合保留期限、且不影响业务恢复的任务日志。成功/取消满 7 天，失败/中断/部分完成满 30 天。活动任务不会出现在可清理范围。</p>
-      {loading ? <p role="status">正在统计可清理记录…</p> : null}
-      {error ? (
-        <p role="alert">
-          无法读取可清理数量。
-          <button className="quiet-button" type="button" onClick={onRetry}>重试</button>
-        </p>
-      ) : null}
-      {retention && !loading ? (
-        <p>
-          当前可清理 {eligible} 条
-          {skipped > 0 ? `；另有 ${skipped} 条因仍被引用而跳过` : ''}
-          （成功/取消 {retention.success_or_cancelled}，失败类 {retention.failed_partial_interrupted}）。
-        </p>
-      ) : null}
-      <button className="quiet-button" type="button" disabled={!canClean} onClick={onOpenConfirm}>
-        清除符合条件的完成记录
-      </button>
-      {message ? <p role="status">{message}</p> : null}
-      {confirmOpen ? (
-        <div className="history-dialog" role="dialog" aria-modal="true" aria-labelledby="task-cleanup-confirm-title">
-          <h2 id="task-cleanup-confirm-title">确认清理任务记录</h2>
-          <p>将永久删除约 {eligible} 条已到期的任务运行记录与诊断信息。不会删除文件、知识库、对话或学习内容。</p>
-          {skipped > 0 ? <p>仍有 {skipped} 条因被业务引用而不会删除。</p> : null}
-          <div className="history-dialog__actions">
-            <button className="quiet-button" type="button" disabled={busy} onClick={onCancelConfirm}>取消</button>
-            <button className="primary-button" type="button" disabled={busy} onClick={onConfirm}>
-              {busy ? '正在清理…' : '确认清理'}
-            </button>
-          </div>
-        </div>
-      ) : null}
-    </section>
-  )
-}
-
 export default function HomePage() {
-  const [taskLimit, setTaskLimit] = useState(8)
-  const [panelOpen, setPanelOpen] = useState(false)
   const overviewQuery = useQuery({
-    queryKey: ['home-overview', taskLimit],
-    queryFn: () => getHomeOverview(taskLimit),
+    queryKey: ['home-overview', 8],
+    queryFn: () => getHomeOverview(8),
     retry: false,
     staleTime: 0,
     refetchOnMount: 'always',
-    refetchInterval: (query) => {
-      const tasks = query.state.data?.tasks
-      if (tasks && (tasks.queued_count > 0 || tasks.running_count > 0)) return 4000
-      return false
-    },
   })
-  const data = overviewReady(overviewQuery.data) ? overviewQuery.data : undefined
-  const openPanel = () => setPanelOpen(true)
 
   return (
     <section className="home-page">
       <header className="page-heading">
         <div>
-          <span className="eyebrow">首页</span>
-          <h1>欢迎回到 MindMate</h1>
-          <p>从最近一次真实学习接着看，并读取当前资料数量、最近内容和已经存在的后台任务。</p>
+          <h1>开始学习</h1>
         </div>
-        {data && data.tasks.total_count === 0 ? (
-          <button className="quiet-button" type="button" onClick={openPanel}>查看后台任务</button>
-        ) : null}
       </header>
       <HomeCounts query={overviewQuery} />
       <ContinueLearning />
       <section className="home-shortcuts" aria-labelledby="home-shortcuts-title">
         <div>
-          <span className="eyebrow">快捷入口</span>
           <h2 id="home-shortcuts-title">快捷操作</h2>
-          <p>四个入口只打开已有流程。未提交表单或未发送消息前，不会新建文件、知识库、对话或学习会话。</p>
         </div>
         <div className="home-shortcuts__actions">
           <Link className="primary-button" to="/learning/new"><GraduationCap size={16} aria-hidden="true" />开始学习</Link>
@@ -720,18 +430,9 @@ export default function HomePage() {
           <Link className="quiet-button" to="/knowledge-bases/new"><Plus size={16} aria-hidden="true" />创建知识库</Link>
         </div>
       </section>
-      <TaskSummary query={overviewQuery} onOpen={openPanel} />
       <RecentKnowledgeBases />
       <RecentFiles />
       <RecentConversations />
-      {panelOpen ? (
-        <TaskPanel
-          query={overviewQuery}
-          taskLimit={taskLimit}
-          onClose={() => setPanelOpen(false)}
-          onShowMore={() => setTaskLimit(30)}
-        />
-      ) : null}
     </section>
   )
 }
